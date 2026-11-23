@@ -266,3 +266,34 @@ The evaluation must:
 Potential user-facing presets are Automatic, Lightweight, Balanced, and High capability. These labels and their internal resource rules remain proposals until tested.
 
 **Research consequence:** The model benchmark matrix must include a compact baseline and at least one more capable model, then scale upward as hardware permits. A 4 GB test alone cannot satisfy Phase 1's performance research.
+
+## 14. Hardware auto-detection and adaptive configuration — OpenJarvis reference (2026-11-23)
+
+OpenJarvis has a documented **Hardware Auto-Detection** workflow. During `jarvis init`, it collects a hardware profile and uses separate `recommend_engine()` and `recommend_model()` functions to select initial defaults, then writes those defaults to `config.toml`. Its documented profile includes platform, CPU brand/count, total RAM, and optional GPU vendor/name/VRAM/compute capability/count. Users can override the generated configuration.
+
+The current documented detection methods include NVIDIA `nvidia-smi`, AMD `rocm-smi`, Apple `system_profiler`, and platform-specific CPU/RAM queries. Its published model-selection heuristic uses reported GPU VRAM when available, otherwise system RAM with a fixed memory reserve. This is a useful architectural pattern: **detect → recommend engine → recommend model → save configurable defaults**.
+
+However, the current documented hardware profile does not include storage capacity/free space, storage type/speed, or disk health. The documented setup workflow is primarily initial configuration; it does not establish a continuously adapting desktop resource manager. Its memory formula is a heuristic, not proof that a model will fit or perform acceptably on every system. The code and guide also show platform-specific detection differences, so we must not assume every metric is equally available on Windows.
+
+Sources:
+- https://github.com/open-jarvis/OpenJarvis/blob/main/docs/architecture/engine.md
+- https://github.com/open-jarvis/OpenJarvis/blob/main/src/openjarvis/core/config.py
+- https://open-jarvis.github.io/OpenJarvis/getting-started/installation/
+- https://open-jarvis.github.io/OpenJarvis/getting-started/configuration/
+
+### Proposed midSunday direction
+
+Study the pattern, but design our own Windows-first **Hardware Intelligence & Adaptive Resource Manager (HIARM)**. It should cover:
+- CPU identity, core topology and relevant capabilities.
+- Installed and currently available RAM.
+- GPU adapters, dedicated/shared memory, driver and verified acceleration support.
+- OS/build/architecture.
+- Storage volume capacity and free space before model downloads; storage performance only where reliable.
+- Live resource pressure and midSunday process usage.
+- Model/runtime/context/speech recommendations informed by measured benchmarks.
+- Safe scheduling of LLM, STT and TTS workloads, with user override and clear explanations.
+
+The subsystem should be local-only, work without an account or network, and never silently upload hardware information, download a large model, switch a user's model, enable cloud inference, alter system settings, or terminate unrelated processes.
+
+**Status:** Research/design requirement only. No Windows detection API, Rust crate, runtime, or adaptive policy is approved. Detailed requirements and acceptance criteria are in [HARDWARE-INTELLIGENCE.md](HARDWARE-INTELLIGENCE.md).
+
