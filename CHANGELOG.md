@@ -3,6 +3,7 @@
 All notable project changes are recorded here. The project is currently in planning and documentation; no application release has been made.
 
 ## 2026-11-23
+- Added Urdu-specific STT/TTS research, including commercial-licence blockers and lightweight experimental candidates.
 - Expanded the read-only FRIDAY reuse review to cover frontend, native workspace code, capabilities, security/product documents, CI workflows, and repository hygiene.
 - Added preliminary upstream licence observations to the licence register; no candidate is approved for bundling.
 - Added initial Phase 1 feasibility research covering desktop frameworks, local LLM runtime/model candidates, STT/TTS, SQLite, hardware questions, and licensing risks.
