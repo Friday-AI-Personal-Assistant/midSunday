@@ -98,3 +98,12 @@ Statuses: **Confirmed**, **Proposed**, **Under review**, **Superseded**.
 - **Decision:** Record initial feasibility findings in `docs/PHASE-1-RESEARCH.md` and keep all engines/models as candidates until practical tests and exact licence reviews are complete.
 - **Rationale:** Official documentation supports several promising candidates, but Urdu language quality, constrained-hardware performance, and redistribution rights are not established by desk research alone.
 - **Consequences:** Do not lock the stack, claim 4 GB compatibility, or bundle a model/voice until Phase 1 acceptance evidence exists.
+
+
+## D-014 — Local inference runtime comparison
+
+- **Date:** 2026-11-23
+- **Status:** Under review
+- **Decision:** Keep llama.cpp as the leading candidate for direct midSunday runtime integration; evaluate Ollama as a local development and model-testing convenience.
+- **Rationale:** Both projects publish MIT licences for their software repositories. llama.cpp offers direct control and a server/library integration path; Ollama offers a convenient local model-management workflow. Ollama cloud inference is a separate optional paid service and is not required for local use.
+- **Consequences:** Do not bundle both by default. Compare them on Windows with the same model before final selection. Review each model and quantised file separately for commercial redistribution rights. No runtime is approved yet.
