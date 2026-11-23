@@ -73,3 +73,14 @@ Sources are linked in [Phase 1 feasibility research](docs/PHASE-1-RESEARCH.md). 
 | Mozilla Data Collective Urdu TTS corpora | Commercial data licences available; some listings are high-cost | Not pursued; no purchase without explicit owner approval |
 
 See [Phase 1 feasibility research](docs/PHASE-1-RESEARCH.md) for source links and technical caveats. No Urdu STT/TTS candidate is approved for release.
+
+
+### Local inference runtime comparison (2026-11-23)
+
+| Candidate | Observed software licence / cost boundary | Register status | Remaining review |
+|---|---|---|---|
+| llama.cpp | Upstream repository lists MIT; local inference uses the user's hardware and does not require a paid hosted API | In review | Exact release/build, transitive dependencies, Windows packaging, update/security process |
+| Ollama | Upstream repository lists MIT; local execution is free; cloud-hosted model usage is separately priced | In review | Exact release/build, bundled dependencies, local/cloud boundary, product redistribution and notices |
+| Qwen3.5-0.8B | Official model card lists Apache-2.0 | In review | Exact checkpoint/revision, GGUF conversion provenance, quantisation source, model-card terms and redistribution |
+
+The software runtime licence does not grant rights to model weights or converted model files. Cloud pricing and terms can change; re-check before any optional cloud integration.
