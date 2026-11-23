@@ -42,6 +42,7 @@ The product must remain useful without a cloud account. Online features must be 
 - [Proposed architecture](docs/ARCHITECTURE.md)
 - [Offline-first requirements](docs/OFFLINE-FIRST-REQUIREMENTS.md)
 - [Hardware compatibility and benchmark policy](docs/HARDWARE-COMPATIBILITY.md)
+- [Hardware Intelligence & Adaptive Resource Manager](docs/HARDWARE-INTELLIGENCE.md)
 - [Voice and language requirements](docs/VOICE-AND-LANGUAGES.md)
 - [Personalities and characters](docs/PERSONALITIES-AND-CHARACTERS.md)
 - [Privacy, security, and safety](docs/PRIVACY-AND-SAFETY.md)
