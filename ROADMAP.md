@@ -93,21 +93,21 @@ Release numbers are planning labels, not promises or dates. A stage is not compl
 
 **Goal:** Make the project understandable and recoverable without relying on chat history.
 
-- [ ] Confirm this roadmap as the master plan.
-- [ ] Create the main README with product purpose, status, setup expectations, and links to project documents.
-- [ ] Create a project history recording decisions, important discussions, and rationale.
-- [ ] Create a product specification with functional and non-functional requirements.
-- [ ] Create an architecture overview and component boundaries.
-- [ ] Create an offline-first requirements document.
-- [ ] Create hardware compatibility and benchmarking policy.
-- [ ] Create voice and language requirements.
-- [ ] Create personality and character guidelines.
-- [ ] Create privacy, safety, and security requirements.
-- [ ] Create commercial licensing and third-party notices policy.
-- [ ] Create FRIDAY reuse analysis.
-- [ ] Create a changelog and decision log.
-- [ ] Record open questions, assumptions, and risks.
-- [ ] Define how every significant conversation decision is transferred into repository documentation.
+- [x] Confirm this roadmap as the master plan.
+- [x] Create the main README with product purpose, status, setup expectations, and links to project documents.
+- [x] Create a project history recording decisions, important discussions, and rationale.
+- [x] Create a product specification with functional and non-functional requirements.
+- [x] Create an architecture overview and component boundaries.
+- [x] Create an offline-first requirements document.
+- [x] Create hardware compatibility and benchmarking policy.
+- [x] Create voice and language requirements.
+- [x] Create personality and character guidelines.
+- [x] Create privacy, safety, and security requirements.
+- [x] Create commercial licensing and third-party notices policy.
+- [x] Create FRIDAY reuse analysis.
+- [x] Create a changelog and decision log.
+- [x] Record open questions, assumptions, and risks.
+- [x] Define how every significant conversation decision is transferred into repository documentation.
 
 **Exit gate:** A new developer can understand the product, current status, confirmed decisions, open questions, and next tasks using repository documents alone.
 
