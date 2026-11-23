@@ -80,3 +80,11 @@ The product is **not** a 4 GB-only application. The goal is to scale capability 
 
 ### Benchmark requirement
 Test representative machines in each available class, including 6 GB where practical. Record both idle and available memory before loading, total application-plus-model peak RAM, VRAM, latency, throughput, thermal behaviour, and voice concurrency. Test under realistic Windows background load. A RAM tier is never a guarantee by itself.
+
+## Hardware intelligence and adaptive management
+
+A separate proposed subsystem, the **Hardware Intelligence & Adaptive Resource Manager (HIARM)**, will inventory CPU/RAM/GPU/VRAM/storage, observe current resource headroom, validate acceleration support, and recommend models and settings. It should also check free disk space before model downloads and schedule LLM/STT/TTS workloads according to measured capacity.
+
+Installed RAM alone is insufficient. The manager must distinguish total from available RAM, dedicated VRAM from shared memory, and model download size from runtime memory. It must explain recommendations, preserve manual choice, and never silently download or switch models, activate cloud inference, change system settings, or terminate unrelated processes.
+
+Detailed proposed requirements, Windows detection research, privacy boundaries, and acceptance criteria: [HARDWARE-INTELLIGENCE.md](HARDWARE-INTELLIGENCE.md). This is a design requirement under research, not an implemented or benchmarked feature.
