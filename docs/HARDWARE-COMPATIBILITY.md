@@ -53,3 +53,30 @@ Before claiming a useful 4 GB experience, define and test:
 - What is the oldest practical CPU instruction set for selected runtimes?
 - Is CPU-only inference the baseline, with GPU acceleration optional?
 - What performance threshold makes a model usable rather than merely launchable?
+
+
+## Scalable experience profiles — expanded direction (2026-11-23)
+
+The product is **not** a 4 GB-only application. The goal is to scale capability upward so users with stronger machines receive a meaningfully better local experience. These are planning profiles, not guaranteed specifications or fixed model assignments.
+
+| Installed system RAM | Intended experience direction | Candidate capabilities to evaluate |
+|---|---|---|
+| 4 GB | Constrained/basic | Very compact quantised model, short context, text-first use, sequential loading, optional voice only if measurements allow |
+| 6 GB | Entry/balanced | More headroom than 4 GB, compact model choices, moderate context, carefully scheduled voice workloads |
+| 8 GB | Comfortable | Stronger compact models, larger context, more practical voice use and multitasking |
+| 16 GB | Advanced | Larger and more capable local models, longer context, improved voice quality, more concurrent services |
+| 32 GB | High capability | Substantially larger models and richer context, higher-quality speech pipelines, more simultaneous workloads where CPU/GPU permit |
+| 64 GB+ | Enthusiast / workstation | Evaluate larger local models, advanced acceleration and high-fidelity voice workflows; no fixed promise until tested |
+
+### Resource-aware behaviour
+- Detect available memory at runtime; installed RAM alone is not enough because Windows and other applications consume memory.
+- Consider CPU architecture/performance, GPU and dedicated/shared VRAM, storage capacity/speed, and power/thermal limits.
+- Offer clear presets such as **Automatic**, **Lightweight**, **Balanced**, and **High capability**, with an advanced manual override.
+- Recommend models based on the machine's measured/available resources and the user's quality/speed preference.
+- Do not silently download or switch to a large model. Show model size, required storage estimate, expected resource class, and ask for consent.
+- Prefer one active LLM at a time. Schedule or unload STT/TTS workloads according to available resources; allow capable systems to use more concurrency when benchmarks support it.
+- Make it possible to choose a smaller/faster model even on powerful hardware.
+- Do not treat system RAM as equivalent to GPU VRAM or assume all model layers can be offloaded.
+
+### Benchmark requirement
+Test representative machines in each available class, including 6 GB where practical. Record both idle and available memory before loading, total application-plus-model peak RAM, VRAM, latency, throughput, thermal behaviour, and voice concurrency. Test under realistic Windows background load. A RAM tier is never a guarantee by itself.
