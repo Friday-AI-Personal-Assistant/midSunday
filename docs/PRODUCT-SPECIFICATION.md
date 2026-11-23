@@ -138,3 +138,23 @@ Later release success criteria are defined by the relevant roadmap phase.
 - Character visual style and asset pipeline.
 - Product licence and commercial distribution model.
 - Update and code-signing strategy.
+
+
+## 10. Scalable hardware experience (owner-confirmed direction)
+
+midSunday must serve a range of computers rather than being optimised only for 4 GB RAM. The intended direction is to scale local model capability, context length, speech quality, and concurrency upward with available resources.
+
+Planning classes include 4 GB, 6 GB, 8 GB, 16 GB, 32 GB, and 64 GB+ systems. These are not certified minimum/recommended specifications and must not be used as compatibility promises before testing.
+
+The application should:
+- Detect available system resources and account for OS/background usage, not just installed RAM.
+- Consider CPU, GPU/VRAM, storage, thermals, and power in addition to RAM.
+- Provide understandable Automatic, Lightweight, Balanced, and High capability modes.
+- Recommend suitable models while allowing manual choice.
+- Explain model download size and expected resource needs before download.
+- Avoid forcing powerful computers to use the smallest model.
+- Avoid forcing constrained computers to load a model that will cause instability.
+- Permit users on powerful machines to choose smaller/faster models when preferred.
+- Schedule model, STT, and TTS workloads based on measured capability.
+
+All profile mappings and model recommendations remain subject to repeatable benchmarks.
