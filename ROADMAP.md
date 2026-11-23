@@ -542,3 +542,15 @@ This repository is the durable source of truth. ChatGPT conversations are workin
 
 - **2026-11-23 — Roadmap 0.1:** Initial end-to-end product and development roadmap created from the current midSunday project decisions and technical proposals.
 - **2026-11-23 — Phase 1 checkpoint:** Initial desk research documented in `docs/PHASE-1-RESEARCH.md`; no technology or asset approved and no benchmarks claimed.
+
+
+### 2026-11-23 — Local runtime research update
+- [x] Confirm upstream MIT licensing for llama.cpp and Ollama at repository level.
+- [x] Confirm Ollama distinguishes free local model execution from separately priced cloud model usage.
+- [x] Document why compact models can handle bounded text tasks but are not yet proven for nuanced companion dialogue or Pakistani Urdu.
+- [x] Add Qwen3.5-0.8B as an additional compact model test candidate.
+- [ ] Compare llama.cpp and Ollama with the same model on Windows.
+- [ ] Run the compact-model task suite and hardware benchmarks.
+- [ ] Continue Pakistani Urdu STT/TTS candidate evaluation.
+
+This update is desk research only. It does not approve a final runtime/model or claim hardware compatibility. See `docs/PHASE-1-RESEARCH.md`.
