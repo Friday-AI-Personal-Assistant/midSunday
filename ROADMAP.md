@@ -115,6 +115,8 @@ Release numbers are planning labels, not promises or dates. A stage is not compl
 
 **Goal:** Verify that the product can meet its promises before locking the stack.
 
+**Research checkpoint (2026-11-23):** Initial desk research is recorded in [PHASE-1-RESEARCH.md](docs/PHASE-1-RESEARCH.md). Tauri 2, llama.cpp, Qwen3-0.6B, whisper.cpp, Kokoro, Piper, and SQLite remain candidates at different confidence levels. No candidate is approved. Pakistani Urdu STT/TTS quality, real hardware performance, exact asset licensing, and a fair desktop-framework comparison remain open. Phase 1 is in progress; desk research does not satisfy its benchmark exit gate.
+
 - [ ] Compare desktop frameworks for Windows-first distribution, performance, accessibility, updates, and licensing.
 - [ ] Validate Tauri 2 + Rust + React/TypeScript as the leading candidate.
 - [ ] Inspect FRIDAY's repository and document reusable patterns, limitations, and code that must remain separate.
@@ -514,7 +516,7 @@ This repository is the durable source of truth. ChatGPT conversations are workin
 
 ## 11. Current status and immediate next actions
 
-**Current stage:** R0 — Project foundation / planning.
+**Current stage:** Phase 1 — Product research and feasibility (desk research in progress).
 
 **Completed:**
 - [x] Product name selected: midSunday.
@@ -525,11 +527,12 @@ This repository is the durable source of truth. ChatGPT conversations are workin
 - [x] Initial complete roadmap drafted.
 
 **Next actions:**
-1. Review this roadmap with the product owner and confirm or amend scope.
-2. Create the README and core documentation listed in Phase 0.
-3. Inspect FRIDAY and complete the reuse analysis.
-4. Build the requirements, architecture, risk, and licensing records.
-5. Begin feasibility benchmarks before locking technical dependencies.
+1. Complete a fair Tauri vs Electron Windows prototype comparison.
+2. Perform read-only inspection of FRIDAY's remaining frontend, Rust commands, capabilities, tests, CI, and dependency lockfiles.
+3. Benchmark compact local models and quantisation on representative hardware.
+4. Evaluate Whisper STT for Pakistani Urdu, Roman Urdu, and code-switching; investigate viable Urdu TTS candidates.
+5. Review exact model, runtime, and voice licences before any bundling decision.
+6. Update the decision log and architecture only when repeatable evidence supports a choice.
 
 **Not yet done:** No application code, AI runtime, model, voice engine, installer, or production feature is claimed to be implemented in this repository.
 
@@ -538,3 +541,4 @@ This repository is the durable source of truth. ChatGPT conversations are workin
 ## 12. Change log
 
 - **2026-11-23 — Roadmap 0.1:** Initial end-to-end product and development roadmap created from the current midSunday project decisions and technical proposals.
+- **2026-11-23 — Phase 1 checkpoint:** Initial desk research documented in `docs/PHASE-1-RESEARCH.md`; no technology or asset approved and no benchmarks claimed.
