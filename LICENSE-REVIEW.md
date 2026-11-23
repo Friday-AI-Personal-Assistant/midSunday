@@ -59,3 +59,17 @@ These are preliminary source-level observations only. They are not final approva
 | SQLite core | Public-domain dedication | In review | Check any wrappers, extensions, and build-time third-party components |
 
 Sources are linked in [Phase 1 feasibility research](docs/PHASE-1-RESEARCH.md). No candidate above is marked Approved. Recheck all information against the exact release and asset at the time of distribution.
+
+
+### Additional Urdu speech candidates (2026-11-23)
+
+| Candidate | Published terms / status | Decision |
+|---|---|---|
+| Loudness.ai Urdu Sukhan ASR v1 | Repository lists CC BY-NC 4.0 for code and model | Not eligible for commercial bundling under currently published terms; research comparison only if permitted |
+| ubaidngt/whisper-small-ur-en | Model card lists Apache-2.0 | In review; verify base, data provenance, exact weights, and conversion |
+| ProximaAI/smol-urdu-tts-v1 | Model page lists Apache-2.0; experimental | In review; verify code, base components, quality, and exact distribution terms |
+| mahwizzzz/DeepSpeak-v1 | Model card lists Apache-2.0; separate codec licence applies; model experimental | In review; codec and all dependencies must be cleared separately |
+| mahwizzzz/Dia-1.6B-Urdu | Exact model/base terms not fully established in this checkpoint | Pending; do not bundle |
+| Mozilla Data Collective Urdu TTS corpora | Commercial data licences available; some listings are high-cost | Not pursued; no purchase without explicit owner approval |
+
+See [Phase 1 feasibility research](docs/PHASE-1-RESEARCH.md) for source links and technical caveats. No Urdu STT/TTS candidate is approved for release.
