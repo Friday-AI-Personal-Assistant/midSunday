@@ -245,3 +245,24 @@ Sources:
 6. Record hardware, exact model repository/revision, quantisation, runtime version, configuration, and file hashes.
 
 **Status:** Desk research only. No model has been run, no performance benchmark has been completed, and no runtime/model is approved for release.
+
+
+## 13. Hardware strategy — scale upward, not just downward (2026-11-23)
+
+The product owner clarified that 4 GB is only one target, not the design ceiling. midSunday should provide the best practical experience that each computer can support. Users with more memory and capable CPUs/GPUs should be able to use stronger local models, longer context, richer speech and more concurrent workloads. Users with constrained hardware should retain a useful lighter option where feasible.
+
+Planning classes now include 4 GB, 6 GB, 8 GB, 16 GB, 32 GB, and 64 GB+. These are not minimum/recommended specifications and do not imply that RAM alone determines capability.
+
+The evaluation must:
+- Compare more than one model size and quantisation, not merely find the smallest model that launches.
+- Measure available RAM and total app-plus-model memory under realistic Windows load.
+- Record CPU, GPU/VRAM, storage, thermal and power behaviour.
+- Test different context lengths and quality/speed trade-offs.
+- Evaluate voice workloads both sequentially and concurrently with chat.
+- Provide model choice and clear resource estimates rather than hard-coding one model per RAM tier.
+- Ensure high-memory users are not artificially capped at the smallest model.
+- Ensure a smaller model remains selectable on powerful hardware for speed or privacy/resource preference.
+
+Potential user-facing presets are Automatic, Lightweight, Balanced, and High capability. These labels and their internal resource rules remain proposals until tested.
+
+**Research consequence:** The model benchmark matrix must include a compact baseline and at least one more capable model, then scale upward as hardware permits. A 4 GB test alone cannot satisfy Phase 1's performance research.
