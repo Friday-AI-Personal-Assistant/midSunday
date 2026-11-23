@@ -554,3 +554,16 @@ This repository is the durable source of truth. ChatGPT conversations are workin
 - [ ] Continue Pakistani Urdu STT/TTS candidate evaluation.
 
 This update is desk research only. It does not approve a final runtime/model or claim hardware compatibility. See `docs/PHASE-1-RESEARCH.md`.
+
+
+### 2026-11-23 — Scalable hardware direction confirmed
+The product owner confirmed that midSunday must not be designed only for 4 GB machines. The experience should scale upward so users with 6 GB, 8 GB, 16 GB, 32 GB, and higher-memory systems can benefit from stronger models, longer context, richer voice, and better multitasking. The 4 GB profile remains a constrained compatibility target, not the universal design ceiling.
+
+- [x] Record multi-tier hardware direction in the decision log.
+- [x] Expand hardware planning profiles to include 6 GB and 64 GB+.
+- [ ] Define resource-aware Automatic / Lightweight / Balanced / High capability modes.
+- [ ] Benchmark representative machines across available RAM, CPU, and GPU classes.
+- [ ] Build a model catalogue with measured resource requirements and quality trade-offs.
+- [ ] Verify simultaneous LLM/STT/TTS workloads at each supported profile.
+
+See `docs/HARDWARE-COMPATIBILITY.md` and `docs/PRODUCT-SPECIFICATION.md`. All tiers remain targets until tested.
