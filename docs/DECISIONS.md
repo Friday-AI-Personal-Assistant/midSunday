@@ -89,3 +89,12 @@ Statuses: **Confirmed**, **Proposed**, **Under review**, **Superseded**.
 - **Status:** Confirmed
 - **Decision:** Maintain a complete roadmap and repository documentation so work can continue if a conversation is lost or corrupted.
 - **Consequences:** Update project records at each meaningful milestone and include handoff notes.
+
+
+## D-013 — Phase 1 research checkpoint
+
+- **Date:** 2026-11-23
+- **Status:** Under review; no technology approval
+- **Decision:** Record initial feasibility findings in `docs/PHASE-1-RESEARCH.md` and keep all engines/models as candidates until practical tests and exact licence reviews are complete.
+- **Rationale:** Official documentation supports several promising candidates, but Urdu language quality, constrained-hardware performance, and redistribution rights are not established by desk research alone.
+- **Consequences:** Do not lock the stack, claim 4 GB compatibility, or bundle a model/voice until Phase 1 acceptance evidence exists.
