@@ -116,3 +116,11 @@ Statuses: **Confirmed**, **Proposed**, **Under review**, **Superseded**.
 - **Decision:** midSunday must not be designed only around 4 GB RAM. It should scale its model choices, context, voice workloads, and advanced capabilities to the resources available on each supported computer. The product should aim to provide the best practical experience on 6 GB, 8 GB, 16 GB, 32 GB, and higher-memory systems while retaining a constrained mode for lower-memory machines where feasible.
 - **Rationale:** Users with more capable computers should benefit from stronger local models, richer conversation, longer context, higher-quality voice, and better multitasking rather than being restricted to the smallest model.
 - **Consequences:** Design resource-aware hardware profiles rather than a single universal model. Consider available RAM, CPU, GPU/VRAM, storage, OS overhead, and concurrent workloads. Profiles are targets only until benchmarked; never promise a given experience based on RAM alone.
+
+## D-016 — Hardware Intelligence & Adaptive Resource Manager
+
+- **Date:** 2026-11-23
+- **Status:** Proposed; technical design under research
+- **Decision proposal:** Add a dedicated local Hardware Intelligence & Adaptive Resource Manager to midSunday. It should detect CPU, cores, installed and available RAM, GPU/VRAM, supported acceleration, OS, and storage capacity; recommend suitable model/runtime/settings; and adapt workload scheduling to live resource pressure.
+- **Rationale:** OpenJarvis demonstrates a useful separation between hardware detection and engine/model recommendation. midSunday needs a more complete Windows-first design that also considers storage and live resource headroom.
+- **Consequences:** Research documented in `docs/HARDWARE-INTELLIGENCE.md`. Do not treat this proposal as owner-approved implementation scope or as a final API/runtime choice until the owner reviews it. No hidden telemetry, automatic paid/cloud use, silent model downloads, or forced model switches.
