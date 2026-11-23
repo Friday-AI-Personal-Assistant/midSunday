@@ -107,3 +107,12 @@ Statuses: **Confirmed**, **Proposed**, **Under review**, **Superseded**.
 - **Decision:** Keep llama.cpp as the leading candidate for direct midSunday runtime integration; evaluate Ollama as a local development and model-testing convenience.
 - **Rationale:** Both projects publish MIT licences for their software repositories. llama.cpp offers direct control and a server/library integration path; Ollama offers a convenient local model-management workflow. Ollama cloud inference is a separate optional paid service and is not required for local use.
 - **Consequences:** Do not bundle both by default. Compare them on Windows with the same model before final selection. Review each model and quantised file separately for commercial redistribution rights. No runtime is approved yet.
+
+
+## D-015 — Scalable hardware experience
+
+- **Date:** 2026-11-23
+- **Status:** Confirmed product direction; technical profiles remain unvalidated
+- **Decision:** midSunday must not be designed only around 4 GB RAM. It should scale its model choices, context, voice workloads, and advanced capabilities to the resources available on each supported computer. The product should aim to provide the best practical experience on 6 GB, 8 GB, 16 GB, 32 GB, and higher-memory systems while retaining a constrained mode for lower-memory machines where feasible.
+- **Rationale:** Users with more capable computers should benefit from stronger local models, richer conversation, longer context, higher-quality voice, and better multitasking rather than being restricted to the smallest model.
+- **Consequences:** Design resource-aware hardware profiles rather than a single universal model. Consider available RAM, CPU, GPU/VRAM, storage, OS overhead, and concurrent workloads. Profiles are targets only until benchmarked; never promise a given experience based on RAM alone.
