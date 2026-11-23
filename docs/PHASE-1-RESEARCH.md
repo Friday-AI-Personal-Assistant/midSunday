@@ -146,3 +146,54 @@ Use permissioned test recordings; do not retain personal audio unnecessarily.
 - Research Pakistani Urdu TTS options and exact voice licences.
 - Update the architecture, decision log, and licence register only when evidence supports a decision.
 - Do not begin production application implementation until the Phase 1 exit gate is satisfied.
+
+
+## 10. Additional Urdu-specific model research
+
+A second search identified more targeted Urdu candidates. These are particularly relevant because generic multilingual claims are not enough for the product's Pakistani Urdu requirement.
+
+### Urdu Sukhan ASR — promising quality, currently non-commercial
+Loudness.ai's Urdu Sukhan ASR v1 is a Whisper large-v3-turbo fine-tune targeting Urdu, English, and Urdu-English code-switching. Its published evaluation reports improvements over the Whisper baseline on several Urdu test sets. However, the repository explicitly lists **CC BY-NC 4.0 for the code and model** and says commercial use requires contacting the developer.
+
+**Conclusion:** Do not plan to bundle this model in a commercial midSunday release under the currently published terms. It may be useful for research comparison only if its access and evaluation terms permit that use.
+
+Source: https://github.com/Loudness-ai/urdu-sukhan-asr
+
+### whisper-small-ur-en — compact bilingual candidate, licence and quality need verification
+A Hugging Face model card for `ubaidngt/whisper-small-ur-en` reports a bilingual Urdu-English fine-tune of Whisper small and lists Apache-2.0. Its published evaluation reports Urdu WER 29.38% versus 43.77% for the baseline on the stated held-out test set, and English WER 8.50% versus 26.89%. The author notes that the model is trained mostly on read speech and that noisy or heavily accented conversational speech may perform worse.
+
+**Conclusion:** Worth testing as a compact Urdu-English candidate. Verify the exact weights, base model terms, training data provenance, conversion/inference format, and independent performance on Pakistani conversational speech before any product decision.
+
+Source: https://huggingface.co/ubaidngt/whisper-small-ur-en
+
+### Smol Urdu TTS V1 — lightweight experimental candidate
+ProximaAI's Smol Urdu TTS V1 is described as an experimental Urdu TTS model based on SmolLM2-135M. Its model page lists Apache-2.0, but warns that quality may not be perfect and improvements are ongoing.
+
+**Conclusion:** This is a promising low-resource candidate for a prototype, not a release-ready voice. Test pronunciation, prosody, latency, memory, and whether its exact code/weights and base components can be redistributed commercially.
+
+Source: https://huggingface.co/ProximaAI/smol-urdu-tts-v1
+
+### DeepSpeak-v1 — experimental Urdu TTS candidate
+The DeepSpeak-v1 model card describes an Urdu-only experimental TTS model with approximately 400M parameters, Apache-2.0 model licensing, and an explicit dependency on a separate semantic codec model whose licence must also be checked. The card says training is incomplete and that speaker-reference audio is required for best results.
+
+**Conclusion:** Keep on the research list, but it is not a practical default for constrained hardware until inference performance, codec licensing, voice rights, and model quality are established.
+
+Source: https://huggingface.co/mahwizzzz/deepspeak-v1
+
+### Dia-1.6B-Urdu — not a 4 GB first choice
+A separate Urdu TTS fine-tune is listed at approximately 1.6B parameters and reports training on a 24 GB VRAM GPU. It is not a sensible first candidate for a constrained 4 GB profile without substantial quantisation and inference testing. Its base model and asset terms also require review.
+
+Source: https://huggingface.co/mahwizzzz/Dia-1.6B-Urdu
+
+### Commercial dataset warning
+Mozilla Data Collective now lists large Pakistan-recorded Urdu TTS corpora with commercial licensing options, but some listed packages are tens of gigabytes and priced in the tens of thousands of US dollars. These are not compatible with our no-unapproved-cost principle and must not be considered without explicit owner approval.
+
+Example: https://mozilladatacollective.com/datasets/cmw574b6z00xi06mo4dchu497
+
+## 11. Updated Urdu voice strategy
+
+- **STT:** Compare Whisper multilingual baseline with `whisper-small-ur-en`; keep Urdu Sukhan ASR out of commercial bundling unless the rights holder grants suitable commercial terms.
+- **TTS:** Test Smol Urdu TTS V1 as the first lightweight Urdu candidate; evaluate DeepSpeak-v1 as experimental; keep Kokoro for English voice evaluation.
+- **Quality:** Test Urdu script, Roman Urdu input normalisation, Pakistani regional accents, names, everyday conversational speech, and Urdu-English code-switching.
+- **Cost/licensing:** Prefer candidates whose exact weights, code, and data rights allow commercial redistribution without a paid licence. Do not purchase datasets or voices without explicit approval.
+- **Reality check:** No Urdu voice candidate is approved or proven on 4 GB hardware at this checkpoint.
