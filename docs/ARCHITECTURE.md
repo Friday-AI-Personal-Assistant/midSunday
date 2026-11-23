@@ -112,3 +112,22 @@ Do not add background network calls, analytics, telemetry, or update checks with
 - Linux/macOS abstraction boundaries.
 
 These decisions must be resolved with prototypes and evidence, not assumed.
+
+## 10. Hardware Intelligence & Adaptive Resource Manager (proposed)
+
+A dedicated **Hardware Intelligence & Adaptive Resource Manager (HIARM)** is proposed to detect the machine's capabilities, estimate current resource headroom, recommend suitable model/runtime configurations, and manage workloads safely.
+
+Responsibilities:
+- Separate hardware inventory (CPU, core topology, installed RAM, GPU adapters/VRAM, OS, storage capacity) from live resource state (available RAM, process memory, GPU memory where reliable, and free disk space).
+- Validate actual runtime/driver acceleration support; do not infer compatibility from a GPU name alone.
+- Estimate model/runtime/context/speech resource needs using benchmark-backed catalogue entries.
+- Recommend configurations according to user preference (quality, speed, lightweight, battery life) and explain uncertainty.
+- Monitor resource pressure and schedule optional STT/TTS/background workloads without terminating unrelated applications.
+- Require user consent before large downloads or material model changes; never silently enable cloud inference.
+- Offer Automatic, Lightweight, Balanced, and High capability presets as candidates, with manual override.
+
+For Windows-first detection, evaluate documented Windows system, memory, process, graphics/DXGI, storage, and power APIs. Vendor-specific utilities may be optional capability providers, never mandatory for basic operation. Hardware inventory stays local; no telemetry or upload by default.
+
+OpenJarvis is a reference for separating detection from engine/model recommendation. It is not a midSunday dependency, and its setup-time recommendation flow is not sufficient evidence for our desired live adaptive behaviour. Full requirements and acceptance criteria are in [HARDWARE-INTELLIGENCE.md](HARDWARE-INTELLIGENCE.md).
+
+No implementation or API dependency is approved by this proposal.
