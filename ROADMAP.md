@@ -1,0 +1,540 @@
+# midSunday — Complete Product & Development Roadmap
+
+> **Product:** midSunday  
+> **Descriptor:** AI Personal Companion  
+> **Roadmap version:** 0.1  
+> **Status:** Foundation / planning  
+> **Repository:** `Friday-AI-Personal-Assistant/midSunday`  
+> **Last updated:** 2026-11-23  
+> **Decision rule:** User-confirmed requirements are binding. Technical choices in this roadmap are proposals until validated and approved.
+
+This document is the long-term project map and recovery reference for midSunday. It is deliberately comprehensive so development can continue even if a ChatGPT conversation is lost, corrupted, or moved. Update this file whenever scope, decisions, priorities, or completion status change.
+
+---
+
+## 1. Product vision
+
+midSunday is an independent, customisable desktop AI companion. It should feel approachable and personal while remaining useful as an assistant. Its core experience should work locally and offline wherever technically practical. Internet-dependent features must be clearly identified and optional.
+
+midSunday is its own product, brand, codebase, interface, character system, and roadmap. FRIDAY is a separate project. We may inspect FRIDAY for proven engineering patterns and reusable ideas, but we must not copy it wholesale or disrupt its development.
+
+### Product principles
+
+1. **Local-first and offline-capable:** Core chat, local models, local voice where supported, and local memory should not require a cloud account.
+2. **No hidden costs:** No mandatory subscription, paid API, hosted backend, or developer-funded usage. Any optional cost must be disclosed before the user commits.
+3. **User ownership and privacy:** Private conversations and memories stay on the device by default. No cloud transfer without clear, informed user action.
+4. **Honest capability claims:** Hardware, language, voice, and offline claims must be tested and documented. A target is not a guarantee.
+5. **Safe computer interaction:** The assistant must not execute arbitrary model-generated shell commands. Sensitive actions require explicit approval.
+6. **Commercially viable licensing:** Every bundled engine, model, voice, font, image, icon, and other asset must have a documented licence compatible with the intended distribution.
+7. **Modular and maintainable:** Components should be replaceable without rebuilding the entire product.
+8. **Accessible and respectful companionship:** Characters may be warm and expressive, but must be transparent that they are AI and must not manipulate users or encourage unhealthy dependency.
+
+---
+
+## 2. Confirmed product direction
+
+The following reflect decisions and priorities already expressed by the product owner:
+
+- Product name: **midSunday** (exact casing).
+- Product descriptor: **AI Personal Companion**.
+- Independent product and repository, separate from FRIDAY.
+- Initial target platform: Windows. Linux and macOS are later targets.
+- Offline/local operation is a central product requirement, not a marketing afterthought.
+- Local chat, voice, memory, and carefully controlled PC interaction are intended core capabilities.
+- Online capabilities, such as web, Google, and YouTube search, naturally require an internet connection.
+- Optional cloud model providers / bring-your-own-key (BYOK) may be supported, but cloud use must never be mandatory.
+- Local/free speech recognition and speech synthesis are preferred.
+- Urdu is a high-priority language, including Pakistani Urdu and Roman Urdu / Urdu-English mixed speech. Multilingual text and voice are desired.
+- Character/personality directions include best friend, girlfriend, boyfriend, mentor, professional assistant, and user-created/custom characters.
+- The girlfriend personality may be warm, playful, and flirtatious, while remaining respectful, transparent, age-appropriate for adults, and free of manipulative dependency behaviours.
+- A low-end **4 GB RAM** experience is an aspiration to investigate and benchmark, not yet a verified minimum requirement.
+- Higher-memory profiles should offer better capability without excluding basic machines unnecessarily.
+- No surprise costs, mandatory subscriptions, or unapproved paid services.
+
+### Proposed, not yet approved, technical starting points
+
+These are candidates for research and benchmarking, not final decisions:
+
+- Desktop shell: Tauri 2, Rust, React, TypeScript, and Vite.
+- Local LLM runtime: llama.cpp with quantised GGUF models.
+- Candidate small models: Qwen-family compact models (exact model/version to be selected after licence, language, quality, and memory testing).
+- Local speech recognition: Vosk and/or whisper.cpp; Urdu quality must be tested before choosing.
+- Local speech synthesis: Piper and/or Kokoro; runtime and voice licences require separate review.
+- Local memory: SQLite.
+- Search in the first release may open a browser search rather than depend on a paid search API.
+- Local model loading should be resource-aware; avoid running multiple heavy engines simultaneously on low-memory machines.
+
+---
+
+## 3. Scope and release strategy
+
+Build in vertical slices: each milestone should produce something testable. Do not attempt every advanced feature at once.
+
+### Release stages
+
+- **R0 — Product foundation:** Requirements, architecture, risk register, licensing policy, and recovery documentation.
+- **R1 — Desktop shell:** Installable Windows application with a polished, responsive interface and settings.
+- **R2 — Offline text companion:** Local model integration, basic chat, conversation history, and resource controls.
+- **R3 — Local memory:** User-controlled persistent memory, inspect/edit/delete/export, and privacy controls.
+- **R4 — Voice companion:** Speech input/output, push-to-talk, interruption, device selection, and language testing.
+- **R5 — Personalities and characters:** Character profiles, persona settings, visual identity, and customisation.
+- **R6 — Useful assistant tools:** Safe allow-listed desktop actions, reminders, file assistance, and browser-based online search.
+- **R7 — Reliability and public beta:** Installer, updates, recovery, security review, accessibility, telemetry policy, and beta testing.
+- **R8 — Stable Windows release:** Release process, documentation, support policy, and commercial readiness.
+- **R9 — Expansion:** Linux/macOS, optional integrations, additional models/languages, and advanced character presentation.
+
+Release numbers are planning labels, not promises or dates. A stage is not complete merely because its code exists; its exit criteria must pass.
+
+---
+
+## 4. Detailed roadmap and acceptance gates
+
+## Phase 0 — Project foundation and continuity
+
+**Goal:** Make the project understandable and recoverable without relying on chat history.
+
+- [ ] Confirm this roadmap as the master plan.
+- [ ] Create the main README with product purpose, status, setup expectations, and links to project documents.
+- [ ] Create a project history recording decisions, important discussions, and rationale.
+- [ ] Create a product specification with functional and non-functional requirements.
+- [ ] Create an architecture overview and component boundaries.
+- [ ] Create an offline-first requirements document.
+- [ ] Create hardware compatibility and benchmarking policy.
+- [ ] Create voice and language requirements.
+- [ ] Create personality and character guidelines.
+- [ ] Create privacy, safety, and security requirements.
+- [ ] Create commercial licensing and third-party notices policy.
+- [ ] Create FRIDAY reuse analysis.
+- [ ] Create a changelog and decision log.
+- [ ] Record open questions, assumptions, and risks.
+- [ ] Define how every significant conversation decision is transferred into repository documentation.
+
+**Exit gate:** A new developer can understand the product, current status, confirmed decisions, open questions, and next tasks using repository documents alone.
+
+## Phase 1 — Product research and feasibility
+
+**Goal:** Verify that the product can meet its promises before locking the stack.
+
+- [ ] Compare desktop frameworks for Windows-first distribution, performance, accessibility, updates, and licensing.
+- [ ] Validate Tauri 2 + Rust + React/TypeScript as the leading candidate.
+- [ ] Inspect FRIDAY's repository and document reusable patterns, limitations, and code that must remain separate.
+- [ ] Compare local LLM runtimes and their commercial distribution implications.
+- [ ] Benchmark compact local models for response quality, Urdu capability, English capability, multilingual handling, and memory use.
+- [ ] Compare quantisation levels and model sizes.
+- [ ] Test cold-start time, first-token latency, generation speed, and sustained memory use.
+- [ ] Compare local STT engines for English, Urdu script, Pakistani accents, Roman Urdu, and code-switching.
+- [ ] Compare local TTS engines and available Urdu/English voices.
+- [ ] Check whether speech engines can run acceptably on CPU-only machines.
+- [ ] Review SQLite and local data protection options.
+- [ ] Define supported Windows versions and CPU architecture.
+- [ ] Identify any GPU requirements and ensure a CPU fallback where possible.
+- [ ] Review all candidate licences, model cards, voice licences, and redistribution terms.
+- [ ] Record benchmark machines, test scripts, model versions, and results.
+
+**Exit gate:** The stack and default model/voice choices are selected based on repeatable tests, documented licences, and realistic hardware profiles. Unverified claims remain clearly labelled as targets.
+
+## Phase 2 — UX, visual identity, and interaction design
+
+**Goal:** Design a distinctive, coherent companion experience before implementing extensive features.
+
+- [ ] Define brand identity, logo direction, colours, typography, and icon style.
+- [ ] Define the main app layout and navigation.
+- [ ] Design first launch and onboarding.
+- [ ] Design model download/import and storage-location flow.
+- [ ] Design chat screen, message states, streaming, stop/regenerate, and errors.
+- [ ] Design character/companion presentation (begin with lightweight 2D as a candidate; evaluate 3D later).
+- [ ] Design voice controls and microphone permission states.
+- [ ] Design settings for models, voice, language, memory, privacy, and performance.
+- [ ] Design offline/online status indicators.
+- [ ] Design safe-action approval dialogs.
+- [ ] Design empty states, loading states, low-memory warnings, and recovery flows.
+- [ ] Check keyboard navigation, contrast, scaling, and screen-reader accessibility.
+- [ ] Test wireframes with the product owner before implementation.
+
+**Exit gate:** The primary user journeys and design system are approved, including clear states for offline use and errors.
+
+## Phase 3 — Engineering foundation and desktop shell
+
+**Goal:** Create a reliable, secure, maintainable desktop application.
+
+- [ ] Set up the application repository structure and development scripts.
+- [ ] Configure Tauri/Rust and React/TypeScript if validated.
+- [ ] Establish formatting, linting, type checks, and automated tests.
+- [ ] Establish CI checks that do not introduce paid services or surprise usage.
+- [ ] Build the application window, navigation, theme, and responsive layout.
+- [ ] Add typed frontend-to-backend command boundaries.
+- [ ] Define Rust modules and permission boundaries.
+- [ ] Add structured local logging with secrets and private content redacted.
+- [ ] Add application settings and safe defaults.
+- [ ] Add crash/error handling and diagnostic export with user review.
+- [ ] Add app version and environment information.
+- [ ] Establish dependency update and vulnerability review practices.
+- [ ] Document local development and build instructions.
+
+**Exit gate:** A clean checkout can build and launch a basic Windows desktop shell reproducibly, with automated checks passing.
+
+## Phase 4 — Offline local chat engine
+
+**Goal:** Deliver the first useful, genuinely offline companion experience.
+
+- [ ] Implement model catalogue metadata (not an automatic download of unreviewed models).
+- [ ] Implement model download/import with source, size, hash, and licence information.
+- [ ] Verify downloaded model integrity.
+- [ ] Implement local model discovery and selection.
+- [ ] Integrate the selected inference runtime behind a replaceable adapter.
+- [ ] Implement streaming text generation.
+- [ ] Implement stop generation, retry, and error recovery.
+- [ ] Implement system prompts and bounded context management.
+- [ ] Implement conversation creation, rename, delete, and history.
+- [ ] Add model load/unload lifecycle and explicit resource status.
+- [ ] Add low-memory safeguards and graceful fallback.
+- [ ] Ensure no internet connection is required after model assets are available.
+- [ ] Verify that no prompt or conversation is sent externally by default.
+- [ ] Test long sessions, malformed input, model failures, and app restarts.
+
+**Exit gate:** A user can disconnect the internet, launch the app, load an installed model, chat, stop generation, and retain local conversation history reliably.
+
+## Phase 5 — Memory and personalisation
+
+**Goal:** Give users useful continuity without taking control away from them.
+
+- [ ] Define the distinction between chat history, explicit saved facts, and inferred memory.
+- [ ] Design the local memory schema and migration strategy.
+- [ ] Implement SQLite storage.
+- [ ] Implement user-approved memory creation and editing rules.
+- [ ] Let users inspect, correct, and delete individual memories.
+- [ ] Let users disable memory.
+- [ ] Let users clear conversation history independently of saved memory.
+- [ ] Add export and backup options.
+- [ ] Add restore and data migration tests.
+- [ ] Define retention and cleanup behaviour.
+- [ ] Keep memory local by default.
+- [ ] Require explicit consent before any cloud provider receives memory or chat context.
+- [ ] Test data integrity after crashes, upgrades, and interrupted writes.
+
+**Exit gate:** Users understand what is stored, can control it, and can export/delete it without hidden copies or unexpected cloud transfer.
+
+## Phase 6 — Voice and multilingual experience
+
+**Goal:** Enable natural voice interaction with realistic language support.
+
+- [ ] Implement microphone permissions and device selection.
+- [ ] Implement push-to-talk first.
+- [ ] Integrate local speech-to-text through an adapter.
+- [ ] Integrate local text-to-speech through an adapter.
+- [ ] Add voice selection, speed, volume, and playback controls.
+- [ ] Add interruption/stop-speaking behaviour.
+- [ ] Add optional hands-free mode only after privacy and activation safeguards.
+- [ ] Test English recognition and synthesis.
+- [ ] Test Urdu recognition and synthesis, including Pakistani pronunciation and accents.
+- [ ] Test Urdu script and Roman Urdu.
+- [ ] Test Urdu-English code-switching in the same sentence.
+- [ ] Test noisy rooms, low-quality microphones, and CPU-only hardware.
+- [ ] Clearly label language/voice quality limitations.
+- [ ] Document which features are fully offline and which require downloads.
+
+**Exit gate:** Voice works reliably for the languages explicitly marked supported, on documented hardware, without silently sending audio to a cloud service.
+
+## Phase 7 — Personalities, characters, and companion experience
+
+**Goal:** Make midSunday expressive and customisable while preserving user trust.
+
+- [ ] Define personality configuration format separate from application logic.
+- [ ] Implement initial personalities: best friend, mentor, professional assistant, girlfriend, and boyfriend.
+- [ ] Allow custom personality creation and editing.
+- [ ] Define boundaries for romantic/flirtatious roleplay and adult-oriented character modes.
+- [ ] Clearly disclose that characters are AI, not human beings.
+- [ ] Prevent manipulative pressure, isolation, guilt, or dependency-maximising behaviour.
+- [ ] Add user controls for tone, warmth, humour, formality, and verbosity.
+- [ ] Design lightweight 2D character assets and animation states.
+- [ ] Review every artwork, font, animation, and sound asset licence.
+- [ ] Consider optional 3D characters only after performance and product value are demonstrated.
+- [ ] Test personality consistency across sessions without overriding user control.
+
+**Exit gate:** Users can choose and customise personalities; character behaviour follows documented boundaries and does not compromise privacy or performance.
+
+## Phase 8 — Safe assistant tools and computer interaction
+
+**Goal:** Make midSunday useful beyond conversation without unsafe autonomous control.
+
+- [ ] Define a permissioned tool registry.
+- [ ] Implement explicit allow-listed actions in the Rust backend.
+- [ ] Never execute arbitrary shell commands generated by the model.
+- [ ] Require confirmation for sensitive, destructive, external, or privacy-impacting actions.
+- [ ] Add clear previews of what an action will do.
+- [ ] Add safe open-application and open-website actions.
+- [ ] Add file search/read assistance with scoped user-selected folders.
+- [ ] Add file modification only with preview, confirmation, and recovery options.
+- [ ] Add reminders and local notifications.
+- [ ] Add clipboard access only with explicit user action and visible status.
+- [ ] Add browser-based Google/YouTube/web search as an internet-dependent feature.
+- [ ] Distinguish local answers from online results and cite/link external sources where appropriate.
+- [ ] Add optional integration adapters only after privacy, security, and licence review.
+- [ ] Test prompt injection and malicious content from webpages/files.
+- [ ] Add audit history for tool actions, with user control over retention.
+
+**Exit gate:** Tools can perform only documented actions within granted permissions, and sensitive actions cannot occur without the required user confirmation.
+
+## Phase 9 — Performance, compatibility, and reliability
+
+**Goal:** Prove the app works on the hardware profiles we advertise.
+
+- [ ] Define a reproducible benchmark suite.
+- [ ] Test 4 GB RAM machines as a constrained/basic target.
+- [ ] Test 8 GB, 16 GB, and 32 GB+ profiles.
+- [ ] Test CPU-only systems and available GPU acceleration.
+- [ ] Measure idle RAM, model-load RAM, peak RAM, CPU usage, disk use, and startup time.
+- [ ] Measure model response latency and voice latency.
+- [ ] Test simultaneous workloads and prevent resource contention.
+- [ ] Implement adaptive model/context recommendations.
+- [ ] Test low disk space, interrupted downloads, and model corruption.
+- [ ] Test sleep/resume, app restart, forced shutdown, and power loss recovery.
+- [ ] Test long-running sessions and memory leaks.
+- [ ] Test Windows scaling, multiple displays, and accessibility settings.
+- [ ] Publish a compatibility matrix based on actual results.
+- [ ] Remove or qualify claims that are not supported by testing.
+
+**Exit gate:** Published hardware requirements and performance statements are supported by repeatable tests. Unsupported configurations fail gracefully.
+
+## Phase 10 — Privacy, security, and safety review
+
+**Goal:** Protect user data and prevent unsafe behaviour before public distribution.
+
+- [ ] Threat-model local data, model files, plugins/tools, updates, and optional cloud connections.
+- [ ] Review secure storage for credentials and optional API keys.
+- [ ] Encrypt sensitive local data where justified and document key recovery limitations.
+- [ ] Keep secrets out of logs, crash reports, and repository history.
+- [ ] Review filesystem permissions and path handling.
+- [ ] Validate all frontend/backend command inputs.
+- [ ] Review dependency vulnerabilities and supply-chain risks.
+- [ ] Test malicious model output, prompt injection, and untrusted file/web content.
+- [ ] Verify sensitive actions require confirmation.
+- [ ] Document data collection (ideally none by default), diagnostics, and telemetry.
+- [ ] Ensure any optional analytics/telemetry is disclosed and opt-in.
+- [ ] Write privacy policy and security reporting instructions.
+- [ ] Perform an independent review where feasible before a broad public release.
+
+**Exit gate:** No known critical security issue remains unresolved; data flows and limitations are documented; privacy defaults are verified.
+
+## Phase 11 — Licensing and commercial readiness
+
+**Goal:** Ensure the product can legally be distributed and potentially sold.
+
+- [ ] Decide the product's own licence and distribution model.
+- [ ] Maintain a software bill of materials (SBOM) or equivalent dependency inventory.
+- [ ] Maintain a third-party notices file.
+- [ ] Record licence, version, source, attribution, modification, and redistribution conditions for every dependency.
+- [ ] Review Tauri, Rust crates, frontend packages, and bundled runtimes.
+- [ ] Review model code licences and model-weight licences separately.
+- [ ] Review speech runtime licences and individual voice licences separately.
+- [ ] Review fonts, icons, illustrations, character artwork, sounds, and animations.
+- [ ] Check whether commercial use, redistribution, modification, and bundling are allowed.
+- [ ] Avoid assets with unclear provenance or incompatible restrictions.
+- [ ] Review trademark and brand-name availability in relevant markets before launch.
+- [ ] Review domain availability only if a domain is actually needed; do not purchase without approval.
+- [ ] Define optional paid features, if any, with transparent costs and no forced subscription.
+- [ ] Prepare end-user licence terms, privacy terms, and refund/support policies as applicable.
+- [ ] Obtain qualified legal advice for final commercial terms where necessary.
+
+**Exit gate:** Every shipped third-party asset has a documented distribution decision. No unclear or incompatible licence is silently included.
+
+## Phase 12 — Packaging, updates, and beta
+
+**Goal:** Deliver a safe and understandable Windows beta.
+
+- [ ] Create reproducible release builds.
+- [ ] Create Windows installer and uninstall flow.
+- [ ] Decide how model downloads are presented and stored.
+- [ ] Test fresh install, upgrade, downgrade policy, and uninstall data choices.
+- [ ] Implement signed updates or another secure update mechanism after evaluating cost and certificate requirements.
+- [ ] Explain update and code-signing costs before choosing a paid route.
+- [ ] Provide release notes and version history.
+- [ ] Add optional, user-approved diagnostic export.
+- [ ] Create onboarding and troubleshooting guides.
+- [ ] Recruit a small opt-in beta group.
+- [ ] Collect feedback without collecting private conversations by default.
+- [ ] Track bugs, compatibility reports, and usability issues.
+- [ ] Fix release-blocking bugs before expanding the beta.
+
+**Exit gate:** A new user can install, configure, use offline features, update safely, and uninstall without losing data unexpectedly.
+
+## Phase 13 — Stable Windows release
+
+**Goal:** Release a dependable first public version.
+
+- [ ] Freeze the release scope.
+- [ ] Complete regression and acceptance testing.
+- [ ] Verify offline operation from a clean installation.
+- [ ] Verify model and voice downloads, integrity checks, and licence notices.
+- [ ] Verify privacy controls and tool confirmations.
+- [ ] Publish minimum/recommended hardware based on tests.
+- [ ] Publish supported Windows versions and known limitations.
+- [ ] Publish user guide, FAQ, troubleshooting, privacy policy, and licence notices.
+- [ ] Publish checksums and release provenance.
+- [ ] Prepare a clear issue-reporting and support process.
+- [ ] Tag the release and archive its build metadata.
+- [ ] Monitor reported issues and publish fixes responsibly.
+
+**Exit gate:** The release meets its published requirements and has a repeatable build, installation, and support process.
+
+## Phase 14 — Post-launch expansion
+
+**Goal:** Expand carefully without undermining the offline-first product.
+
+- [ ] Evaluate Linux support.
+- [ ] Evaluate macOS support.
+- [ ] Improve Urdu and additional language support based on real user testing.
+- [ ] Add more model choices after licence and performance review.
+- [ ] Add optional provider/BYOK integrations behind clear settings.
+- [ ] Consider optional sync or remote access only with strong encryption, explicit consent, and a cost model approved in advance.
+- [ ] Evaluate richer character animation and optional 3D.
+- [ ] Add community-contributed character/model packs with review and provenance controls.
+- [ ] Improve accessibility and localisation.
+- [ ] Review support burden, maintenance costs, and sustainability.
+- [ ] Revisit roadmap priorities using user feedback and measured usage.
+
+**Exit gate:** New features preserve the product principles and do not introduce mandatory cloud dependency or undisclosed cost.
+
+---
+
+## 5. Hardware profile policy
+
+These are planning profiles, not final minimum specifications. The exact model, context size, voice engines, and supported features must be chosen from benchmarks.
+
+| Profile | Intended experience | Policy |
+|---|---|---|
+| 4 GB RAM | Basic local companion | Smallest models, reduced context, sequential engine loading, limited concurrent features. Must be proven before claiming support. |
+| 8 GB RAM | Comfortable basic use | More model options and better multitasking, subject to CPU and storage. |
+| 16 GB RAM | Recommended mainstream target | Larger compact models, smoother voice and multitasking where supported. |
+| 32 GB+ RAM | Advanced use | Larger local models and richer features, depending on CPU/GPU. |
+
+Never use model file size alone as a RAM estimate. Measure runtime memory, context cache, UI, voice engines, and operating-system overhead together.
+
+---
+
+## 6. Offline / online feature boundary
+
+### Expected to work offline once required assets are installed
+
+- Local chat and local inference.
+- Local conversation history.
+- Local memory and settings.
+- Local speech recognition and synthesis, where the selected language/voice is installed.
+- Local character/personality configuration.
+- Local allow-listed desktop actions that do not depend on external services.
+
+### Internet required or optional
+
+- Initial app/model/voice downloads.
+- Web, Google, and YouTube search.
+- Optional cloud model providers and BYOK endpoints.
+- Update checks and application updates.
+- Optional external integrations.
+
+The interface must make the online/offline boundary visible. Offline must not be falsely implied for features that depend on remote services.
+
+---
+
+## 7. Privacy, safety, and trust requirements
+
+- Local-first is the default.
+- No hidden recording or background microphone activation.
+- Microphone use must be visible and controllable.
+- No conversation, audio, file, or memory data leaves the device without clear disclosure and consent.
+- API keys must be stored securely and never committed to Git.
+- Memory must be inspectable, editable, deletable, exportable, and disableable.
+- Users must be able to delete local data and understand what deletion covers.
+- Model-generated instructions are untrusted input.
+- Webpages, documents, and other retrieved content must not be allowed to override tool permissions.
+- Sensitive actions require user confirmation.
+- No arbitrary shell execution by the model.
+- Character design must not impersonate a real human or conceal that the companion is AI.
+- Romantic character modes must not use coercion, guilt, isolation, or dependency pressure.
+
+---
+
+## 8. Cost-control rules
+
+These rules apply throughout development and release:
+
+1. No paid API, subscription, hosted backend, domain, certificate, marketplace service, or paid asset is adopted without explicit owner approval.
+2. Prefer local/free tools only after verifying their licence and maintenance status.
+3. CI and hosting choices must be checked for usage limits and billing triggers.
+4. The product must remain useful without optional cloud services.
+5. BYOK means the user supplies and pays their chosen provider directly; explain that provider's charges clearly.
+6. Any future paid distribution or support plan must be transparent and must not make basic offline functionality dependent on a subscription.
+7. Maintain a cost register showing service, purpose, free limits, potential charges, and approval status.
+
+---
+
+## 9. Testing and quality policy
+
+Every feature should have:
+- A written requirement and acceptance criteria.
+- Unit tests for logic where practical.
+- Integration tests for frontend/backend and model adapters.
+- Manual tests on supported hardware.
+- Offline tests where relevant.
+- Failure and recovery tests.
+- Privacy/security review where data or tools are involved.
+- Licence review before distribution.
+
+A feature is **Done** only when implementation, tests, documentation, privacy review, and licensing review (where applicable) are complete.
+
+---
+
+## 10. Project governance and conversation recovery
+
+This repository is the durable source of truth. ChatGPT conversations are working sessions, not the only record of decisions.
+
+### Required project records
+
+- `ROADMAP.md` — phases, tasks, priorities, status, and exit gates.
+- `README.md` — current overview and links.
+- `docs/PROJECT-HISTORY.md` — chronological project history and confirmed decisions.
+- `docs/PRODUCT-SPECIFICATION.md` — detailed product requirements.
+- `docs/ARCHITECTURE.md` — current technical architecture.
+- `docs/DECISIONS.md` — dated architecture/product decision records and rationale.
+- `docs/RISKS-AND-OPEN-QUESTIONS.md` — unresolved questions and risks.
+- `CHANGELOG.md` — user-visible changes by release.
+- `LICENSE-REVIEW.md` — dependency, model, voice, and asset licence inventory.
+
+### Rules for maintaining continuity
+
+- Update the roadmap whenever a task starts, changes, is blocked, or is completed.
+- Record why important decisions were made, not just what was chosen.
+- Mark each item as **Proposed**, **Approved**, **In progress**, **Blocked**, **Done**, or **Deferred**.
+- Do not mark a task Done without evidence or a recorded test result.
+- Keep a short **Current Status / Next Actions** section near the top of the roadmap.
+- At the end of a major development session, write a handoff note with files changed, commit references, tests run, outcomes, unresolved issues, and next exact step.
+- If a conversation is lost, start from this repository and its latest commit; do not rely on reconstructing decisions from memory.
+- Preserve previous decisions in Git history. Do not silently rewrite a confirmed decision; document a superseding decision and its reason.
+
+---
+
+## 11. Current status and immediate next actions
+
+**Current stage:** R0 — Project foundation / planning.
+
+**Completed:**
+- [x] Product name selected: midSunday.
+- [x] Independent private GitHub repository created under the Friday organisation.
+- [x] Windows-first direction established.
+- [x] Offline-first, no-hidden-cost principles established.
+- [x] Core companion, local voice, memory, personalities, and safe PC interaction identified as intended product areas.
+- [x] Initial complete roadmap drafted.
+
+**Next actions:**
+1. Review this roadmap with the product owner and confirm or amend scope.
+2. Create the README and core documentation listed in Phase 0.
+3. Inspect FRIDAY and complete the reuse analysis.
+4. Build the requirements, architecture, risk, and licensing records.
+5. Begin feasibility benchmarks before locking technical dependencies.
+
+**Not yet done:** No application code, AI runtime, model, voice engine, installer, or production feature is claimed to be implemented in this repository.
+
+---
+
+## 12. Change log
+
+- **2026-11-23 — Roadmap 0.1:** Initial end-to-end product and development roadmap created from the current midSunday project decisions and technical proposals.
