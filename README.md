@@ -50,13 +50,14 @@ The product must remain useful without a cloud account. Online features must be 
 - [FRIDAY reuse analysis](docs/FRIDAY-REUSE-ANALYSIS.md)
 - [Commercial licensing policy](docs/COMMERCIAL-LICENSING.md)
 - [Licence review register](LICENSE-REVIEW.md)
+- [Phase 1 feasibility research](docs/PHASE-1-RESEARCH.md)
 
 The roadmap is the master sequence of work. These documents provide detailed requirements, decisions, risks, and technical context. Update them as the project changes so development can recover without relying on chat history.
 
 ## Current status
 The repository currently contains planning documentation. **No application code, AI runtime, model, voice engine, installer, or production feature is implemented yet.**
 
-The next work is to review the completed foundation, resolve open product questions, validate technical choices, and benchmark candidates before implementation.
+Phase 1 desk research is underway. Initial findings and unresolved questions are recorded in [Phase 1 feasibility research](docs/PHASE-1-RESEARCH.md). Practical benchmarks and licence clearance are still outstanding; no application implementation has begun.
 
 ## Development approach
 Development proceeds in small, testable milestones. A task is complete only when its acceptance criteria, tests, documentation, privacy review, and applicable licence review are satisfied.
