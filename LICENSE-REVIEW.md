@@ -40,3 +40,22 @@ This register tracks licence checks for code, models, voices, and creative asset
 
 ## Important
 This register is not legal advice and does not grant permission to use any item. Do not bundle or distribute candidates until their exact terms have been reviewed and the status is updated.
+
+
+## Initial upstream licence observations (2026-11-23)
+
+These are preliminary source-level observations only. They are not final approvals to bundle exact versions or assets.
+
+| Candidate | Observed upstream licence information | Register status | Remaining review |
+|---|---|---|---|
+| Tauri | Repository reports Apache-2.0 and MIT licences | In review | Exact crates, plugins, bundled binaries, notices, and versions |
+| llama.cpp | Runtime repository licence is MIT | In review | Exact build/dependency tree and model-weight licence separately |
+| Qwen3-0.6B | Official model card lists Apache-2.0 | In review | Exact checkpoint, GGUF conversion provenance, quantisation, model card terms |
+| whisper.cpp | Repository licence is MIT | In review | Exact build and upstream Whisper model asset terms |
+| Vosk | Official model catalogue lists per-model licences, including Apache-2.0 and other terms | Pending per model | Exact language model required; no Urdu model identified in reviewed catalogue |
+| Kokoro 82M | Official model card lists Apache-2.0 weights | In review | Exact version, inference code, voice assets, and language-specific rights |
+| Piper engine | Current OHF-Voice Piper engine states GPL-3.0-or-later | In review | Distribution obligations and compatibility with intended product licence |
+| Piper voices | Rights depend on each voice's data and training lineage | Pending per voice | Inspect each voice MODEL_CARD and full ancestry; do not assume commercial rights |
+| SQLite core | Public-domain dedication | In review | Check any wrappers, extensions, and build-time third-party components |
+
+Sources are linked in [Phase 1 feasibility research](docs/PHASE-1-RESEARCH.md). No candidate above is marked Approved. Recheck all information against the exact release and asset at the time of distribution.
