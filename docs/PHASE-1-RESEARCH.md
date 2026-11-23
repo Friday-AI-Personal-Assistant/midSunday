@@ -197,3 +197,51 @@ Example: https://mozilladatacollective.com/datasets/cmw574b6z00xi06mo4dchu497
 - **Quality:** Test Urdu script, Roman Urdu input normalisation, Pakistani regional accents, names, everyday conversational speech, and Urdu-English code-switching.
 - **Cost/licensing:** Prefer candidates whose exact weights, code, and data rights allow commercial redistribution without a paid licence. Do not purchase datasets or voices without explicit approval.
 - **Reality check:** No Urdu voice candidate is approved or proven on 4 GB hardware at this checkpoint.
+
+
+## 12. Local runtime comparison — llama.cpp and Ollama (2026-11-23)
+
+### llama.cpp
+The upstream repository is MIT-licensed and provides local inference across CPU and several acceleration backends, quantisation options, a library/API, and an OpenAI-compatible server interface. This makes it a strong candidate for direct integration into a desktop application. It gives the engineering team control over model loading, runtime settings, packaging, and resource management.
+
+Sources:
+- https://github.com/ggml-org/llama.cpp
+- https://github.com/ggml-org/llama.cpp/blob/master/LICENSE
+- https://github.com/ggml-org/llama.cpp/blob/master/tools/server/README.md
+
+### Ollama
+Ollama's software repository is MIT-licensed. Its local model-running workflow is free to use and local inference runs on the user's own hardware; its current pricing page separately lists paid plans/usage for cloud-hosted models. Therefore, do not confuse free local use with cloud inference being free. Ollama's repository identifies llama.cpp as a supported backend.
+
+Sources:
+- https://github.com/ollama/ollama
+- https://github.com/ollama/ollama/blob/main/LICENSE
+- https://ollama.com/pricing
+
+### What this means for midSunday
+- **Development convenience:** Ollama is useful for quickly downloading, switching, and testing local models through a local API.
+- **Potential product integration:** llama.cpp is the leading candidate for a directly controlled, packaged local runtime, subject to Windows integration, process isolation, updates, and dependency review.
+- **No need to ship both:** We should avoid adding two runtimes to the installer unless testing demonstrates a concrete benefit.
+- **Cloud boundary:** Ollama cloud features are optional and may incur usage charges. They are not part of the no-cost offline core and must never be invoked silently.
+- **Licensing:** Both runtime repositories are MIT-licensed at the time of this research. Model weights, quantised conversions, and other bundled assets keep their own licence obligations.
+
+### Small-model task suitability
+A compact model running through llama.cpp may be sufficient for bounded tasks such as short text classification, extracting structured fields, tagging and organising notes, simple rewriting, concise summaries, and routing a request to a small set of predefined intents. It is not yet proven to be sufficient for high-quality long-form companion dialogue, nuanced Urdu-English conversation, complex reasoning, or reliable multi-step planning.
+
+For safety-critical or deterministic operations, use ordinary application code and strict schemas rather than asking a small model to make security decisions. The model may propose an intent; the Rust permission broker must validate it against an allow-list and request confirmation for sensitive actions.
+
+### Additional compact model candidate: Qwen3.5-0.8B
+The official Qwen3.5-0.8B model card lists Apache-2.0 and positions the model at approximately 0.9B parameters. The llama.cpp project currently documents a GGUF quick-start reference for a Qwen3.5-0.8B GGUF build. This makes it a useful additional compact candidate alongside Qwen3-0.6B, but does not establish Pakistani Urdu quality, 4 GB compatibility, or suitability as the main companion model.
+
+Sources:
+- https://huggingface.co/Qwen/Qwen3.5-0.8B
+- https://github.com/ggml-org/llama.cpp
+
+### Updated practical test plan
+1. Compare the same exact GGUF model and quantisation through llama.cpp and Ollama on Windows.
+2. Record installer/runtime footprint, model download size, load time, time to first token, tokens per second, peak RAM, idle RAM, and CPU/GPU use.
+3. Use a fixed task set: classification, structured extraction, note tagging, short summarisation, rewriting, English chat, Urdu script, Roman Urdu, and Urdu-English switching.
+4. Compare Qwen3-0.6B and Qwen3.5-0.8B, plus one slightly larger compact model if hardware allows.
+5. Test cold start, repeated requests, context growth, cancellation, crash recovery, and fully offline operation after model installation.
+6. Record hardware, exact model repository/revision, quantisation, runtime version, configuration, and file hashes.
+
+**Status:** Desk research only. No model has been run, no performance benchmark has been completed, and no runtime/model is approved for release.
