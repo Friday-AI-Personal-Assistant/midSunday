@@ -3,6 +3,8 @@
 All notable project changes are recorded here. The project is currently in planning and documentation; no application release has been made.
 
 ## 2026-11-23
+- Added initial Phase 1 feasibility research covering desktop frameworks, local LLM runtime/model candidates, STT/TTS, SQLite, hardware questions, and licensing risks.
+- Updated roadmap and README with Phase 1 research status and next actions.
 - Established the complete product and development roadmap.
 - Added the initial project overview, product specification, architecture proposal, decision log, and risk register.
 - Added offline-first, hardware compatibility, voice/language, personality/character, privacy/safety, and commercial licensing requirements.
