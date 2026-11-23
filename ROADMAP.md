@@ -130,6 +130,8 @@ Release numbers are planning labels, not promises or dates. A stage is not compl
 - [ ] Review SQLite and local data protection options.
 - [ ] Define supported Windows versions and CPU architecture.
 - [ ] Identify any GPU requirements and ensure a CPU fallback where possible.
+- [ ] Research and design the Windows-first Hardware Intelligence & Adaptive Resource Manager (CPU, RAM, GPU/VRAM, storage, live resource state, model recommendations, and safe workload scheduling).
+- [ ] Compare OpenJarvis hardware auto-detection/recommendation with the proposed midSunday design; do not assume its setup-time heuristic is sufficient for runtime adaptation.
 - [ ] Review all candidate licences, model cards, voice licences, and redistribution terms.
 - [ ] Record benchmark machines, test scripts, model versions, and results.
 
@@ -567,3 +569,19 @@ The product owner confirmed that midSunday must not be designed only for 4 GB ma
 - [ ] Verify simultaneous LLM/STT/TTS workloads at each supported profile.
 
 See `docs/HARDWARE-COMPATIBILITY.md` and `docs/PRODUCT-SPECIFICATION.md`. All tiers remain targets until tested.
+
+
+### 2026-11-23 — Hardware intelligence research added
+
+OpenJarvis's hardware auto-detection and engine/model recommendation workflow has been verified against its current documentation and source. midSunday now has a proposed, more complete Windows-first **Hardware Intelligence & Adaptive Resource Manager (HIARM)** design, including storage checks and live resource-aware workload scheduling.
+
+- [x] Verify OpenJarvis's documented detection/recommendation workflow and inspect its current source.
+- [x] Create `docs/HARDWARE-INTELLIGENCE.md` with scope, proposed Windows detection approach, privacy rules, user controls, and acceptance criteria.
+- [x] Link the requirement from README, architecture, and hardware compatibility documentation.
+- [x] Record D-016 as a proposal, not an approved implementation decision.
+- [ ] Compare Windows hardware-detection APIs and suitable Rust libraries.
+- [ ] Define benchmark-backed model resource estimates, including context and GPU offload.
+- [ ] Define safe live resource-pressure thresholds and workload scheduling behaviour.
+- [ ] Validate detection and recommendation accuracy on representative Windows hardware.
+
+This is desk research and documentation only. No detection code or benchmark has been implemented. OpenJarvis is a reference, not a midSunday dependency. The detailed design is in `docs/HARDWARE-INTELLIGENCE.md`.
