@@ -52,6 +52,7 @@ The product must remain useful without a cloud account. Online features must be 
 - [Commercial licensing policy](docs/COMMERCIAL-LICENSING.md)
 - [Licence review register](LICENSE-REVIEW.md)
 - [Phase 1 feasibility research](docs/PHASE-1-RESEARCH.md)
+- [Windows desktop framework evaluation](docs/DESKTOP-FRAMEWORK-EVALUATION.md)
 - [Repeatable AI benchmark protocol](docs/BENCHMARK-PROTOCOL.md)
 - [Benchmark dataset v1 (draft)](docs/BENCHMARK-DATASET-V1.md)
 
