@@ -3,11 +3,11 @@
 All notable project changes are recorded here. The project is in foundation/prototype development; no application release has been made.
 
 ## 2026-11-24
-- Added a manual-only GitHub Actions workflow to compile the prototype on a hosted Windows runner and retain the NSIS installer artifact for 7 days. It is not triggered automatically; no run has been started.
+- Added a manual-only GitHub Actions workflow to compile the prototype on a hosted Windows runner and retain the NSIS installer artifact for 7 days. Two manual attempts stopped during setup because the pinned artifact-upload action v3 was deprecated; the workflow now pins the official v4 action. No frontend, Rust, or installer build has completed yet. Further runs remain manual and subject to the zero-cost rule.
 - Added instructions for manually starting the Windows build and retrieving its artifact.
 - Completed the Tauri 2 versus Electron desk evaluation and recorded Tauri 2 as the provisional direction for the first Windows shell prototype; production approval remains pending measurements.
 - Scaffolded the first Tauri 2 + Rust + React + TypeScript + Vite desktop shell under prototype/desktop-shell, including a harmless Rust status command and a minimal capability allow-list.
-- The shell has not yet been built or run on Windows; no AI model, speech engine, cloud service, telemetry, or paid dependency has been added.
+- The shell has not yet been compiled or run on Windows; no AI model, speech engine, cloud service, telemetry, or paid dependency has been added. A committed npm lockfile is still needed for reproducible frontend dependency installation.
 
 ## 2026-11-23
 - Added Urdu-specific STT/TTS research, including commercial-licence blockers and lightweight experimental candidates.
