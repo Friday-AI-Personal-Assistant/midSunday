@@ -98,6 +98,9 @@ impl GenerationRequest {
         if self.prompt.trim().is_empty() {
             return Err(GenerationRequestError::EmptyPrompt);
         }
+        if self.prompt.len() > 32_768 {
+            return Err(GenerationRequestError::PromptTooLarge);
+        }
         if self.history.len() > 64 { return Err(GenerationRequestError::TooManyHistoryMessages); }
         let mut history_bytes = 0usize;
         for message in &self.history {
@@ -121,6 +124,7 @@ impl GenerationRequest {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum GenerationRequestError {
     EmptyPrompt,
+    PromptTooLarge,
     InvalidTokenLimit,
     InvalidTemperature,
     InvalidTopP,
@@ -299,6 +303,13 @@ mod tests {
             request.validate(),
             Err(GenerationRequestError::EmptyPrompt)
         );
+    }
+
+    #[test]
+    fn oversized_generation_prompt_is_rejected() {
+        let mut request = valid_request();
+        request.prompt = "x".repeat(32_769);
+        assert_eq!(request.validate(), Err(GenerationRequestError::PromptTooLarge));
     }
 
     #[test]

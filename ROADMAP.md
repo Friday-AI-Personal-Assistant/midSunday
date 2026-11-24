@@ -759,3 +759,15 @@ The frontend now has a real IPC path for local runtime setup, live generation de
 - [ ] Review exact plugin/dependency licences and generate a committed npm lockfile before distribution.
 
 The chat now sends previous visible user/assistant turns with each new prompt, bounded to 64 prior messages and 128 KiB of prior message content. This is session-only context, not saved to disk. The native picker only returns selected paths; Rust still validates that the executable and model exist. No model download, cloud service, or paid dependency has been added.
+
+
+### 2026-11-24 — Bounded conversation-context hardening
+
+- [x] Keep the newest eligible user/assistant turns while preserving chronological order.
+- [x] Skip empty assistant placeholders and system messages before building request history.
+- [x] Enforce the backend's 64-message, 32 KiB-per-message, and 128 KiB-total history limits in the frontend.
+- [x] Add a 32 KiB UTF-8 limit for the current prompt in both frontend and Rust validation.
+- [x] Add a Rust regression test for oversized prompts.
+- [ ] Verify TypeScript, Rust tests, and desktop packaging on Windows, Linux, and macOS CI.
+
+The frontend now trims history to the newest messages that fit the same byte limits enforced by Rust, preventing long sessions from failing simply because the visible transcript grows. Empty streaming placeholders are excluded. The current prompt is separately capped at 32 KiB of UTF-8 content. This does not persist chat history or change the session-only privacy behaviour.

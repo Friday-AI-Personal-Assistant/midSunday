@@ -7,6 +7,32 @@ type Section = "chat" | "characters" | "settings";
 type Message = { id: number; role: "user" | "assistant" | "system"; text: string };
 type RuntimeStatusSnapshot = { status: string; detail: string | null };
 
+const MAX_HISTORY_MESSAGES = 64;
+const MAX_HISTORY_MESSAGE_BYTES = 32_768;
+const MAX_HISTORY_TOTAL_BYTES = 131_072;
+const MAX_PROMPT_BYTES = 32_768;
+
+function buildBoundedHistory(messages: Message[]) {
+  const encoder = new TextEncoder();
+  const selected: Array<{ role: "user" | "assistant"; content: string }> = [];
+  let totalBytes = 0;
+
+  for (const message of [...messages].reverse()) {
+    if (message.role !== "user" && message.role !== "assistant") continue;
+    if (!message.text.trim()) continue;
+
+    const byteLength = encoder.encode(message.text).byteLength;
+    if (byteLength > MAX_HISTORY_MESSAGE_BYTES) continue;
+    if (totalBytes + byteLength > MAX_HISTORY_TOTAL_BYTES) continue;
+
+    selected.push({ role: message.role, content: message.text });
+    totalBytes += byteLength;
+    if (selected.length >= MAX_HISTORY_MESSAGES) break;
+  }
+
+  return selected.reverse();
+}
+
 const personalities = [
   { name: "Best friend", detail: "Easygoing, honest and supportive", mark: "B" },
   { name: "Mentor", detail: "Thoughtful guidance and perspective", mark: "M" },
@@ -71,7 +97,11 @@ export default function App() {
       return;
     }
 
-    const history = messages.filter((message) => message.role === "user" || message.role === "assistant").map((message) => ({ role: message.role as "user" | "assistant", content: message.text }));
+    if (new TextEncoder().encode(text).byteLength > MAX_PROMPT_BYTES) {
+      setRuntimeError("That message is too large. Please keep each message under 32 KB.");
+      return;
+    }
+    const history = buildBoundedHistory(messages);
     const userId = Date.now();
     const assistantId = userId + 1;
     setMessages((current) => [
