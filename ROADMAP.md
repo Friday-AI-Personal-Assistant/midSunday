@@ -528,21 +528,22 @@ This repository is the durable source of truth. ChatGPT conversations are workin
 
 ## 11. Current status and immediate next actions
 
-**Current stage:** Phase 3 — Engineering foundation and desktop shell (first interactive workspace UI implemented; manual Windows, Linux, and macOS build workflows are configured; platform builds and runtime validation pending). Phase 1 feasibility research continues in parallel.
+**Current stage:** Phase 3 — Engineering foundation and desktop shell (first interactive workspace UI implemented; automatic Windows, Linux, and macOS CI workflows are configured for pushes to main and pull requests; platform build results and runtime validation pending). Phase 1 feasibility research continues in parallel.
 
 **Completed:**
 - [x] Product name selected: midSunday.
 - [x] Create the first interactive workspace UI prototype with conversation view, local-session composer, companion selection, settings screens, responsive layout, and Rust-core status indicator. This is UI-only; no AI response, persistent storage, voice, or hardware detection is claimed.
 - [x] Independent private GitHub repository created under the Friday organisation.
 - [x] Cross-platform direction established: Windows, Linux, and macOS builds; Windows remains the first priority.
+- [x] Configure automatic parallel Windows/Linux/macOS CI builds for pushes to `main` and pull requests targeting `main`; retain manual dispatch for package artifacts. Standard hosted runners only; automatic CI does not retain artifacts.
 - [x] Offline-first, no-hidden-cost principles established.
 - [x] Core companion, local voice, memory, personalities, and safe PC interaction identified as intended product areas.
 - [x] Initial complete roadmap drafted.
 
 **Next actions:**
 1. Generate and commit a reviewed npm lockfile, then use it for reproducible dependency installation.
-2. Run the manual Windows build first, then Linux and macOS builds on their standard hosted runners; all workflows remain manual-only.
-3. Fix platform-specific TypeScript, Rust, Tauri, or packaging issues exposed by CI; retrieve and inspect each produced artifact.
+2. Review the automatic Windows, Linux, and macOS CI runs triggered by the workflow changes; all three platforms should build independently and in parallel.
+3. Fix platform-specific TypeScript, Rust, Tauri, or packaging issues exposed by CI. Use manual workflow dispatch only when package artifacts or the generated npm lockfile are needed.
 4. Test the app on real Windows, Linux, and macOS devices when available; CI compilation is not a substitute for runtime testing.
 5. Continue the read-only FRIDAY review and record reusable patterns without modifying FRIDAY.
 6. Continue local-model, Pakistani Urdu/Roman Urdu speech, hardware-intelligence, and licensing research; no model or speech engine is selected until evidence supports it.
