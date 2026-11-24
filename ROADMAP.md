@@ -119,7 +119,7 @@ Release numbers are planning labels, not promises or dates. A stage is not compl
 
 - [x] Complete desk comparison of Tauri 2 and Electron for Windows-first distribution, security, packaging, accessibility considerations, and maintenance; see [DESKTOP-FRAMEWORK-EVALUATION.md](docs/DESKTOP-FRAMEWORK-EVALUATION.md).
 - [x] Scaffold the first minimal Tauri 2 + Rust + React/TypeScript desktop shell, including a harmless Rust status command and a minimal capability file.
-- [x] Add a manual-only GitHub Actions Windows build workflow; no build has been triggered.
+- [x] Add a manual-only GitHub Actions Windows build workflow. It was manually attempted twice; both attempts stopped during setup because the artifact-upload action was deprecated. The action pin is now updated to v4; a clean build attempt remains pending.
 - [ ] Install dependencies, build, and run the shell on Windows; measure installer size, startup, idle memory, accessibility, and WebView2 behaviour before approving the production framework.
 - [ ] Inspect FRIDAY's repository and document reusable patterns, limitations, and code that must remain separate.
 - [ ] Compare local LLM runtimes and their commercial distribution implications.
@@ -528,7 +528,7 @@ This repository is the durable source of truth. ChatGPT conversations are workin
 
 ## 11. Current status and immediate next actions
 
-**Current stage:** Phase 1 — Product research and feasibility (desk research in progress).
+**Current stage:** Phase 1 — Product research and feasibility (desktop shell scaffold created; Windows compilation and runtime validation pending).
 
 **Completed:**
 - [x] Product name selected: midSunday.
@@ -539,12 +539,11 @@ This repository is the durable source of truth. ChatGPT conversations are workin
 - [x] Initial complete roadmap drafted.
 
 **Next actions:**
-1. Complete a fair Tauri vs Electron Windows prototype comparison.
-2. Perform read-only inspection of FRIDAY's remaining frontend, Rust commands, capabilities, tests, CI, and dependency lockfiles.
-3. Benchmark compact local models and quantisation on representative hardware.
-4. Evaluate Whisper STT for Pakistani Urdu, Roman Urdu, and code-switching; investigate viable Urdu TTS candidates.
-5. Review exact model, runtime, and voice licences before any bundling decision.
-6. Update the decision log and architecture only when repeatable evidence supports a choice.
+1. Review and stabilise the desktop-shell dependency setup; generate and commit a reviewed npm lockfile before repeatable builds.
+2. After checking Actions billing safeguards, decide whether to run the corrected manual Windows build; do not run automatically.
+3. Resolve any compile/configuration issues exposed by the first successful build, then test the app on a real Windows PC.
+4. Continue the read-only FRIDAY review and record reusable patterns without modifying FRIDAY.
+5. Review compact local models, Pakistani Urdu/Roman Urdu STT/TTS, and exact redistribution licences; run benchmarks only on available hardware.
 
 **Not yet done:** No application code, AI runtime, model, voice engine, installer, or production feature is claimed to be implemented in this repository.
 
