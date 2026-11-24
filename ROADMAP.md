@@ -122,7 +122,9 @@ Release numbers are planning labels, not promises or dates. A stage is not compl
 - [ ] Inspect FRIDAY's repository and document reusable patterns, limitations, and code that must remain separate.
 - [ ] Compare local LLM runtimes and their commercial distribution implications.
 - [x] Build a preliminary scalable model ladder from current Qwen3.5 and Gemma 4 candidates, with exact quantised file-size references and hardware-class test buckets.
-- [x] Design the repeatable benchmark protocol, scoring rubric, safety gates, hardware record, and results template; benchmark dataset authoring and test execution remain pending.
+- [x] Design the repeatable benchmark protocol, scoring rubric, safety gates, hardware record, and results template.
+- [x] Draft benchmark dataset v1 with synthetic English, Urdu-script, Roman Urdu, code-switching, persona, reasoning, factuality, and safety cases.
+- [ ] Review the Urdu/Roman Urdu cases with fluent Pakistani Urdu evaluators, expand STT/TTS audio sets, then freeze benchmark dataset v1.
 - [ ] Benchmark compact local models for response quality, Pakistani Urdu/Roman Urdu capability, English capability, multilingual handling, and memory use.
 - [ ] Compare quantisation levels and model sizes.
 - [ ] Test cold-start time, first-token latency, generation speed, and sustained memory use.
@@ -141,7 +143,7 @@ Release numbers are planning labels, not promises or dates. A stage is not compl
 
 **Exit gate:** The stack and default model/voice choices are selected based on repeatable tests, documented licences, and realistic hardware profiles. Unverified claims remain clearly labelled as targets.
 
-**Benchmark protocol status (2026-11-24):** The repeatable protocol is documented in [BENCHMARK-PROTOCOL.md](docs/BENCHMARK-PROTOCOL.md). The versioned test dataset still needs to be authored and reviewed; no benchmark has been executed.
+**Benchmark protocol status (2026-11-24):** The repeatable protocol is documented in [BENCHMARK-PROTOCOL.md](docs/BENCHMARK-PROTOCOL.md), and a synthetic text seed set is drafted in [BENCHMARK-DATASET-V1.md](docs/BENCHMARK-DATASET-V1.md). Fluent Urdu review, speech audio sets, holdout cases, and dataset freeze remain pending; no benchmark has been executed.
 
 ## Phase 2 — UX, visual identity, and interaction design
 
