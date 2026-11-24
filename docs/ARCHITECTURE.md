@@ -145,3 +145,8 @@ Important data semantics: installed RAM differs from currently available RAM; de
 Detailed API mapping, crate candidates, fallback/confidence statuses, and source links: [HARDWARE-INTELLIGENCE.md](HARDWARE-INTELLIGENCE.md#12-windows-detection-research--api-and-rust-library-shortlist-2026-11-24).
 
 This is a research recommendation only. No dependency or implementation has been approved; check exact crate versions, MSRV, features, transitive dependencies, and licences against the eventual project toolchain before adding anything.
+
+
+## Framework selection note (2026-11-24)
+
+Tauri 2 + Rust + React + TypeScript + Vite is the proposed direction for the first Windows shell prototype, not an approved production lock. See [DESKTOP-FRAMEWORK-EVALUATION.md](DESKTOP-FRAMEWORK-EVALUATION.md) for the Tauri/Electron comparison, WebView2 offline-install trade-offs, security boundaries, and prototype acceptance criteria. Revisit this proposal if measured prototype results show a concrete blocker.
