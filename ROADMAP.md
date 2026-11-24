@@ -202,7 +202,8 @@ Release numbers are planning labels, not promises or dates. A stage is not compl
 - [x] Implement local SQLite conversation creation, rename, delete, and message history through a narrow Rust command boundary; frontend lists, opens, creates, renames, and deletes saved conversations. (Initial implementation; real-device crash/restart verification remains pending.)
 - [x] Add versioned SQLite schema initialization using SQLite's user_version marker and refuse to open a database created by a newer unsupported schema.
 - [x] Add a versioned JSON conversation export and a clear-all-history control, separate from the future memory store.
-- [x] Add validated version-1 JSON import with size/count/content checks, new local identifiers, exact-duplicate detection, and transactional rollback; existing conversations are never overwritten. Full database restore and backup/restore across future schema versions remain pending.
+- [x] Add validated version-1 JSON import with size/count/content checks, normalised titles, new local identifiers, exact-duplicate detection, and transactional rollback; existing conversations are never overwritten. Full database restore and backup/restore across future schema versions remain pending.
+- [x] Make conversation export a consistent SQLite read snapshot and add import/export round-trip plus malformed-title/timestamp regression tests.
 - [ ] Add model load/unload lifecycle and explicit resource status.
 - [ ] Add low-memory safeguards and graceful fallback.
 - [ ] Ensure no internet connection is required after model assets are available.

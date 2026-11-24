@@ -208,7 +208,7 @@ impl ConversationStore {
         if json.len() > MAX_IMPORT_BYTES {
             return Err("The backup is larger than the 20 MB import limit.".to_owned());
         }
-        let parsed: ConversationImportFile = serde_json::from_str(json)
+        let mut parsed: ConversationImportFile = serde_json::from_str(json)
             .map_err(|error| format!("This is not a valid midSunday backup: {error}"))?;
         if parsed.format != "midSunday-conversation-export" || parsed.format_version != 1 {
             return Err("This backup format or version is not supported. Nothing was imported.".to_owned());
@@ -222,11 +222,11 @@ impl ConversationStore {
         }
 
         let mut seen_conversation_ids = std::collections::HashSet::new();
-        for conversation in &parsed.conversations {
+        for conversation in &mut parsed.conversations {
             if conversation.id <= 0 || !seen_conversation_ids.insert(conversation.id) {
                 return Err("The backup contains an invalid or repeated conversation identifier.".to_owned());
             }
-            clean_title(&conversation.title)?;
+            conversation.title = clean_title(&conversation.title)?;
             if conversation.created_at < 0 || conversation.updated_at < conversation.created_at {
                 return Err("The backup contains invalid conversation timestamps.".to_owned());
             }
@@ -288,7 +288,7 @@ impl ConversationStore {
 
             transaction.execute(
                 "INSERT INTO conversations(title, created_at, updated_at) VALUES(?1, ?2, ?3)",
-                params![item.title.trim(), item.created_at, item.updated_at],
+                params![item.title, item.created_at, item.updated_at],
             ).map_err(|error| format!("Could not import conversation: {error}"))?;
             let new_id = transaction.last_insert_rowid();
             for message in item.messages {
@@ -317,17 +317,43 @@ impl ConversationStore {
     }
 
     pub fn export_json(&self) -> Result<String, String> {
-        let summaries = self.list()?;
+        // Hold one read transaction for the entire export so a concurrent write
+        // cannot produce a backup with mismatched conversation/message snapshots.
+        let mut connection = self.lock()?;
+        let transaction = connection.transaction()
+            .map_err(|error| format!("Could not begin conversation export: {error}"))?;
+        let summaries = {
+            let mut statement = transaction.prepare(
+                "SELECT id, title, created_at, updated_at
+                 FROM conversations ORDER BY updated_at DESC, id DESC"
+            ).map_err(|error| error.to_string())?;
+            let rows = statement.query_map([], |row| Ok(ConversationSummary {
+                id: row.get(0)?, title: row.get(1)?, created_at: row.get(2)?, updated_at: row.get(3)?,
+            })).map_err(|error| error.to_string())?;
+            rows.collect::<Result<Vec<_>, _>>().map_err(|error| error.to_string())?
+        };
         let mut conversations = Vec::with_capacity(summaries.len());
         for summary in summaries {
+            let messages = {
+                let mut statement = transaction.prepare(
+                    "SELECT id, conversation_id, role, content, created_at
+                     FROM conversation_messages WHERE conversation_id = ?1 ORDER BY id ASC"
+                ).map_err(|error| error.to_string())?;
+                let rows = statement.query_map(params![summary.id], |row| Ok(StoredMessage {
+                    id: row.get(0)?, conversation_id: row.get(1)?, role: row.get(2)?,
+                    content: row.get(3)?, created_at: row.get(4)?,
+                })).map_err(|error| error.to_string())?;
+                rows.collect::<Result<Vec<_>, _>>().map_err(|error| error.to_string())?
+            };
             conversations.push(ConversationExport {
                 id: summary.id,
                 title: summary.title,
                 created_at: summary.created_at,
                 updated_at: summary.updated_at,
-                messages: self.messages(summary.id)?,
+                messages,
             });
         }
+        transaction.commit().map_err(|error| format!("Could not finish conversation export: {error}"))?;
         let export = ConversationExportFile {
             format: "midSunday-conversation-export",
             format_version: 1,
@@ -499,6 +525,52 @@ mod tests {
         assert!(store.import_json(&backup).is_err());
         assert_eq!(store.list().unwrap().len(), 1);
         assert_eq!(store.list().unwrap()[0].title, "Already here");
+    }
+
+    #[test]
+    fn import_trims_titles_and_round_trips_exported_backups() {
+        let source = store();
+        let conversation = source.create("Round trip").unwrap();
+        source.append(conversation.id, "user", "Keep this message").unwrap();
+        let backup = source.export_json().unwrap();
+
+        let destination = store();
+        let result = destination.import_json(&backup).unwrap();
+        assert_eq!(result.imported, 1);
+        assert_eq!(destination.list().unwrap()[0].title, "Round trip");
+        assert_eq!(destination.messages(destination.list().unwrap()[0].id).unwrap()[0].content, "Keep this message");
+
+        let padded = serde_json::json!({
+            "format": "midSunday-conversation-export", "formatVersion": 1, "exportedAt": 10,
+            "conversations": [{
+                "id": 42, "title": "  Trim this title  ", "createdAt": 2, "updatedAt": 3,
+                "messages": []
+            }]
+        }).to_string();
+        let imported = destination.import_json(&padded).unwrap();
+        assert_eq!(imported.imported, 1);
+        assert!(destination.list().unwrap().iter().any(|item| item.title == "Trim this title"));
+    }
+
+    #[test]
+    fn rejects_invalid_conversation_timestamps_and_titles_before_import() {
+        let store = store();
+        let invalid_timestamp = serde_json::json!({
+            "format": "midSunday-conversation-export", "formatVersion": 1, "exportedAt": 10,
+            "conversations": [{
+                "id": 1, "title": "Valid", "createdAt": 5, "updatedAt": 4, "messages": []
+            }]
+        }).to_string();
+        assert!(store.import_json(&invalid_timestamp).is_err());
+
+        let invalid_title = serde_json::json!({
+            "format": "midSunday-conversation-export", "formatVersion": 1, "exportedAt": 10,
+            "conversations": [{
+                "id": 1, "title": "   ", "createdAt": 1, "updatedAt": 1, "messages": []
+            }]
+        }).to_string();
+        assert!(store.import_json(&invalid_title).is_err());
+        assert!(store.list().unwrap().is_empty());
     }
 
     #[test]

@@ -3,6 +3,7 @@
 All notable project changes are recorded here. The project is in foundation/prototype development; no application release has been made.
 
 ## 2026-11-24
+- Hardened conversation backup handling: imported titles are normalised using the same validation as newly created conversations, added round-trip and malformed-metadata tests, and exports now read from one consistent SQLite transaction so concurrent changes cannot create mixed snapshots.
 - Added safe conversation backup import: validates version, size, counts, identifiers, timestamps, roles, and message limits; merges without overwriting existing chats, skips exact duplicates, remaps imported IDs, and commits atomically. Full database restore and cross-version restore remain future work.
 - Added a versioned SQLite schema marker and a safe startup guard against opening databases from a newer unsupported schema.
 - Added portable, versioned JSON export for all saved conversations and messages, plus a separate clear-all-history action in Settings. Clearing conversation history does not touch the future memory store; import/restore is intentionally not included yet.
