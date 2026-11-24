@@ -173,7 +173,6 @@ impl ConversationStore {
         if changed == 0 { return Err("Conversation was not found.".to_owned()); }
         Ok(())
     }
-}
 
     pub fn clear_all(&self) -> Result<usize, String> {
         let connection = self.lock()?;
