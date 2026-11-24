@@ -528,7 +528,7 @@ This repository is the durable source of truth. ChatGPT conversations are workin
 
 ## 11. Current status and immediate next actions
 
-**Current stage:** Phase 3 — Engineering foundation and desktop shell. Run #32 passed Windows, Linux, and macOS. Runtime reliability work is underway: explicit bounded recovery from a failed/stopped local inference session is being implemented and will be verified before any UI integration.
+**Current stage:** Phase 3 — Engineering foundation and desktop shell. Run #35 passed Windows, Linux, and macOS. Explicit bounded recovery is implemented and its initial integration tests pass; the remaining unhealthy-replacement cleanup case is being verified before runtime coordinator/UI integration.
 
 **Completed:**
 - [x] Product name selected: midSunday.
@@ -677,12 +677,13 @@ Cancellation is verified at the client transport boundary: the test server obser
 
 ### 2026-11-24 — Recovery integration verification
 
-- [ ] Add an injectable process boundary so lifecycle recovery can be tested without downloading or launching a real model.
-- [ ] Test successful process replacement and readiness.
-- [ ] Test retry after a startup failure.
-- [ ] Test recovery exhaustion, exact attempt count, and final Failed state.
-- [ ] Test that recovery is rejected while the session is Ready.
-- [ ] Verify the tests on Windows, Linux, and macOS CI.
+- [x] Add an injectable process boundary so lifecycle recovery can be tested without downloading or launching a real model.
+- [x] Test successful process replacement and readiness.
+- [x] Test retry after a startup failure.
+- [x] Test recovery exhaustion, exact attempt count, and final Failed state.
+- [x] Test that recovery is rejected while the session is Ready.
+- [x] Verify the tests on Windows, Linux, and macOS CI (Run #35 passed all three jobs).
+- [ ] Test replacement processes that launch but never become healthy, including cleanup and final Failed state.
 
 The test seam substitutes only the managed-process boundary. The HTTP readiness path remains real loopback TCP, while fake process handles make restart outcomes deterministic. These tests do not claim real llama.cpp compute cancellation or model inference behaviour.
 

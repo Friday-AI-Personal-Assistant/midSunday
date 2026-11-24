@@ -502,6 +502,45 @@ mod recovery_integration_tests {
     }
 
     #[test]
+    fn recovery_stops_each_replacement_that_never_becomes_ready() {
+        // Reserve and release a loopback port so every health request is refused.
+        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let port = listener.local_addr().unwrap().port();
+        drop(listener);
+
+        let (mut session, old_stop_count) = failed_session(port);
+        let attempts = Arc::new(AtomicUsize::new(0));
+        let replacement_stop_count = Arc::new(AtomicUsize::new(0));
+        let result = session.recover_with(
+            Duration::from_millis(30),
+            Duration::from_millis(5),
+            no_delay_policy(2),
+            {
+                let attempts = attempts.clone();
+                let stops = replacement_stop_count.clone();
+                move |_, _, _| {
+                    attempts.fetch_add(1, Ordering::SeqCst);
+                    Ok(Box::new(FakeProcess {
+                        running: Arc::new(AtomicBool::new(true)),
+                        stop_count: stops.clone(),
+                    }) as Box<dyn ManagedServerProcess>)
+                }
+            },
+            Path::new("fake-server"),
+            Path::new("fake-model"),
+        );
+
+        assert!(matches!(
+            result,
+            Err(RuntimeSessionError::RecoveryExhausted { attempts: 2, .. })
+        ));
+        assert_eq!(attempts.load(Ordering::SeqCst), 2);
+        assert_eq!(old_stop_count.load(Ordering::SeqCst), 1);
+        assert_eq!(replacement_stop_count.load(Ordering::SeqCst), 2);
+        assert_eq!(session.status(), RuntimeStatus::Failed);
+    }
+
+    #[test]
     fn recovery_is_rejected_while_session_is_ready() {
         let (mut session, _) = failed_session(1);
         session.lifecycle.transition(RuntimeStatus::Stopped).unwrap();
