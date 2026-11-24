@@ -4,7 +4,7 @@
 
 midSunday is an independent, local-first desktop AI companion designed to combine useful assistance with a personal, customisable companion experience.
 
-> Project status: **Interactive desktop workspace prototype implemented; Windows build and runtime validation pending**  
+> Project status: **Interactive desktop workspace prototype implemented; cross-platform CI passing; local runtime integration in progress**  
 > Build targets: **Windows, Linux and macOS** (Windows first priority)  
 > Core direction: **Offline-capable, privacy-first, no mandatory subscription**
 
@@ -64,9 +64,9 @@ The product must remain useful without a cloud account. Online features must be 
 The roadmap is the master sequence of work. These documents provide detailed requirements, decisions, risks, and technical context. Update them as the project changes so development can recover without relying on chat history.
 
 ## Current status
-The repository contains the first interactive Tauri desktop workspace prototype alongside the project documentation. The workspace includes a conversation view, local-session message composer, companion selection, settings screens, and a Rust-core status indicator. It is still a UI prototype: no AI model, persistent chat storage, voice engine, hardware detection, installer, or production feature is implemented.
+The repository contains the first interactive Tauri desktop workspace prototype alongside the project documentation. The workspace includes a conversation view, local-session message composer, companion selection, settings screens, and a Rust-core status indicator. It is still a UI prototype: no AI model is connected, and persistent chat storage, voice engine, hardware detection, and real-device validation are not implemented yet.
 
-Phase 1 feasibility research continues in parallel. Initial findings and unresolved questions are recorded in [Phase 1 feasibility research](docs/PHASE-1-RESEARCH.md). Automatic Windows/Linux/macOS CI builds now run on pushes to `main` and pull requests targeting `main`; actual build results are still pending. Practical benchmarks, real-device runtime testing, and licence clearance remain outstanding.
+Phase 1 feasibility research continues in parallel. Initial findings and unresolved questions are recorded in [Phase 1 feasibility research](docs/PHASE-1-RESEARCH.md). Automatic Windows/Linux/macOS CI builds now run on pushes to `main` and pull requests targeting `main`; Runs #13 and #14 passed on all three platforms. The Rust backend now defines a tested local-runtime adapter contract and lifecycle state machine, but no actual model runtime is connected. Practical benchmarks, real-device runtime testing, and licence clearance remain outstanding.
 
 ## Development approach
 Development proceeds in small, testable milestones. A task is complete only when its acceptance criteria, tests, documentation, privacy review, and applicable licence review are satisfied.
