@@ -622,3 +622,19 @@ This checkpoint completes initial desk research only. No crate was added and no 
 - [ ] Select model defaults only after benchmark and licence evidence.
 
 Research is recorded in `docs/PHASE-1-RESEARCH.md` section 16. This is a desk-research shortlist; no models have been downloaded or run.
+
+
+### 2026-11-24 — First managed local-runtime process milestone
+
+- [x] Add a llama.cpp child-process supervisor using Rust's `std::process::Command`.
+- [x] Use an argument array only; never invoke a shell or accept model-generated command text.
+- [x] Require existing regular files for the executable and GGUF model; no automatic downloads.
+- [x] Validate loopback-only host configuration before process launch.
+- [x] Add explicit process status inspection, stop/wait handling, and best-effort cleanup on drop.
+- [x] Add unit tests for argument construction and optional CPU thread configuration.
+- [ ] Verify the new module with Windows, Linux, and macOS CI.
+- [ ] Add bounded startup/readiness polling and detect early process exit.
+- [ ] Add a typed loopback HTTP client for health and chat-completion requests.
+- [ ] Add cancellation, timeout, and crash-recovery integration tests using a controlled test server.
+
+This is the first process-management implementation, not a working model integration. The desktop app does not yet start this supervisor, check HTTP readiness, or generate model responses. No llama.cpp binary or model has been downloaded or bundled.
