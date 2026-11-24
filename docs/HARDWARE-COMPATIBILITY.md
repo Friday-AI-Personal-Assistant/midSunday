@@ -88,3 +88,11 @@ A separate proposed subsystem, the **Hardware Intelligence & Adaptive Resource M
 Installed RAM alone is insufficient. The manager must distinguish total from available RAM, dedicated VRAM from shared memory, and model download size from runtime memory. It must explain recommendations, preserve manual choice, and never silently download or switch models, activate cloud inference, change system settings, or terminate unrelated processes.
 
 Detailed proposed requirements, Windows detection research, privacy boundaries, and acceptance criteria: [HARDWARE-INTELLIGENCE.md](HARDWARE-INTELLIGENCE.md). This is a design requirement under research, not an implemented or benchmarked feature.
+
+## Windows hardware detection: preliminary technical direction
+
+The initial API review suggests using `sysinfo` for general cross-platform system inventory and Microsoft's Rust `windows` crate for Windows-specific detail. Candidate APIs include `GlobalMemoryStatusEx` (installed/available RAM), `GetLogicalProcessorInformationEx` (CPU topology), DXGI (GPU adapters, dedicated/shared memory and process GPU-memory budget), and `GetDiskFreeSpaceExW` (space available at the model-library path).
+
+Do not treat WMI's `AdapterRAM` as authoritative VRAM. Do not count shared GPU memory as dedicated VRAM, or a GPU memory budget as global free VRAM. A runtime must separately prove it can use the detected acceleration backend.
+
+This is a desk-research recommendation only; no crate is approved or installed. See [HARDWARE-INTELLIGENCE.md](HARDWARE-INTELLIGENCE.md) for details and sources.
