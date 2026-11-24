@@ -175,7 +175,7 @@ Release numbers are planning labels, not promises or dates. A stage is not compl
 - [ ] Configure Tauri/Rust and React/TypeScript if validated.
 - [ ] Establish formatting, linting, type checks, and automated tests.
 - [ ] Establish CI checks that do not introduce paid services or surprise usage.
-- [ ] Build the application window, navigation, theme, and responsive layout.
+- [x] Build the first interactive application window, navigation, dark-green theme, and responsive workspace layout prototype. Production UX approval and Windows validation remain pending.
 - [ ] Add typed frontend-to-backend command boundaries.
 - [ ] Define Rust modules and permission boundaries.
 - [ ] Add structured local logging with secrets and private content redacted.
@@ -528,10 +528,11 @@ This repository is the durable source of truth. ChatGPT conversations are workin
 
 ## 11. Current status and immediate next actions
 
-**Current stage:** Phase 1 — Product research and feasibility (desktop shell scaffold created; Windows compilation and runtime validation pending).
+**Current stage:** Phase 3 — Engineering foundation and desktop shell (first interactive workspace UI implemented; Windows compilation and runtime validation pending). Phase 1 feasibility research continues in parallel.
 
 **Completed:**
 - [x] Product name selected: midSunday.
+- [x] Create the first interactive workspace UI prototype with conversation view, local-session composer, companion selection, settings screens, responsive layout, and Rust-core status indicator. This is UI-only; no AI response, persistent storage, voice, or hardware detection is claimed.
 - [x] Independent private GitHub repository created under the Friday organisation.
 - [x] Windows-first direction established.
 - [x] Offline-first, no-hidden-cost principles established.
@@ -539,13 +540,14 @@ This repository is the durable source of truth. ChatGPT conversations are workin
 - [x] Initial complete roadmap drafted.
 
 **Next actions:**
-1. Review and stabilise the desktop-shell dependency setup; generate and commit a reviewed npm lockfile before repeatable builds.
-2. After checking Actions billing safeguards, decide whether to run the corrected manual Windows build; do not run automatically.
-3. Resolve any compile/configuration issues exposed by the first successful build, then test the app on a real Windows PC.
-4. Continue the read-only FRIDAY review and record reusable patterns without modifying FRIDAY.
-5. Review compact local models, Pakistani Urdu/Roman Urdu STT/TTS, and exact redistribution licences; run benchmarks only on available hardware.
+1. Generate and commit a reviewed npm lockfile, then use it for reproducible dependency installation.
+2. Run the corrected manual Windows build on the standard hosted runner; keep the workflow manual-only and confirm the public-repository standard-runner cost rules before each workflow change.
+3. Fix any TypeScript, Rust, Tauri, or packaging issues exposed by the build; retrieve and inspect the installer artifact.
+4. Test the app on a real Windows PC when one is available; do not treat a successful CI build as a substitute for runtime testing.
+5. Continue the read-only FRIDAY review and record reusable patterns without modifying FRIDAY.
+6. Continue local-model, Pakistani Urdu/Roman Urdu speech, hardware-intelligence, and licensing research; no model or speech engine is selected until evidence supports it.
 
-**Not yet done:** No application code, AI runtime, model, voice engine, installer, or production feature is claimed to be implemented in this repository.
+**Not yet done:** No AI runtime, model, persistent chat/memory storage, voice engine, hardware detector, or verified Windows installer is implemented. The current chat is a local-session UI demonstration and does not generate AI replies.
 
 ---
 
