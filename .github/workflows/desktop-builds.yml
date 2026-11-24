@@ -1,4 +1,4 @@
-name: midSunday Desktop Builds
+name: midSunday — Cross-platform build
 
 on:
   push:
@@ -17,68 +17,43 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build-windows:
-    name: Windows — Build installer
-    runs-on: windows-latest
-    timeout-minutes: 35
+  build:
+    name: Build midSunday — ${{ matrix.platform }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: Windows
+            runner: windows-latest
+            bundle_args: ""
+            artifact_name: midsunday-windows-build
+            artifact_paths: |
+              prototype/desktop-shell/src-tauri/target/release/bundle/nsis/*.exe
+              prototype/desktop-shell/package-lock.json
+          - platform: Linux
+            runner: ubuntu-24.04
+            bundle_args: "--bundles appimage,deb"
+            artifact_name: midsunday-linux-build
+            artifact_paths: |
+              prototype/desktop-shell/src-tauri/target/release/bundle/appimage/*.AppImage
+              prototype/desktop-shell/src-tauri/target/release/bundle/deb/*.deb
+              prototype/desktop-shell/package-lock.json
+          - platform: macOS
+            runner: macos-latest
+            bundle_args: "--bundles dmg"
+            artifact_name: midsunday-macos-build
+            artifact_paths: |
+              prototype/desktop-shell/src-tauri/target/release/bundle/dmg/*.dmg
+              prototype/desktop-shell/package-lock.json
+
     steps:
-      - name: Check out repository
+      - name: Check out the same midSunday source
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
-      - name: Set up Node.js
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
-        with:
-          node-version: 22
-
-      - name: Install Rust (MSVC)
-        shell: pwsh
-        run: |
-          $installer = Join-Path $env:RUNNER_TEMP "rustup-init.exe"
-          Invoke-WebRequest "https://win.rustup.rs/x86_64" -OutFile $installer
-          & $installer -y --profile minimal --default-host x86_64-pc-windows-msvc
-          if ($LASTEXITCODE -ne 0) { throw "Rust installation failed." }
-          ($env:USERPROFILE + '\.cargo\bin') | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-
-      - name: Show toolchain versions
-        shell: pwsh
-        run: |
-          node --version
-          npm --version
-          rustc --version
-          cargo --version
-
-      - name: Install frontend dependencies
-        working-directory: prototype/desktop-shell
-        run: npm install --no-audit --no-fund
-
-      - name: Build frontend
-        working-directory: prototype/desktop-shell
-        run: npm run build
-
-      - name: Build Windows installer
-        working-directory: prototype/desktop-shell
-        run: npx tauri build
-
-      - name: Upload Windows installer and generated lockfile (manual runs only)
-        if: always() && github.event_name == 'workflow_dispatch'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: midsunday-windows-build
-          path: |
-            prototype/desktop-shell/src-tauri/target/release/bundle/nsis/*.exe
-            prototype/desktop-shell/package-lock.json
-          if-no-files-found: warn
-          retention-days: 7
-
-  build-linux:
-    name: Linux — Build packages
-    runs-on: ubuntu-24.04
-    timeout-minutes: 35
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-
-      - name: Install Tauri Linux prerequisites
+      - name: Install Linux desktop prerequisites
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -97,86 +72,48 @@ jobs:
         with:
           node-version: 22
 
-      - name: Install Rust
+      - name: Install Rust (Windows MSVC)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $installer = Join-Path $env:RUNNER_TEMP "rustup-init.exe"
+          Invoke-WebRequest "https://win.rustup.rs/x86_64" -OutFile $installer
+          & $installer -y --profile minimal --default-host x86_64-pc-windows-msvc
+          if ($LASTEXITCODE -ne 0) { throw "Rust installation failed." }
+          ($env:USERPROFILE + '\.cargo\bin') | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Install Rust (Linux and macOS)
+        if: runner.os != 'Windows'
         run: |
           curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
           echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
 
       - name: Show toolchain versions
+        shell: bash
         run: |
           node --version
           npm --version
           rustc --version
           cargo --version
 
-      - name: Install frontend dependencies
+      - name: Install the same frontend dependencies
         working-directory: prototype/desktop-shell
         run: npm install --no-audit --no-fund
 
-      - name: Build frontend
+      - name: Build the same midSunday frontend
         working-directory: prototype/desktop-shell
         run: npm run build
 
-      - name: Build Linux packages
+      - name: Package midSunday for this platform
         working-directory: prototype/desktop-shell
-        run: npx tauri build --bundles appimage,deb
+        shell: bash
+        run: npx tauri build ${{ matrix.bundle_args }}
 
-      - name: Upload Linux packages and generated lockfile (manual runs only)
+      - name: Upload this platform's installer (manual runs only)
         if: always() && github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: midsunday-linux-build
-          path: |
-            prototype/desktop-shell/src-tauri/target/release/bundle/appimage/*.AppImage
-            prototype/desktop-shell/src-tauri/target/release/bundle/deb/*.deb
-            prototype/desktop-shell/package-lock.json
-          if-no-files-found: warn
-          retention-days: 7
-
-  build-macos:
-    name: macOS — Build disk image
-    runs-on: macos-latest
-    timeout-minutes: 35
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-
-      - name: Set up Node.js
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
-        with:
-          node-version: 22
-
-      - name: Install Rust
-        run: |
-          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
-          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
-
-      - name: Show toolchain versions
-        run: |
-          node --version
-          npm --version
-          rustc --version
-          cargo --version
-
-      - name: Install frontend dependencies
-        working-directory: prototype/desktop-shell
-        run: npm install --no-audit --no-fund
-
-      - name: Build frontend
-        working-directory: prototype/desktop-shell
-        run: npm run build
-
-      - name: Build macOS disk image
-        working-directory: prototype/desktop-shell
-        run: npx tauri build --bundles dmg
-
-      - name: Upload macOS disk image and generated lockfile (manual runs only)
-        if: always() && github.event_name == 'workflow_dispatch'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: midsunday-macos-build
-          path: |
-            prototype/desktop-shell/src-tauri/target/release/bundle/dmg/*.dmg
-            prototype/desktop-shell/package-lock.json
+          name: ${{ matrix.artifact_name }}
+          path: ${{ matrix.artifact_paths }}
           if-no-files-found: warn
           retention-days: 7
