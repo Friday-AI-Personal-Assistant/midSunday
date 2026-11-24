@@ -297,3 +297,23 @@ The subsystem should be local-only, work without an account or network, and neve
 
 **Status:** Research/design requirement only. No Windows detection API, Rust crate, runtime, or adaptive policy is approved. Detailed requirements and acceptance criteria are in [HARDWARE-INTELLIGENCE.md](HARDWARE-INTELLIGENCE.md).
 
+## 15. Windows hardware-detection API and Rust-library shortlist (2026-11-24)
+
+The initial Windows-first API review is now documented in detail in [HARDWARE-INTELLIGENCE.md](HARDWARE-INTELLIGENCE.md#12-windows-detection-research--api-and-rust-library-shortlist-2026-11-24).
+
+### Preliminary findings
+- `GlobalMemoryStatusEx` provides installed and currently available physical memory; the values are live/volatile and should be re-queried before large model operations.
+- `GetLogicalProcessorInformationEx` provides processor-core, package, cache and NUMA topology relationships; logical processor count must not be mistaken for physical core count.
+- DXGI can enumerate adapters and report adapter identity plus dedicated/shared memory capacity. `IDXGIAdapter3::QueryVideoMemoryInfo` provides a process-specific OS GPU-memory budget and usage, not a global free-VRAM counter.
+- `GetDiskFreeSpaceExW` can check free space at the selected model-library destination. `GetDriveTypeW` distinguishes fixed/removable/network volumes; storage seek-penalty information is a more advanced optional query.
+- Microsoft's Rust `windows` crate provides typed bindings to Win32 and COM APIs.
+- `sysinfo` supports Windows and provides a useful cross-platform baseline for CPU, memory, process and disk information. Its current docs require retaining and refreshing a `System` instance; its latest documented version has Rust MSRV 1.95, which must be checked against the project's eventual pinned toolchain.
+- NVIDIA `nvml-wrapper` is a possible optional diagnostics adapter, not a cross-vendor or mandatory dependency.
+
+### Important rejected shortcut
+Do not rely on WMI `Win32_VideoController.AdapterRAM` as authoritative VRAM. The field is 32-bit and Microsoft's documentation warns that values can be inaccurate on non-WDDM-compatible hardware. Use DXGI for generic adapter inventory and mark missing/uncertain readings honestly.
+
+### Preliminary implementation direction
+Prototype `sysinfo` plus narrowly-featured `windows` APIs first. Keep vendor-specific telemetry optional. Validate actual acceleration through the selected inference runtime and a controlled model-load test; a detected GPU does not prove the runtime can use it.
+
+**Status:** Desk research only. No crate has been added, no detector code has been written, and no Windows test machine has been inspected. Exact crate versions, licences, MSRV, feature flags, and transitive dependencies must be checked before adoption.
