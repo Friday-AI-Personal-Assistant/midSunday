@@ -86,6 +86,8 @@ pub struct ConversationMessage { pub role: ConversationRole, pub content: String
 /// A bounded request passed from the application coordinator to a runtime.
 #[derive(Clone, Debug, PartialEq)]
 pub struct GenerationRequest {
+    /// Optional local companion instructions, separate from saved conversation history.
+    pub system_prompt: String,
     pub prompt: String,
     pub history: Vec<ConversationMessage>,
     pub max_tokens: u32,
@@ -95,6 +97,7 @@ pub struct GenerationRequest {
 
 impl GenerationRequest {
     pub fn validate(&self) -> Result<(), GenerationRequestError> {
+        if self.system_prompt.len() > 8_192 { return Err(GenerationRequestError::SystemPromptTooLarge); }
         if self.prompt.trim().is_empty() {
             return Err(GenerationRequestError::EmptyPrompt);
         }
@@ -124,6 +127,7 @@ impl GenerationRequest {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum GenerationRequestError {
     EmptyPrompt,
+    SystemPromptTooLarge,
     PromptTooLarge,
     InvalidTokenLimit,
     InvalidTemperature,
@@ -282,6 +286,7 @@ mod tests {
 
     fn valid_request() -> GenerationRequest {
         GenerationRequest {
+            system_prompt: String::new(),
             history: Vec::new(),
             prompt: "Hello, midSunday.".to_owned(),
             max_tokens: 256,
@@ -295,6 +300,11 @@ mod tests {
         assert_eq!(valid_request().validate(), Ok(()));
     }
 
+    #[test]
+    fn oversized_system_prompt_is_rejected() {
+        let mut request = valid_request(); request.system_prompt = "x".repeat(8_193);
+        assert_eq!(request.validate(), Err(GenerationRequestError::SystemPromptTooLarge));
+    }
     #[test]
     fn empty_generation_prompt_is_rejected() {
         let mut request = valid_request();

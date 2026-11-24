@@ -42,3 +42,10 @@ All notable project changes are recorded here. The project is in foundation/prot
 - Added on-demand SHA-256 and file-size verification for registered models, with clear missing/modified-file status.
 - Added launch preflight so a registered model cannot silently change after it was fingerprinted; unregistered GGUF files remain usable with a clear no-saved-fingerprint status.
 - Added Rust regression tests for invalid GGUF headers, modified/missing files, and unregistered model preflight.
+
+
+## 2026-11-24
+- Connected Best friend, Mentor, Professional, and Custom character choices to actual local system prompts.
+- Added editable custom style notes, bounded to 4,000 characters in the UI.
+- Added Rust-side 8 KiB system-prompt validation and ensured system instructions precede saved conversation context without entering the transcript.
+- Added regression tests for system-prompt size limits and system-message ordering.

@@ -177,10 +177,12 @@ struct ChatCompletionRequest<'a> {
 #[derive(Serialize)]
 struct ChatMessageRequest<'a> { role: &'a str, content: &'a str }
 fn build_chat_messages(request: &GenerationRequest) -> Vec<ChatMessageRequest<'_>> {
-    let mut messages: Vec<_> = request.history.iter().map(|message| ChatMessageRequest {
+    let mut messages = Vec::with_capacity(request.history.len() + 2);
+    if !request.system_prompt.trim().is_empty() { messages.push(ChatMessageRequest { role: "system", content: request.system_prompt.as_str() }); }
+    messages.extend(request.history.iter().map(|message| ChatMessageRequest {
         role: match message.role { crate::runtime::ConversationRole::User => "user", crate::runtime::ConversationRole::Assistant => "assistant" },
         content: message.content.as_str(),
-    }).collect();
+    }));
     messages.push(ChatMessageRequest { role: "user", content: request.prompt.as_str() });
     messages
 }
@@ -367,6 +369,7 @@ mod tests {
         let (port, server) = mock_server(vec![(200, r#"{"choices":[{"message":{"content":"Hello from a local model."}}]}"#)]);
         let client = LlamaHttpClient::new(&config(port), Duration::from_secs(2)).unwrap();
         let request = GenerationRequest {
+            system_prompt: String::new(),
             history: Vec::new(),
             prompt: "Hello, midSunday.".to_owned(), max_tokens: 64,
             temperature: 0.7, top_p: 0.9,
@@ -385,6 +388,7 @@ mod tests {
         let (port, server) = mock_server(vec![(200, body)]);
         let client = LlamaHttpClient::new(&config(port), Duration::from_secs(2)).unwrap();
         let request = GenerationRequest {
+            system_prompt: String::new(),
             history: Vec::new(),
             prompt: "Hello, midSunday.".to_owned(), max_tokens: 64,
             temperature: 0.7, top_p: 0.9,
@@ -406,6 +410,7 @@ mod tests {
         let (port, server) = mock_server(vec![(200, body)]);
         let client = LlamaHttpClient::new(&config(port), Duration::from_secs(2)).unwrap();
         let request = GenerationRequest {
+            system_prompt: String::new(),
             history: Vec::new(),
             prompt: "Cancel me.".to_owned(), max_tokens: 64,
             temperature: 0.7, top_p: 0.9,
@@ -457,6 +462,7 @@ mod tests {
 
         let client = LlamaHttpClient::new(&config(port), Duration::from_secs(2)).unwrap();
         let request = GenerationRequest {
+            system_prompt: String::new(),
             history: Vec::new(),
             prompt: "Stop after the first token.".to_owned(),
             max_tokens: 64,
@@ -474,6 +480,7 @@ mod tests {
     fn already_cancelled_stream_does_not_send_a_request() {
         let client = LlamaHttpClient::new(&RuntimeConfig::default(), Duration::from_millis(100)).unwrap();
         let request = GenerationRequest {
+            system_prompt: String::new(),
             history: Vec::new(),
             prompt: "Do not send.".to_owned(), max_tokens: 64,
             temperature: 0.7, top_p: 0.9,
@@ -490,6 +497,7 @@ mod tests {
     fn chat_message_builder_keeps_history_order_and_appends_current_prompt() {
         use crate::runtime::{ConversationMessage, ConversationRole};
         let request = GenerationRequest {
+            system_prompt: String::new(),
             history: vec![ConversationMessage { role: ConversationRole::User, content: "Hi".to_owned() }, ConversationMessage { role: ConversationRole::Assistant, content: "Hello".to_owned() }],
             prompt: "How are you?".to_owned(), max_tokens: 32, temperature: 0.7, top_p: 0.9,
         };
@@ -500,6 +508,16 @@ mod tests {
         assert_eq!((messages[2].role, messages[2].content), ("user", "How are you?"));
     }
 
+    #[test]
+    fn system_prompt_is_sent_before_conversation_history() {
+        use crate::runtime::{ConversationMessage, ConversationRole};
+        let request = GenerationRequest { system_prompt: "You are midSunday.".to_owned(), history: vec![ConversationMessage { role: ConversationRole::User, content: "Hi".to_owned() }], prompt: "Help me.".to_owned(), max_tokens: 32, temperature: 0.7, top_p: 0.9 };
+        let messages = build_chat_messages(&request);
+        assert_eq!(messages.len(), 3);
+        assert_eq!((messages[0].role, messages[0].content), ("system", "You are midSunday."));
+        assert_eq!((messages[1].role, messages[1].content), ("user", "Hi"));
+        assert_eq!((messages[2].role, messages[2].content), ("user", "Help me."));
+    }
     #[test]
     fn streaming_line_parser_preserves_urdu_unicode() {
         let line = r#"data: {"choices":[{"delta":{"content":"سلام"}}]}"#.as_bytes();

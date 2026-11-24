@@ -252,6 +252,7 @@ mod tests {
     fn generation_without_a_session_is_rejected() {
         let manager = RuntimeManager::default();
         let request = GenerationRequest {
+            system_prompt: String::new(),
             history: Vec::new(),
             prompt: "Hello".to_owned(), max_tokens: 32, temperature: 0.7, top_p: 0.9,
         };

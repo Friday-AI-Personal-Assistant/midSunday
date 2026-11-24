@@ -138,6 +138,7 @@ async fn start_local_runtime(
 #[tauri::command]
 async fn generate_local_response(
     manager: State<'_, RuntimeManager>,
+    system_prompt: String,
     prompt: String,
     history: Vec<ConversationMessage>,
     max_tokens: u32,
@@ -147,7 +148,7 @@ async fn generate_local_response(
 ) -> Result<(), String> {
     let manager = manager.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
-        manager.generate_with_callback(GenerationRequest { prompt, history, max_tokens, temperature, top_p }, |delta| {
+        manager.generate_with_callback(GenerationRequest { system_prompt, prompt, history, max_tokens, temperature, top_p }, |delta| {
             let _ = on_delta.send(delta.to_owned());
         })
     })

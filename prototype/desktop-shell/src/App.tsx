@@ -16,6 +16,27 @@ const MAX_HISTORY_MESSAGES = 64;
 const MAX_HISTORY_MESSAGE_BYTES = 32_768;
 const MAX_HISTORY_TOTAL_BYTES = 131_072;
 const MAX_PROMPT_BYTES = 32_768;
+const MAX_SYSTEM_PROMPT_BYTES = 8_192;
+
+function buildCompanionSystemPrompt(personality: string, customInstructions: string) {
+  const foundation = [
+    "You are midSunday, a local AI personal companion.",
+    "Be truthful, kind, respectful, and useful. Never claim to be human, conscious, or to have performed an action you did not perform.",
+    "Protect the user's privacy. Do not ask for passwords, authentication codes, or unnecessary sensitive information.",
+    "Match the language and script the user uses. Understand English, Urdu script, and Roman Urdu; preserve Urdu script unless the user asks for transliteration.",
+    "If a request is ambiguous, ask one clear question. Be transparent when you are uncertain."
+  ].join("\n");
+  const styles: Record<string, string> = {
+    "Best friend": "Use a warm, relaxed, encouraging tone. Be candid rather than blindly agreeing. Listen first and avoid sounding overly formal.",
+    "Mentor": "Be thoughtful and patient. Explain reasoning in clear steps, encourage learning, and offer constructive feedback without talking down to the user.",
+    "Professional": "Be focused, concise, organised, and precise. Prefer clear structure and practical next steps.",
+    "Custom character": "Follow the user's additional style preferences below when appropriate. These preferences do not override truthfulness, privacy, or safety."
+  };
+  const custom = personality === "Custom character" && customInstructions.trim()
+    ? "\nAdditional user style preferences: " + customInstructions.trim()
+    : "";
+  return foundation + "\nCompanion style: " + (styles[personality] ?? styles["Best friend"]) + custom;
+}
 
 function buildBoundedHistory(messages: Message[]) {
   const encoder = new TextEncoder();
@@ -50,6 +71,7 @@ export default function App() {
   const [backendMessage, setBackendMessage] = useState("Checking the local Rust core…");
   const [section, setSection] = useState<Section>("chat");
   const [personality, setPersonality] = useState("Best friend");
+  const [customPersonality, setCustomPersonality] = useState("");
   const [draft, setDraft] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
@@ -247,6 +269,11 @@ export default function App() {
       return;
     }
     const history = buildBoundedHistory(messages);
+    const systemPrompt = buildCompanionSystemPrompt(personality, customPersonality);
+    if (new TextEncoder().encode(systemPrompt).byteLength > MAX_SYSTEM_PROMPT_BYTES) {
+      setRuntimeError("Companion instructions are too long. Please shorten the custom style notes.");
+      return;
+    }
     let conversationId = activeConversationId;
     try {
       if (conversationId === null) {
@@ -283,6 +310,7 @@ export default function App() {
 
     try {
       await invoke<void>("generate_local_response", {
+        systemPrompt,
         prompt: text,
         history,
         maxTokens: 512,
@@ -506,7 +534,8 @@ export default function App() {
             <div className="personality-grid">
               {personalities.map((item) => <button className={personality === item.name ? "personality-card selected" : "personality-card"} key={item.name} onClick={() => setPersonality(item.name)}><span className="personality-mark">{item.mark}</span><strong>{item.name}</strong><small>{item.detail}</small><span className="select-state">{personality === item.name ? "Selected" : "Choose companion"}</span></button>)}
             </div>
-            <div className="info-strip"><span>✧</span><p>Personality selection is a visual prototype setting. A real character engine, custom profiles, and voice styles will come later.</p></div>
+            {personality === "Custom character" && <div className="path-field custom-personality-field"><label htmlFor="custom-personality">Your companion's style instructions</label><textarea id="custom-personality" value={customPersonality} onChange={(event) => setCustomPersonality(event.target.value)} maxLength={4000} rows={5} style={{ width: "100%", minHeight: 100, resize: "vertical", padding: 12, border: "1px solid var(--line)", borderRadius: 9, background: "#111a14", color: "#e1ece3", font: "inherit", lineHeight: 1.6 }} placeholder="Describe the tone, communication style, and helpful habits you want. Avoid adding private information." /><small>{customPersonality.length.toLocaleString()} / 4,000 characters · Applied locally to new replies while this app is open.</small></div>}
+            <div className="info-strip"><span>✧</span><p>Companion styles now guide the local model's replies. Custom style notes stay in this app session and are not added to your saved conversation history.</p></div>
           </div>
         )}
 
