@@ -54,10 +54,13 @@ jobs:
         working-directory: prototype/desktop-shell
         run: npx tauri build
 
-      - name: Upload NSIS installer
+      - name: Upload build outputs and generated lockfile
+        if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: midsunday-windows-prototype-installer
-          path: prototype/desktop-shell/src-tauri/target/release/bundle/nsis/*.exe
-          if-no-files-found: error
+          name: midsunday-windows-prototype-build
+          path: |
+            prototype/desktop-shell/src-tauri/target/release/bundle/nsis/*.exe
+            prototype/desktop-shell/package-lock.json
+          if-no-files-found: warn
           retention-days: 7
