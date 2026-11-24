@@ -7,6 +7,7 @@ type Section = "chat" | "characters" | "settings";
 type Message = { id: number; role: "user" | "assistant" | "system"; text: string };
 type RuntimeStatusSnapshot = { status: string; detail: string | null };
 type EngineSettings = { executablePath: string; modelPath: string; contextTokens: number; cpuThreads: number | null };
+type LocalModel = { id: string; displayName: string; filePath: string; sizeBytes: number; sha256: string; source: string; license: string; addedAt: number };
 type ConversationSummary = { id: number; title: string; createdAt: number; updatedAt: number };
 type StoredMessage = { id: number; conversationId: number; role: "user" | "assistant"; content: string; createdAt: number };
 
@@ -62,6 +63,11 @@ export default function App() {
   const [modelPath, setModelPath] = useState("");
   const [contextTokens, setContextTokens] = useState("2048");
   const [cpuThreads, setCpuThreads] = useState("");
+  const [localModels, setLocalModels] = useState<LocalModel[]>([]);
+  const [modelDisplayName, setModelDisplayName] = useState("");
+  const [modelSource, setModelSource] = useState("");
+  const [modelLicense, setModelLicense] = useState("");
+  const [modelCatalogBusy, setModelCatalogBusy] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [importBusy, setImportBusy] = useState(false);
   const importFileRef = useRef<HTMLInputElement>(null);
@@ -96,6 +102,7 @@ export default function App() {
         setMessages(saved.map((message) => ({ id: message.id, role: message.role, text: message.content })));
       })
       .catch(() => { if (active) setRuntimeError("Could not load local conversations."); });
+    invoke<LocalModel[]>("list_local_models").then((items) => { if (active) setLocalModels(items); }).catch(() => { if (active) setRuntimeError("Could not load the local model library."); });
     invoke<EngineSettings>("get_engine_settings")
       .then((settings) => {
         if (!active) return;
@@ -312,8 +319,30 @@ export default function App() {
   async function browseForModel() {
     try {
       const selected = await open({ multiple: false, directory: false, title: "Select GGUF model file", filters: [{ name: "GGUF model", extensions: ["gguf"] }] });
-      if (typeof selected === "string") setModelPath(selected);
+      if (typeof selected === "string") { setModelPath(selected); const fileName = selected.split(/[\\\\/]/).pop() ?? "Local model"; setModelDisplayName(fileName.replace(/\\.gguf$/i, "")); }
     } catch (error) { setRuntimeError(`Could not open the file picker: ${String(error)}`); }
+  }
+
+
+  async function registerLocalModel() {
+    if (!modelPath.trim()) { setRuntimeError("Choose an existing GGUF file first."); return; }
+    if (!modelDisplayName.trim()) { setRuntimeError("Give this model a name before adding it to the library."); return; }
+    setModelCatalogBusy(true); setRuntimeError("");
+    try {
+      const model = await invoke<LocalModel>("register_local_model", { filePath: modelPath.trim(), displayName: modelDisplayName.trim(), source: modelSource.trim(), license: modelLicense.trim() });
+      setLocalModels(await invoke<LocalModel[]>("list_local_models")); setModelPath(model.filePath);
+    } catch (error) { setRuntimeError(String(error)); }
+    finally { setModelCatalogBusy(false); }
+  }
+  async function removeLocalModel(model: LocalModel) {
+    if (!window.confirm(`Remove "${model.displayName}" from the midSunday library? The GGUF file itself will not be deleted.`)) return;
+    try { await invoke<boolean>("remove_local_model", { id: model.id }); setLocalModels(await invoke<LocalModel[]>("list_local_models")); }
+    catch (error) { setRuntimeError(`Could not remove model from the library: ${String(error)}`); }
+  }
+  function formatModelSize(bytes: number) {
+    if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(2)} GB`;
+    if (bytes >= 1024 ** 2) return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
+    return `${bytes.toLocaleString()} bytes`;
   }
 
   async function startLocalRuntime() {
@@ -478,6 +507,15 @@ export default function App() {
               <div className="runtime-actions"><button className="primary-action" onClick={startLocalRuntime} disabled={runtimeBusy || runtimeStatus.status === "ready"}>{runtimeBusy ? "Please wait…" : "Start local engine"}</button><button className="secondary-action" onClick={stopLocalRuntime} disabled={runtimeBusy || runtimeStatus.status === "notInstalled" || runtimeStatus.status === "stopped"}>Stop engine</button></div>
               {runtimeError && <p className="runtime-error" role="alert">{runtimeError}</p>}
               <p className="settings-footnote">Nothing is downloaded automatically. You must already have a compatible llama.cpp server executable and GGUF model. The engine listens only on this device (127.0.0.1).</p>
+            </section>
+            <section className="settings-section">
+              <div className="settings-section-title"><div><h2>Local model library</h2><p>Register GGUF files already on this device. midSunday records their details and SHA-256 fingerprint without copying or downloading them.</p></div><span className="settings-symbol">▧</span></div>
+              <div className="path-field"><label htmlFor="model-display-name">Model name</label><input id="model-display-name" value={modelDisplayName} onChange={(event) => setModelDisplayName(event.target.value)} placeholder="e.g. My local assistant" maxLength={120} /></div>
+              <div className="path-field"><label htmlFor="model-source">Source (optional)</label><input id="model-source" value={modelSource} onChange={(event) => setModelSource(event.target.value)} placeholder="Where did you get this model?" maxLength={512} /></div>
+              <div className="path-field"><label htmlFor="model-license">Licence (optional)</label><input id="model-license" value={modelLicense} onChange={(event) => setModelLicense(event.target.value)} placeholder="Record the model's licence" maxLength={512} /></div>
+              <div className="runtime-actions"><button className="secondary-action" type="button" onClick={registerLocalModel} disabled={modelCatalogBusy || !modelPath.trim()}>{modelCatalogBusy ? "Fingerprinting model…" : "Add selected GGUF to library"}</button></div>
+              {localModels.length === 0 ? <p className="settings-footnote">No models registered yet. Browse for an existing GGUF file above, then add it here.</p> : <div className="model-library-list">{localModels.map((model) => <div className="setting-row" key={model.id}><div><strong>{model.displayName}</strong><p>{formatModelSize(model.sizeBytes)} · SHA-256: {model.sha256.slice(0, 16)}…</p><p>{model.source || "Source not recorded"} · {model.license || "Licence not recorded"}</p><p className="model-path-text">{model.filePath}</p></div><div className="model-library-actions"><button className="secondary-action" type="button" onClick={() => { setModelPath(model.filePath); setModelDisplayName(model.displayName); setModelSource(model.source); setModelLicense(model.license); }}>Use model</button><button className="danger-action" type="button" onClick={() => void removeLocalModel(model)}>Remove</button></div></div>)}</div>}
+              <p className="settings-footnote">Removing an entry only removes its catalogue record. It never deletes the original model file. Always check the model's licence before redistribution or commercial use.</p>
             </section>
             <section className="settings-section"><div className="settings-section-title"><div><h2>Conversation data</h2><p>Your chat history stays in the local app database. Export a portable copy or clear it from this device.</p></div><span className="settings-symbol">▤</span></div>
               <div className="setting-row"><div><strong>Export conversation history</strong><p>Save all conversations and messages as a versioned JSON file. This export does not include future personal memories or model files.</p></div><button className="secondary-action" type="button" onClick={() => void exportConversations()}>Export JSON</button></div>

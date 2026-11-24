@@ -191,7 +191,7 @@ Release numbers are planning labels, not promises or dates. A stage is not compl
 
 **Goal:** Deliver the first useful, genuinely offline companion experience.
 
-- [ ] Implement model catalogue metadata (not an automatic download of unreviewed models).
+- [x] Implement a device-local model catalogue for manually registered GGUF files, recording name, path, size, optional source/licence notes, and a streaming SHA-256 fingerprint. Duplicate content is tracked once; removing an entry never deletes the model file. No model downloads or copying occur.
 - [ ] Implement model download/import with source, size, hash, and licence information.
 - [ ] Verify downloaded model integrity.
 - [ ] Implement local model discovery and selection.

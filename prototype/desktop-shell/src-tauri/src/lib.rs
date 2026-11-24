@@ -1,6 +1,7 @@
 mod conversation_store;
 mod engine_settings;
 mod llama_client;
+mod model_catalog;
 mod llama_process;
 mod llama_runtime;
 mod runtime;
@@ -11,6 +12,7 @@ use runtime::{ConversationMessage, GenerationRequest, RuntimeConfig};
 use runtime_manager::{RuntimeManager, RuntimeStatusSnapshot};
 use conversation_store::{ConversationStore, ConversationSummary, ImportResult, StoredMessage};
 use engine_settings::{EngineSettings, EngineSettingsStore};
+use model_catalog::{LocalModel, ModelCatalog};
 use tauri::Manager;
 
 
@@ -62,6 +64,17 @@ fn import_conversations(store: State<'_, ConversationStore>, json: String) -> Re
 fn clear_conversations(store: State<'_, ConversationStore>) -> Result<usize, String> {
     store.clear_all()
 }
+
+#[tauri::command]
+fn list_local_models(catalog: State<'_, ModelCatalog>) -> Result<Vec<LocalModel>, String> { catalog.list() }
+
+#[tauri::command]
+fn register_local_model(catalog: State<'_, ModelCatalog>, file_path: String, display_name: String, source: String, license: String) -> Result<LocalModel, String> {
+    catalog.register(&file_path, &display_name, &source, &license)
+}
+
+#[tauri::command]
+fn remove_local_model(catalog: State<'_, ModelCatalog>, id: String) -> Result<bool, String> { catalog.remove(&id) }
 
 #[tauri::command]
 fn get_app_status() -> &'static str {
@@ -180,14 +193,20 @@ pub fn run() {
                 .map_err(|error| std::io::Error::new(std::io::ErrorKind::Other, error))?;
             let settings = EngineSettingsStore::open(&data_dir.join("engine-settings.json"))
                 .map_err(|error| std::io::Error::new(std::io::ErrorKind::Other, error))?;
+            let models = ModelCatalog::open(&data_dir.join("models.json"))
+                .map_err(|error| std::io::Error::new(std::io::ErrorKind::Other, error))?;
             app.manage(store);
             app.manage(settings);
+            app.manage(models);
             Ok(())
         })
         .plugin(tauri_plugin_dialog::init())
         .manage(RuntimeManager::default())
         .invoke_handler(tauri::generate_handler![
             get_app_status,
+            list_local_models,
+            register_local_model,
+            remove_local_model,
             list_conversations,
             create_conversation,
             get_conversation_messages,

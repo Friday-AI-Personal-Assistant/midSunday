@@ -1,0 +1,120 @@
+//! User-managed inventory of existing local GGUF model files.
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
+use std::{fmt::Write as _, fs::{self, File}, io::{BufReader, Read}, path::{Path, PathBuf}, sync::Mutex, time::{SystemTime, UNIX_EPOCH}};
+const MAX_LABEL_BYTES: usize = 512;
+const HASH_BUFFER_BYTES: usize = 1024 * 1024;
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct LocalModel {
+    pub id: String, pub display_name: String, pub file_path: String,
+    pub size_bytes: u64, pub sha256: String, pub source: String,
+    pub license: String, pub added_at: u64,
+}
+pub struct ModelCatalog { path: PathBuf, models: Mutex<Vec<LocalModel>> }
+
+impl ModelCatalog {
+    pub fn open(path: &Path) -> Result<Self, String> {
+        if let Some(parent) = path.parent() { fs::create_dir_all(parent).map_err(|e| format!("Could not create model catalogue directory: {e}"))?; }
+        let models = match fs::read_to_string(path) {
+            Ok(contents) => { let parsed: Vec<LocalModel> = serde_json::from_str(&contents).map_err(|e| format!("Local model catalogue could not be read: {e}"))?; validate_catalogue(&parsed)?; parsed }
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Vec::new(),
+            Err(e) => return Err(format!("Could not read local model catalogue: {e}")),
+        };
+        Ok(Self { path: path.to_path_buf(), models: Mutex::new(models) })
+    }
+    pub fn list(&self) -> Result<Vec<LocalModel>, String> {
+        self.models.lock().map(|m| m.clone()).map_err(|_| "Local model catalogue is unavailable.".to_owned())
+    }
+    pub fn register(&self, file_path: &str, display_name: &str, source: &str, license: &str) -> Result<LocalModel, String> {
+        let display_name = clean_label(display_name, "Model name", 120)?;
+        let source = clean_label(source, "Source", MAX_LABEL_BYTES)?;
+        let license = clean_label(license, "Licence", MAX_LABEL_BYTES)?;
+        let canonical = Path::new(file_path).canonicalize().map_err(|e| format!("Could not locate the selected model file: {e}"))?;
+        if !canonical.is_file() { return Err("The selected model path is not a file.".to_owned()); }
+        if !canonical.extension().and_then(|v| v.to_str()).is_some_and(|v| v.eq_ignore_ascii_case("gguf")) { return Err("Only existing .gguf model files can be registered.".to_owned()); }
+        let metadata = fs::metadata(&canonical).map_err(|e| format!("Could not inspect the selected model file: {e}"))?;
+        if metadata.len() == 0 { return Err("The selected GGUF file is empty.".to_owned()); }
+        let sha256 = hash_file(&canonical)?;
+        let added_at = SystemTime::now().duration_since(UNIX_EPOCH).map_err(|_| "System clock is earlier than the Unix epoch.".to_owned())?.as_secs();
+        let model = LocalModel { id: sha256.clone(), display_name, file_path: canonical.to_string_lossy().into_owned(), size_bytes: metadata.len(), sha256, source, license, added_at };
+        let mut models = self.models.lock().map_err(|_| "Local model catalogue is unavailable.".to_owned())?;
+        let mut next = models.clone();
+        if let Some(existing) = next.iter_mut().find(|entry| entry.id == model.id) { *existing = model.clone(); } else { next.push(model.clone()); }
+        self.persist(&next)?;
+        *models = next;
+        Ok(model)
+    }
+    /// Removes catalogue metadata only; the original GGUF file is never deleted.
+    pub fn remove(&self, id: &str) -> Result<bool, String> {
+        if id.len() != 64 || !id.bytes().all(|b| b.is_ascii_hexdigit()) { return Err("The model identifier is invalid.".to_owned()); }
+        let mut models = self.models.lock().map_err(|_| "Local model catalogue is unavailable.".to_owned())?;
+        let mut next = models.clone();
+        let before = next.len(); next.retain(|model| model.id != id);
+        if next.len() == before { return Ok(false); }
+        self.persist(&next)?; *models = next; Ok(true)
+    }
+    fn persist(&self, models: &[LocalModel]) -> Result<(), String> {
+        let contents = serde_json::to_vec_pretty(models).map_err(|e| format!("Could not encode local model catalogue: {e}"))?;
+        let temporary = self.path.with_extension("json.tmp");
+        fs::write(&temporary, contents).map_err(|e| format!("Could not write local model catalogue: {e}"))?;
+        if self.path.exists() { fs::remove_file(&self.path).map_err(|e| format!("Could not replace local model catalogue: {e}"))?; }
+        fs::rename(&temporary, &self.path).map_err(|e| format!("Could not finish saving local model catalogue: {e}"))?;
+        Ok(())
+    }
+}
+fn clean_label(value: &str, label: &str, max: usize) -> Result<String, String> {
+    let value = value.trim();
+    if value.len() > max || value.contains('\0') { return Err(format!("{label} is too long or contains invalid characters.")); }
+    Ok(value.to_owned())
+}
+fn hash_file(path: &Path) -> Result<String, String> {
+    let file = File::open(path).map_err(|e| format!("Could not open model file for fingerprinting: {e}"))?;
+    let mut reader = BufReader::with_capacity(HASH_BUFFER_BYTES, file);
+    let mut hasher = Sha256::new(); let mut buffer = vec![0; HASH_BUFFER_BYTES];
+    loop { let count = reader.read(&mut buffer).map_err(|e| format!("Could not read model file for fingerprinting: {e}"))?; if count == 0 { break; } hasher.update(&buffer[..count]); }
+    let mut output = String::with_capacity(64);
+    for byte in hasher.finalize() { write!(&mut output, "{byte:02x}").expect("String formatting cannot fail"); }
+    Ok(output)
+}
+fn validate_catalogue(models: &[LocalModel]) -> Result<(), String> {
+    if models.len() > 10_000 { return Err("The local model catalogue contains too many entries.".to_owned()); }
+    let mut ids = std::collections::HashSet::new();
+    for model in models {
+        if model.id.len() != 64 || model.id != model.sha256 || !model.id.bytes().all(|b| b.is_ascii_hexdigit()) || !ids.insert(model.id.as_str()) { return Err("The local model catalogue contains an invalid or duplicate fingerprint.".to_owned()); }
+        clean_label(&model.display_name, "Model name", 120)?; clean_label(&model.source, "Source", MAX_LABEL_BYTES)?; clean_label(&model.license, "Licence", MAX_LABEL_BYTES)?;
+        if model.file_path.is_empty() || model.file_path.len() > 4096 || model.file_path.contains('\0') || model.size_bytes == 0 { return Err("The local model catalogue contains invalid file metadata.".to_owned()); }
+    }
+    Ok(())
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    static NEXT: AtomicUsize = AtomicUsize::new(0);
+    fn dir() -> PathBuf { let p = std::env::temp_dir().join(format!("midsunday-model-catalog-{}-{}", std::process::id(), NEXT.fetch_add(1, Ordering::Relaxed))); fs::create_dir_all(&p).unwrap(); p }
+    #[test] fn registers_fingerprints_and_reloads_catalogue() {
+        let d=dir(); let model_path=d.join("tiny.gguf"); fs::write(&model_path,b"local test model bytes").unwrap();
+        let path=d.join("models.json"); let c=ModelCatalog::open(&path).unwrap();
+        let model=c.register(model_path.to_str().unwrap(),"Tiny model","Local test","Test-only").unwrap();
+        assert_eq!(model.sha256.len(),64); assert_eq!(model.id,model.sha256); assert_eq!(model.size_bytes,22);
+        drop(c); let reopened=ModelCatalog::open(&path).unwrap(); assert_eq!(reopened.list().unwrap(),vec![model]); let _=fs::remove_dir_all(d);
+    }
+    #[test] fn duplicate_content_is_one_catalogue_entry() {
+        let d=dir(); let a=d.join("a.gguf"); let b=d.join("b.gguf"); fs::write(&a,b"same model").unwrap(); fs::write(&b,b"same model").unwrap();
+        let c=ModelCatalog::open(&d.join("models.json")).unwrap(); c.register(a.to_str().unwrap(),"First","","").unwrap(); c.register(b.to_str().unwrap(),"Second","","").unwrap();
+        assert_eq!(c.list().unwrap().len(),1); assert_eq!(c.list().unwrap()[0].display_name,"Second"); let _=fs::remove_dir_all(d);
+    }
+    #[test] fn rejects_wrong_extension_and_empty_files() {
+        let d=dir(); let wrong=d.join("model.bin"); let empty=d.join("empty.gguf"); fs::write(&wrong,b"not gguf").unwrap(); fs::write(&empty,b"").unwrap();
+        let c=ModelCatalog::open(&d.join("models.json")).unwrap(); assert!(c.register(wrong.to_str().unwrap(),"Wrong","","").is_err()); assert!(c.register(empty.to_str().unwrap(),"Empty","","").is_err()); let _=fs::remove_dir_all(d);
+    }
+    #[test] fn removal_never_deletes_the_original_model_file() {
+        let d=dir(); let p=d.join("keep.gguf"); fs::write(&p,b"keep me").unwrap(); let c=ModelCatalog::open(&d.join("models.json")).unwrap();
+        let m=c.register(p.to_str().unwrap(),"Keep","","").unwrap(); assert!(c.remove(&m.id).unwrap()); assert!(p.exists()); assert!(c.list().unwrap().is_empty()); let _=fs::remove_dir_all(d);
+    }
+    #[test] fn malformed_catalogue_is_not_silently_overwritten() {
+        let d=dir(); let p=d.join("models.json"); fs::write(&p,"{broken").unwrap(); assert!(ModelCatalog::open(&p).is_err()); let _=fs::remove_dir_all(d);
+    }
+}

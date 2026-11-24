@@ -3,6 +3,7 @@
 All notable project changes are recorded here. The project is in foundation/prototype development; no application release has been made.
 
 ## 2026-11-24
+- Added a local GGUF model library: manually register existing files, record source/licence metadata, compute streaming SHA-256 fingerprints, detect duplicate content, select registered models, and remove catalogue entries without deleting model files. No download or model copy is performed.
 - Added device-local persistence for llama-server/model paths and inference tuning settings, restored them on startup, exposed context-length and CPU-thread controls, and validated their ranges. Settings contain paths and tuning values only, not chat content or credentials.
 - Made the local HTTP cancellation test portable across operating systems: it accepts clean EOF and the standard TCP disconnect errors produced when a client cancels a response, while still failing on unexpected reads or I/O errors.
 - Hardened conversation backup handling: imported titles are normalised using the same validation as newly created conversations, added round-trip and malformed-metadata tests, and exports now read from one consistent SQLite transaction so concurrent changes cannot create mixed snapshots.
