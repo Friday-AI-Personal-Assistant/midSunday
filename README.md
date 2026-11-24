@@ -52,6 +52,7 @@ The product must remain useful without a cloud account. Online features must be 
 - [Commercial licensing policy](docs/COMMERCIAL-LICENSING.md)
 - [Licence review register](LICENSE-REVIEW.md)
 - [Phase 1 feasibility research](docs/PHASE-1-RESEARCH.md)
+- [Repeatable AI benchmark protocol](docs/BENCHMARK-PROTOCOL.md)
 
 The roadmap is the master sequence of work. These documents provide detailed requirements, decisions, risks, and technical context. Update them as the project changes so development can recover without relying on chat history.
 
