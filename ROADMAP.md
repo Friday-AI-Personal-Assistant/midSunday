@@ -119,6 +119,7 @@ Release numbers are planning labels, not promises or dates. A stage is not compl
 
 - [x] Complete desk comparison of Tauri 2 and Electron for Windows-first distribution, security, packaging, accessibility considerations, and maintenance; see [DESKTOP-FRAMEWORK-EVALUATION.md](docs/DESKTOP-FRAMEWORK-EVALUATION.md).
 - [x] Scaffold the first minimal Tauri 2 + Rust + React/TypeScript desktop shell, including a harmless Rust status command and a minimal capability file.
+- [x] Add a manual-only GitHub Actions Windows build workflow; no build has been triggered.
 - [ ] Install dependencies, build, and run the shell on Windows; measure installer size, startup, idle memory, accessibility, and WebView2 behaviour before approving the production framework.
 - [ ] Inspect FRIDAY's repository and document reusable patterns, limitations, and code that must remain separate.
 - [ ] Compare local LLM runtimes and their commercial distribution implications.
