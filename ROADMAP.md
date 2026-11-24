@@ -200,7 +200,7 @@ Release numbers are planning labels, not promises or dates. A stage is not compl
 - [ ] Implement streaming text generation.
 - [ ] Implement stop generation, retry, and error recovery.
 - [x] Implement bounded local system prompts for Best friend, Mentor, Professional, and user-authored custom style notes; validate prompt size and keep system instructions separate from saved conversation messages.
-- [ ] Persist companion preferences locally across app restarts and add editable named character profiles.
+- [x] Persist companion preferences locally across app restarts and add editable named character profiles. Built-in companion selection, custom style notes, and up to 20 named profiles are stored in a validated device-local JSON file; real desktop restart testing remains pending.
 - [x] Implement local SQLite conversation creation, rename, delete, and message history through a narrow Rust command boundary; frontend lists, opens, creates, renames, and deletes saved conversations. (Initial implementation; real-device crash/restart verification remains pending.)
 - [x] Add versioned SQLite schema initialization using SQLite's user_version marker and refuse to open a database created by a newer unsupported schema.
 - [x] Add a versioned JSON conversation export and a clear-all-history control, separate from the future memory store.
@@ -813,6 +813,9 @@ The check is local and reads the selected model file; it does not upload, copy, 
 
 - [x] Turn Best friend, Mentor, and Professional selections into actual local model instructions.
 - [x] Add user-authored custom style notes for the Custom character option.
+- [x] Add Girlfriend and Boyfriend built-in styles with respectful, non-explicit, non-coercive behaviour boundaries.
+- [x] Persist selected companion, custom style notes, and up to 20 editable named character profiles in the local app-data directory.
+- [x] Validate companion settings versions, selected profile references, unique names/IDs, and instruction size limits on the Rust side.
 - [x] Send system instructions as a system-role message before conversation history.
 - [x] Enforce an 8 KiB UTF-8 system-prompt limit in the Rust request validator.
 - [x] Keep system prompts out of the saved conversation transcript and add tests for validation and message ordering.

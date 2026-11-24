@@ -1,4 +1,5 @@
 mod conversation_store;
+mod companion_settings;
 mod engine_settings;
 mod llama_client;
 mod model_catalog;
@@ -12,6 +13,7 @@ use runtime::{ConversationMessage, GenerationRequest, RuntimeConfig};
 use runtime_manager::{RuntimeManager, RuntimeStatusSnapshot};
 use conversation_store::{ConversationStore, ConversationSummary, ImportResult, StoredMessage};
 use engine_settings::{EngineSettings, EngineSettingsStore};
+use companion_settings::{CompanionSettings, CompanionSettingsStore};
 use model_catalog::{LocalModel, ModelCatalog, ModelVerification};
 use tauri::Manager;
 
@@ -95,6 +97,19 @@ fn get_engine_settings(settings: State<'_, EngineSettingsStore>) -> Result<Engin
 fn save_engine_settings(settings: State<'_, EngineSettingsStore>, value: EngineSettings) -> Result<EngineSettings, String> {
     settings.save(value.clone())?;
     Ok(value)
+}
+
+#[tauri::command]
+fn get_companion_settings(store: State<'_, CompanionSettingsStore>) -> Result<CompanionSettings, String> {
+    store.get()
+}
+
+#[tauri::command]
+fn save_companion_settings(
+    store: State<'_, CompanionSettingsStore>,
+    value: CompanionSettings,
+) -> Result<CompanionSettings, String> {
+    store.save(value)
 }
 
 #[tauri::command]
@@ -206,9 +221,12 @@ pub fn run() {
                 .map_err(|error| std::io::Error::new(std::io::ErrorKind::Other, error))?;
             let models = ModelCatalog::open(&data_dir.join("models.json"))
                 .map_err(|error| std::io::Error::new(std::io::ErrorKind::Other, error))?;
+            let companions = CompanionSettingsStore::open(&data_dir.join("companion-settings.json"))
+                .map_err(|error| std::io::Error::new(std::io::ErrorKind::Other, error))?;
             app.manage(store);
             app.manage(settings);
             app.manage(models);
+            app.manage(companions);
             Ok(())
         })
         .plugin(tauri_plugin_dialog::init())
@@ -230,6 +248,8 @@ pub fn run() {
             clear_conversations,
             get_engine_settings,
             save_engine_settings,
+            get_companion_settings,
+            save_companion_settings,
             get_runtime_status,
             start_local_runtime,
             generate_local_response,

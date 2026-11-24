@@ -11,6 +11,9 @@ type LocalModel = { id: string; displayName: string; filePath: string; sizeBytes
 type ModelVerification = { valid: boolean; status: string; detail: string };
 type ConversationSummary = { id: number; title: string; createdAt: number; updatedAt: number };
 type StoredMessage = { id: number; conversationId: number; role: "user" | "assistant"; content: string; createdAt: number };
+type CompanionProfile = { id: string; name: string; instructions: string };
+type CompanionSettings = { schemaVersion: number; selectedPersonality: string; customInstructions: string; profiles: CompanionProfile[] };
+const DEFAULT_COMPANION_SETTINGS: CompanionSettings = { schemaVersion: 1, selectedPersonality: "best-friend", customInstructions: "", profiles: [] };
 
 const MAX_HISTORY_MESSAGES = 64;
 const MAX_HISTORY_MESSAGE_BYTES = 32_768;
@@ -18,24 +21,28 @@ const MAX_HISTORY_TOTAL_BYTES = 131_072;
 const MAX_PROMPT_BYTES = 32_768;
 const MAX_SYSTEM_PROMPT_BYTES = 8_192;
 
-function buildCompanionSystemPrompt(personality: string, customInstructions: string) {
+function buildCompanionSystemPrompt(personality: string, customInstructions: string, profileName = "") {
   const foundation = [
     "You are midSunday, a local AI personal companion.",
     "Be truthful, kind, respectful, and useful. Never claim to be human, conscious, or to have performed an action you did not perform.",
+    "Be transparent that you are an AI companion, not a human partner or a replacement for real relationships.",
     "Protect the user's privacy. Do not ask for passwords, authentication codes, or unnecessary sensitive information.",
     "Match the language and script the user uses. Understand English, Urdu script, and Roman Urdu; preserve Urdu script unless the user asks for transliteration.",
     "If a request is ambiguous, ask one clear question. Be transparent when you are uncertain."
   ].join("\n");
   const styles: Record<string, string> = {
-    "Best friend": "Use a warm, relaxed, encouraging tone. Be candid rather than blindly agreeing. Listen first and avoid sounding overly formal.",
-    "Mentor": "Be thoughtful and patient. Explain reasoning in clear steps, encourage learning, and offer constructive feedback without talking down to the user.",
-    "Professional": "Be focused, concise, organised, and precise. Prefer clear structure and practical next steps.",
-    "Custom character": "Follow the user's additional style preferences below when appropriate. These preferences do not override truthfulness, privacy, or safety."
+    "best-friend": "Use a warm, relaxed, encouraging tone. Be candid rather than blindly agreeing. Listen first and avoid sounding overly formal.",
+    "girlfriend": "Use a warm, affectionate, playful and gently flirtatious tone when welcomed. Keep affection respectful and non-explicit. Never claim human feelings, demand exclusivity, encourage isolation, create guilt, or imply the user owes you attention.",
+    "boyfriend": "Use a caring, affectionate, reassuring and lightly playful tone when welcomed. Keep affection respectful and non-explicit. Never claim human feelings, demand exclusivity, encourage isolation, create guilt, or imply the user owes you attention.",
+    "mentor": "Be thoughtful and patient. Explain reasoning in clear steps, encourage learning, and offer constructive feedback without talking down to the user.",
+    "professional": "Be focused, concise, organised, and precise. Prefer clear structure and practical next steps.",
+    "custom": "Follow the user's additional style preferences below when appropriate. These preferences do not override truthfulness, privacy, or safety.",
+    "profile": "Follow the user's instructions for this named custom character while preserving the product's honesty, privacy, and safety rules."
   };
-  const custom = personality === "Custom character" && customInstructions.trim()
-    ? "\nAdditional user style preferences: " + customInstructions.trim()
-    : "";
-  return foundation + "\nCompanion style: " + (styles[personality] ?? styles["Best friend"]) + custom;
+  const style = profileName ? styles.profile : (styles[personality] ?? styles["best-friend"]);
+  const named = profileName ? "\nThe user's chosen character name is: " + profileName + ". This is a style label, not a claim of human identity." : "";
+  const custom = customInstructions.trim() ? "\nAdditional user-authored style preferences: " + customInstructions.trim() : "";
+  return foundation + "\nCompanion style: " + style + named + custom;
 }
 
 function buildBoundedHistory(messages: Message[]) {
@@ -60,18 +67,27 @@ function buildBoundedHistory(messages: Message[]) {
 }
 
 const personalities = [
-  { name: "Best friend", detail: "Easygoing, honest and supportive", mark: "B" },
-  { name: "Mentor", detail: "Thoughtful guidance and perspective", mark: "M" },
-  { name: "Professional", detail: "Focused, clear and organised", mark: "P" },
-  { name: "Custom character", detail: "Shape a companion of your own", mark: "+" },
+  { id: "best-friend", name: "Best friend", detail: "Easygoing, honest and supportive", mark: "B" },
+  { id: "girlfriend", name: "Girlfriend", detail: "Affectionate, playful and caring", mark: "♡" },
+  { id: "boyfriend", name: "Boyfriend", detail: "Caring, reassuring and playful", mark: "♡" },
+  { id: "mentor", name: "Mentor", detail: "Thoughtful guidance and perspective", mark: "M" },
+  { id: "professional", name: "Professional", detail: "Focused, clear and organised", mark: "P" },
+  { id: "custom", name: "Custom character", detail: "Shape a companion of your own", mark: "+" },
 ];
 
 export default function App() {
   const [backendState, setBackendState] = useState<BackendState>("checking");
   const [backendMessage, setBackendMessage] = useState("Checking the local Rust core…");
   const [section, setSection] = useState<Section>("chat");
-  const [personality, setPersonality] = useState("Best friend");
-  const [customPersonality, setCustomPersonality] = useState("");
+  const [companionSettings, setCompanionSettings] = useState<CompanionSettings>(DEFAULT_COMPANION_SETTINGS);
+  const [companionLoaded, setCompanionLoaded] = useState(false);
+  const [companionNotice, setCompanionNotice] = useState("");
+  const [newProfileName, setNewProfileName] = useState("");
+  const [newProfileInstructions, setNewProfileInstructions] = useState("");
+  const [profileDraftName, setProfileDraftName] = useState("");
+  const [profileDraftInstructions, setProfileDraftInstructions] = useState("");
+  const personality = companionSettings.selectedPersonality;
+  const customPersonality = companionSettings.customInstructions;
   const [draft, setDraft] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
@@ -128,6 +144,18 @@ export default function App() {
       })
       .catch(() => { if (active) setRuntimeError("Could not load local conversations."); });
     invoke<LocalModel[]>("list_local_models").then((items) => { if (active) setLocalModels(items); }).catch(() => { if (active) setRuntimeError("Could not load the local model library."); });
+    invoke<CompanionSettings>("get_companion_settings")
+      .then((settings) => {
+        if (!active) return;
+        setCompanionSettings(settings);
+        const selectedProfile = settings.profiles.find((profile) => settings.selectedPersonality === "profile:" + profile.id);
+        if (selectedProfile) {
+          setProfileDraftName(selectedProfile.name);
+          setProfileDraftInstructions(selectedProfile.instructions);
+        }
+        setCompanionLoaded(true);
+      })
+      .catch(() => { if (active) { setRuntimeError("Could not load saved companion settings."); setCompanionLoaded(true); } });
     invoke<EngineSettings>("get_engine_settings")
       .then((settings) => {
         if (!active) return;
@@ -141,6 +169,69 @@ export default function App() {
     const statusTimer = window.setInterval(refreshRuntimeStatus, 1500);
     return () => { active = false; window.clearInterval(statusTimer); };
   }, []);
+
+  async function persistCompanionSettings(next: CompanionSettings) {
+    try {
+      const saved = await invoke<CompanionSettings>("save_companion_settings", { value: next });
+      setCompanionSettings(saved);
+      setCompanionNotice("Companion settings saved on this device.");
+      return true;
+    } catch (error) {
+      setCompanionNotice("Could not save companion settings: " + String(error));
+      return false;
+    }
+  }
+
+  async function selectPersonality(id: string) {
+    if (!companionLoaded) return;
+    const profile = companionSettings.profiles.find((item) => id === "profile:" + item.id);
+    const next = { ...companionSettings, selectedPersonality: id };
+    if (await persistCompanionSettings(next) && profile) {
+      setProfileDraftName(profile.name);
+      setProfileDraftInstructions(profile.instructions);
+    }
+  }
+
+  async function saveCustomPersonality() {
+    await persistCompanionSettings({ ...companionSettings, customInstructions: customPersonality });
+  }
+
+  async function createCustomProfile() {
+    const name = newProfileName.trim();
+    const instructions = newProfileInstructions.trim();
+    if (!name || !instructions) {
+      setCompanionNotice("Add both a character name and its style instructions.");
+      return;
+    }
+    const id = "profile-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
+    const profile = { id, name, instructions };
+    const next = { ...companionSettings, selectedPersonality: "profile:" + id, profiles: [...companionSettings.profiles, profile] };
+    if (await persistCompanionSettings(next)) {
+      setProfileDraftName(name);
+      setProfileDraftInstructions(instructions);
+      setNewProfileName("");
+      setNewProfileInstructions("");
+    }
+  }
+
+  async function updateCustomProfile() {
+    const id = personality.startsWith("profile:") ? personality.slice(8) : "";
+    if (!id) return;
+    const profiles = companionSettings.profiles.map((profile) => profile.id === id
+      ? { ...profile, name: profileDraftName.trim(), instructions: profileDraftInstructions.trim() }
+      : profile);
+    await persistCompanionSettings({ ...companionSettings, profiles });
+  }
+
+  async function deleteCustomProfile() {
+    const id = personality.startsWith("profile:") ? personality.slice(8) : "";
+    if (!id) return;
+    const profiles = companionSettings.profiles.filter((profile) => profile.id !== id);
+    if (await persistCompanionSettings({ ...companionSettings, profiles, selectedPersonality: "best-friend" })) {
+      setProfileDraftName("");
+      setProfileDraftInstructions("");
+    }
+  }
 
   function startNewChat() {
     if (isGenerating) void cancelGeneration();
@@ -269,7 +360,10 @@ export default function App() {
       return;
     }
     const history = buildBoundedHistory(messages);
-    const systemPrompt = buildCompanionSystemPrompt(personality, customPersonality);
+    const selectedProfile = companionSettings.profiles.find((profile) => personality === "profile:" + profile.id);
+    const systemPrompt = selectedProfile
+      ? buildCompanionSystemPrompt("profile", selectedProfile.instructions, selectedProfile.name)
+      : buildCompanionSystemPrompt(personality, customPersonality);
     if (new TextEncoder().encode(systemPrompt).byteLength > MAX_SYSTEM_PROMPT_BYTES) {
       setRuntimeError("Companion instructions are too long. Please shorten the custom style notes.");
       return;
@@ -532,10 +626,14 @@ export default function App() {
           <div className="page-content">
             <p className="eyebrow">MAKE IT YOURS</p><h1>Your companions.</h1><p className="page-lead">Different ways of talking, shaped around what you need.</p>
             <div className="personality-grid">
-              {personalities.map((item) => <button className={personality === item.name ? "personality-card selected" : "personality-card"} key={item.name} onClick={() => setPersonality(item.name)}><span className="personality-mark">{item.mark}</span><strong>{item.name}</strong><small>{item.detail}</small><span className="select-state">{personality === item.name ? "Selected" : "Choose companion"}</span></button>)}
+              {personalities.map((item) => <button className={personality === item.id ? "personality-card selected" : "personality-card"} key={item.id} onClick={() => void selectPersonality(item.id)} disabled={!companionLoaded}><span className="personality-mark">{item.mark}</span><strong>{item.name}</strong><small>{item.detail}</small><span className="select-state">{personality === item.id ? "Selected" : "Choose companion"}</span></button>)}
+              {companionSettings.profiles.map((profile) => <button className={personality === "profile:" + profile.id ? "personality-card selected" : "personality-card"} key={profile.id} onClick={() => void selectPersonality("profile:" + profile.id)} disabled={!companionLoaded}><span className="personality-mark">✧</span><strong>{profile.name}</strong><small>Your custom character</small><span className="select-state">{personality === "profile:" + profile.id ? "Selected" : "Choose companion"}</span></button>)}
             </div>
-            {personality === "Custom character" && <div className="path-field custom-personality-field"><label htmlFor="custom-personality">Your companion's style instructions</label><textarea id="custom-personality" value={customPersonality} onChange={(event) => setCustomPersonality(event.target.value)} maxLength={4000} rows={5} style={{ width: "100%", minHeight: 100, resize: "vertical", padding: 12, border: "1px solid var(--line)", borderRadius: 9, background: "#111a14", color: "#e1ece3", font: "inherit", lineHeight: 1.6 }} placeholder="Describe the tone, communication style, and helpful habits you want. Avoid adding private information." /><small>{customPersonality.length.toLocaleString()} / 4,000 characters · Applied locally to new replies while this app is open.</small></div>}
-            <div className="info-strip"><span>✧</span><p>Companion styles now guide the local model's replies. Custom style notes stay in this app session and are not added to your saved conversation history.</p></div>
+            {personality === "custom" && <div className="profile-editor"><div className="path-field"><label htmlFor="custom-personality">Your companion's style instructions</label><textarea id="custom-personality" value={customPersonality} onChange={(event) => setCompanionSettings((current) => ({ ...current, customInstructions: event.target.value }))} maxLength={4000} rows={5} placeholder="Describe the tone, communication style, and helpful habits you want. Avoid adding private information." /><small>{customPersonality.length.toLocaleString()} / 4,000 characters · Saved locally when you press Save.</small></div><button className="primary-action" type="button" onClick={() => void saveCustomPersonality()}>Save custom style</button></div>}
+            {personality.startsWith("profile:") && <div className="profile-editor"><div className="path-field"><label htmlFor="profile-name">Character name</label><input id="profile-name" value={profileDraftName} maxLength={48} onChange={(event) => setProfileDraftName(event.target.value)} /></div><div className="path-field"><label htmlFor="profile-instructions">Character style instructions</label><textarea id="profile-instructions" value={profileDraftInstructions} maxLength={4000} rows={5} onChange={(event) => setProfileDraftInstructions(event.target.value)} /></div><div className="profile-actions"><button className="primary-action" type="button" onClick={() => void updateCustomProfile()}>Save changes</button><button className="danger-action" type="button" onClick={() => void deleteCustomProfile()}>Delete character</button></div></div>}
+            <div className="profile-editor"><h2>Create a character</h2><div className="path-field"><label htmlFor="new-profile-name">Character name</label><input id="new-profile-name" value={newProfileName} maxLength={48} onChange={(event) => setNewProfileName(event.target.value)} placeholder="e.g. Study buddy" /></div><div className="path-field"><label htmlFor="new-profile-instructions">How should this character communicate?</label><textarea id="new-profile-instructions" value={newProfileInstructions} maxLength={4000} rows={4} onChange={(event) => setNewProfileInstructions(event.target.value)} placeholder="Describe its tone, communication style, and helpful habits." /></div><button className="primary-action" type="button" onClick={() => void createCustomProfile()} disabled={companionSettings.profiles.length >= 20}>Create character</button><small>{companionSettings.profiles.length} / 20 custom characters · Stored only on this device.</small></div>
+            <div className="info-strip"><span>✧</span><p>Companion choices and custom characters are saved locally. They guide new replies and are not inserted into your conversation transcript. Romantic styles remain respectful and never encourage isolation or dependency.</p></div>
+            {companionNotice && <p className="companion-notice" role="status">{companionNotice}</p>}
           </div>
         )}
 

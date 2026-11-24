@@ -247,3 +247,14 @@ h1 { margin: 0; color: #eef5ef; font-size: clamp(25px, 3vw, 34px); font-weight: 
 .model-library-actions { display: flex; flex-wrap: wrap; gap: 8px; flex-shrink: 0; }
 .model-path-text { overflow-wrap: anywhere; font-size: 0.78rem; opacity: 0.7; }
 @media (max-width: 640px) { .model-library-list .setting-row { flex-direction: column; } }
+
+
+/* Persistent companion profiles */
+.profile-editor { margin-top: 20px; padding: 17px; border: 1px solid var(--line); border-radius: 12px; background: rgba(255,255,255,.02); }
+.profile-editor h2 { margin: 0 0 12px; color: #dce8de; font-size: 13px; }
+.profile-editor .path-field textarea { width: 100%; min-height: 100px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; outline: 0; background: #111a14; color: #e1ece3; font: inherit; font-size: 10px; line-height: 1.6; resize: vertical; }
+.profile-editor .path-field textarea:focus { border-color: rgba(169,230,183,.45); }
+.profile-editor .path-field small, .profile-editor > small { color: #718177; font-size: 9px; line-height: 1.5; }
+.profile-actions { display: flex; flex-wrap: wrap; gap: 9px; }
+.companion-notice { margin-top: 12px; color: #9edbaa; font-size: 10px; line-height: 1.5; overflow-wrap: anywhere; }
+.personality-card:disabled { opacity: .55; cursor: wait; }

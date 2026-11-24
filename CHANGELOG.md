@@ -45,6 +45,9 @@ All notable project changes are recorded here. The project is in foundation/prot
 
 
 ## 2026-11-24
+- Added Girlfriend and Boyfriend companion styles with warm, affectionate, playful guidance and explicit boundaries against exclusivity pressure, isolation, guilt, and dependency-building.
+- Added device-local persistence for selected companion preferences and custom style notes, plus create/edit/delete support for up to 20 named custom character profiles.
+- Added a versioned, validated companion-settings store with Rust tests for persistence, malformed files, duplicate names, invalid selections, and size limits. Real desktop restart testing remains pending.
 - Connected Best friend, Mentor, Professional, and Custom character choices to actual local system prompts.
 - Added editable custom style notes, bounded to 4,000 characters in the UI.
 - Added Rust-side 8 KiB system-prompt validation and ensured system instructions precede saved conversation context without entering the transcript.
