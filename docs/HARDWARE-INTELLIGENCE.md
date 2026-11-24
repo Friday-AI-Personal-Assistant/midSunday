@@ -251,3 +251,9 @@ Rust libraries:
 - nvml-wrapper: https://docs.rs/nvml-wrapper/latest/nvml_wrapper/
 
 **Conclusion:** A credible Windows-first detector appears feasible with standard OS APIs and a small number of Rust bindings. The strongest initial direction is `sysinfo` for the cross-platform baseline plus Microsoft's `windows` crate for precise Windows-specific functions. This remains a research recommendation, not a final dependency approval.
+
+## 13. Model catalogue connection
+
+Hardware detection must not hard-code one model per RAM tier. It should query a versioned model catalogue containing exact model revision, architecture, quantisation, file size, runtime compatibility, context profile, measured peak system RAM, GPU memory behaviour, quality scores, and licence/provenance records. Recommendations should use measured resource estimates for the selected runtime and context, then compare those estimates with live available RAM and DXGI process budgets.
+
+The preliminary Qwen3.5/Gemma 4 candidate ladder and test buckets are recorded in [PHASE-1-RESEARCH.md](PHASE-1-RESEARCH.md#16-preliminary-local-model-ladder--qwen35-and-gemma-4-candidates-2026-11-24). These are research candidates, not installed models or approved defaults.
