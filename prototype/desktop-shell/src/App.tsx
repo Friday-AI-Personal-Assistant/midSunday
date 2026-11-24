@@ -143,6 +143,40 @@ export default function App() {
     } catch (error) { setRuntimeError(`Could not delete conversation: ${String(error)}`); }
   }
 
+  async function exportConversations() {
+    try {
+      const json = await invoke<string>("export_conversations");
+      const blob = new Blob([json], { type: "application/json;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `midsunday-conversations-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+      setRuntimeError("");
+    } catch (error) {
+      setRuntimeError(`Could not export conversations: ${String(error)}`);
+    }
+  }
+
+  async function clearAllConversations() {
+    if (isGenerating) return;
+    if (!window.confirm("Permanently delete every saved conversation and message from this device? Export your history first if you want to keep a copy. This does not delete future personal memories.")) return;
+    try {
+      await invoke<number>("clear_conversations");
+      setConversations([]);
+      setActiveConversationId(null);
+      setMessages([]);
+      setConversationName("A fresh start");
+      setDraft("");
+      setRuntimeError("");
+    } catch (error) {
+      setRuntimeError(`Could not clear conversation history: ${String(error)}`);
+    }
+  }
+
   async function sendMessage(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const text = draft.trim();
@@ -386,6 +420,10 @@ export default function App() {
               <div className="runtime-actions"><button className="primary-action" onClick={startLocalRuntime} disabled={runtimeBusy || runtimeStatus.status === "ready"}>{runtimeBusy ? "Please wait…" : "Start local engine"}</button><button className="secondary-action" onClick={stopLocalRuntime} disabled={runtimeBusy || runtimeStatus.status === "notInstalled" || runtimeStatus.status === "stopped"}>Stop engine</button></div>
               {runtimeError && <p className="runtime-error" role="alert">{runtimeError}</p>}
               <p className="settings-footnote">Nothing is downloaded automatically. You must already have a compatible llama.cpp server executable and GGUF model. The engine listens only on this device (127.0.0.1).</p>
+            </section>
+            <section className="settings-section"><div className="settings-section-title"><div><h2>Conversation data</h2><p>Your chat history stays in the local app database. Export a portable copy or clear it from this device.</p></div><span className="settings-symbol">▤</span></div>
+              <div className="setting-row"><div><strong>Export conversation history</strong><p>Save all conversations and messages as a versioned JSON file. This export does not include future personal memories or model files.</p></div><button className="secondary-action" type="button" onClick={() => void exportConversations()}>Export JSON</button></div>
+              <div className="setting-row"><div><strong>Clear all conversation history</strong><p>Delete every saved conversation and its messages. This does not affect separate memory data.</p></div><button className="danger-action" type="button" onClick={() => void clearAllConversations()} disabled={isGenerating}>Clear history</button></div>
             </section>
             <section className="settings-section"><div className="settings-section-title"><div><h2>Privacy & memory</h2><p>Choose what midSunday may remember on this device.</p></div><span className="settings-symbol">⌑</span></div>
               <div className="setting-row"><div><strong>Local memory</strong><p>Allow the future memory system to keep useful details locally.</p></div><button className={memoryEnabled ? "toggle on" : "toggle"} role="switch" aria-checked={memoryEnabled} onClick={() => setMemoryEnabled(!memoryEnabled)}><i /></button></div>

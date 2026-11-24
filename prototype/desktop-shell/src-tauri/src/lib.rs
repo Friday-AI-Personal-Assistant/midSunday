@@ -47,6 +47,16 @@ fn delete_conversation(store: State<'_, ConversationStore>, conversation_id: i64
 }
 
 #[tauri::command]
+fn export_conversations(store: State<'_, ConversationStore>) -> Result<String, String> {
+    store.export_json()
+}
+
+#[tauri::command]
+fn clear_conversations(store: State<'_, ConversationStore>) -> Result<usize, String> {
+    store.clear_all()
+}
+
+#[tauri::command]
 fn get_app_status() -> &'static str {
     "The midSunday Rust core is running. The desktop shell is connected."
 }
@@ -161,6 +171,8 @@ pub fn run() {
             append_conversation_message,
             rename_conversation,
             delete_conversation,
+            export_conversations,
+            clear_conversations,
             get_runtime_status,
             start_local_runtime,
             generate_local_response,

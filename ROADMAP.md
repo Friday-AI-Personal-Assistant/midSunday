@@ -200,6 +200,9 @@ Release numbers are planning labels, not promises or dates. A stage is not compl
 - [ ] Implement stop generation, retry, and error recovery.
 - [ ] Implement system prompts and bounded context management.
 - [x] Implement local SQLite conversation creation, rename, delete, and message history through a narrow Rust command boundary; frontend lists, opens, creates, renames, and deletes saved conversations. (Initial implementation; real-device crash/restart verification remains pending.)
+- [x] Add versioned SQLite schema initialization using SQLite's user_version marker and refuse to open a database created by a newer unsupported schema.
+- [x] Add a versioned JSON conversation export and a clear-all-history control, separate from the future memory store.
+- [ ] Add validated import/restore with duplicate handling and transactional rollback; do not overwrite existing history silently.
 - [ ] Add model load/unload lifecycle and explicit resource status.
 - [ ] Add low-memory safeguards and graceful fallback.
 - [ ] Ensure no internet connection is required after model assets are available.
@@ -219,7 +222,7 @@ Release numbers are planning labels, not promises or dates. A stage is not compl
 - [ ] Let users inspect, correct, and delete individual memories.
 - [ ] Let users disable memory.
 - [ ] Let users clear conversation history independently of saved memory.
-- [ ] Add export and backup options.
+- [x] Add conversation-history export (versioned JSON); full database backup and restore remain pending.
 - [ ] Add restore and data migration tests.
 - [ ] Define retention and cleanup behaviour.
 - [ ] Keep memory local by default.

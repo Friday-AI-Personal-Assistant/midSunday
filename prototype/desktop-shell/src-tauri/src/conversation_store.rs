@@ -21,6 +21,25 @@ pub struct StoredMessage {
     pub created_at: i64,
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ConversationExport {
+    id: i64,
+    title: String,
+    created_at: i64,
+    updated_at: i64,
+    messages: Vec<StoredMessage>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ConversationExportFile {
+    format: &'static str,
+    format_version: u32,
+    exported_at: i64,
+    conversations: Vec<ConversationExport>,
+}
+
 pub struct ConversationStore {
     connection: Mutex<Connection>,
 }
@@ -35,26 +54,38 @@ impl ConversationStore {
     }
 
     fn from_connection(connection: Connection) -> Result<Self, String> {
-        connection.execute_batch(
-            "PRAGMA foreign_keys = ON;
-             CREATE TABLE IF NOT EXISTS conversations (
-               id INTEGER PRIMARY KEY AUTOINCREMENT,
-               title TEXT NOT NULL,
-               created_at INTEGER NOT NULL,
-               updated_at INTEGER NOT NULL
-             );
-             CREATE TABLE IF NOT EXISTS conversation_messages (
-               id INTEGER PRIMARY KEY AUTOINCREMENT,
-               conversation_id INTEGER NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
-               role TEXT NOT NULL CHECK(role IN ('user', 'assistant')),
-               content TEXT NOT NULL,
-               created_at INTEGER NOT NULL
-             );
-             CREATE INDEX IF NOT EXISTS idx_conversation_messages_order
-               ON conversation_messages(conversation_id, id);
-             CREATE INDEX IF NOT EXISTS idx_conversations_updated
-               ON conversations(updated_at DESC);"
-        ).map_err(|error| format!("Could not initialise local conversation database: {error}"))?;
+        connection.execute_batch("PRAGMA foreign_keys = ON;")
+            .map_err(|error| format!("Could not enable local database constraints: {error}"))?;
+        let schema_version: i64 = connection.pragma_query_value(None, "user_version", |row| row.get(0))
+            .map_err(|error| format!("Could not read local database version: {error}"))?;
+        if schema_version > 1 {
+            return Err(format!("This midSunday database uses a newer schema version ({schema_version}) than this app supports."));
+        }
+        if schema_version == 0 {
+            let transaction = connection.unchecked_transaction()
+                .map_err(|error| format!("Could not prepare local database migration: {error}"))?;
+            transaction.execute_batch(
+                "CREATE TABLE conversations (
+                   id INTEGER PRIMARY KEY AUTOINCREMENT,
+                   title TEXT NOT NULL,
+                   created_at INTEGER NOT NULL,
+                   updated_at INTEGER NOT NULL
+                 );
+                 CREATE TABLE conversation_messages (
+                   id INTEGER PRIMARY KEY AUTOINCREMENT,
+                   conversation_id INTEGER NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+                   role TEXT NOT NULL CHECK(role IN ('user', 'assistant')),
+                   content TEXT NOT NULL,
+                   created_at INTEGER NOT NULL
+                 );
+                 CREATE INDEX idx_conversation_messages_order
+                   ON conversation_messages(conversation_id, id);
+                 CREATE INDEX idx_conversations_updated
+                   ON conversations(updated_at DESC);
+                 PRAGMA user_version = 1;"
+            ).map_err(|error| format!("Could not apply local database migration 1: {error}"))?;
+            transaction.commit().map_err(|error| format!("Could not finish local database migration: {error}"))?;
+        }
         Ok(Self { connection: Mutex::new(connection) })
     }
 
@@ -144,6 +175,40 @@ impl ConversationStore {
     }
 }
 
+    pub fn clear_all(&self) -> Result<usize, String> {
+        let connection = self.lock()?;
+        let transaction = connection.unchecked_transaction().map_err(|error| error.to_string())?;
+        let count: usize = transaction.query_row("SELECT COUNT(*) FROM conversations", [], |row| row.get(0))
+            .map_err(|error| error.to_string())?;
+        transaction.execute("DELETE FROM conversations", [])
+            .map_err(|error| format!("Could not clear local conversations: {error}"))?;
+        transaction.commit().map_err(|error| error.to_string())?;
+        Ok(count)
+    }
+
+    pub fn export_json(&self) -> Result<String, String> {
+        let summaries = self.list()?;
+        let mut conversations = Vec::with_capacity(summaries.len());
+        for summary in summaries {
+            conversations.push(ConversationExport {
+                id: summary.id,
+                title: summary.title,
+                created_at: summary.created_at,
+                updated_at: summary.updated_at,
+                messages: self.messages(summary.id)?,
+            });
+        }
+        let export = ConversationExportFile {
+            format: "midSunday-conversation-export",
+            format_version: 1,
+            exported_at: unix_time(),
+            conversations,
+        };
+        serde_json::to_string_pretty(&export)
+            .map_err(|error| format!("Could not create conversation export: {error}"))
+    }
+}
+
 fn clean_title(title: &str) -> Result<String, String> {
     let title = title.trim();
     if title.is_empty() { return Err("Conversation title cannot be empty.".to_owned()); }
@@ -200,5 +265,30 @@ mod tests {
         let store = store();
         assert!(store.create("  ").is_err());
         assert!(store.create(&"x".repeat(121)).is_err());
+    }
+
+    #[test]
+    fn exports_conversations_with_versioned_metadata_and_messages() {
+        let store = store();
+        let conversation = store.create("Export me").unwrap();
+        store.append(conversation.id, "user", "Hello export").unwrap();
+        let json = store.export_json().unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed["format"], "midSunday-conversation-export");
+        assert_eq!(parsed["formatVersion"], 1);
+        assert_eq!(parsed["conversations"][0]["title"], "Export me");
+        assert_eq!(parsed["conversations"][0]["messages"][0]["content"], "Hello export");
+    }
+
+    #[test]
+    fn clearing_history_removes_all_conversations_and_messages() {
+        let store = store();
+        let first = store.create("First").unwrap();
+        let second = store.create("Second").unwrap();
+        store.append(first.id, "user", "Private one").unwrap();
+        store.append(second.id, "assistant", "Private two").unwrap();
+        assert_eq!(store.clear_all().unwrap(), 2);
+        assert!(store.list().unwrap().is_empty());
+        assert!(store.messages(first.id).unwrap().is_empty());
     }
 }

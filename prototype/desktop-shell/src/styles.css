@@ -222,3 +222,9 @@ h1 { margin: 0; color: #eef5ef; font-size: clamp(25px, 3vw, 34px); font-weight: 
 .conversation-action:hover { background: rgba(255,255,255,.06); color: #dce9df; }
 .conversation-action.delete:hover { color: #e6a59b; }
 @media (max-width: 560px) { .conversation-list { display: none; } }
+
+/* Conversation data controls */
+.danger-action { min-height: 33px; padding: 0 13px; border: 1px solid rgba(230,165,155,.32); border-radius: 8px; background: rgba(130,48,42,.16); color: #e6a59b; font-size: 10px; font-weight: 700; cursor: pointer; }
+.danger-action:hover:not(:disabled) { background: rgba(130,48,42,.28); }
+.danger-action:disabled { opacity: .45; cursor: not-allowed; }
+.settings-section .setting-row .secondary-action { flex: 0 0 auto; }
