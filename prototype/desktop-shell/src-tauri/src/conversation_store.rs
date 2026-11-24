@@ -856,7 +856,11 @@ fn awareness_content_fingerprint(content: &str) -> String {
     let mut hasher = Sha256::new();
     hasher.update(b"midSunday-awareness-suppression-v1:");
     hasher.update(normalized.as_bytes());
-    format!("{:x}", hasher.finalize())
+    let digest = hasher.finalize();
+    digest.iter().fold(String::with_capacity(64), |mut output, byte| {
+        output.push_str(&format!("{:02x}", byte));
+        output
+    })
 }
 
 fn insert_awareness_suppression(
