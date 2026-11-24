@@ -122,7 +122,7 @@ Release numbers are planning labels, not promises or dates. A stage is not compl
 - [x] Add manual-only GitHub Actions workflows for Windows, Linux, and macOS. Each uses a standard hosted runner and uploads its platform package plus generated npm lockfile when available. All builds remain pending validation.
 - [ ] Install dependencies, build, and run the shell on Windows; measure installer size, startup, idle memory, accessibility, and WebView2 behaviour before approving the production framework.
 - [ ] Inspect FRIDAY's repository and document reusable patterns, limitations, and code that must remain separate.
-- [ ] Compare local LLM runtimes and their commercial distribution implications.
+- [x] Complete desk evaluation of llama.cpp and Ollama, including local integration options, commercial distribution considerations, and security boundaries; see [LLM-RUNTIME-EVALUATION.md](docs/LLM-RUNTIME-EVALUATION.md). Production runtime approval remains pending real-device benchmarks and a complete dependency/licence audit.
 - [x] Build a preliminary scalable model ladder from current Qwen3.5 and Gemma 4 candidates, with exact quantised file-size references and hardware-class test buckets.
 - [x] Design the repeatable benchmark protocol, scoring rubric, safety gates, hardware record, and results template.
 - [x] Draft benchmark dataset v1 with synthetic English, Urdu-script, Roman Urdu, code-switching, persona, reasoning, factuality, and safety cases.
