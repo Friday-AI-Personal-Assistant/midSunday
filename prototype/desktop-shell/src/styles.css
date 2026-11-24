@@ -274,3 +274,8 @@ h1 { margin: 0; color: #eef5ef; font-size: clamp(25px, 3vw, 34px); font-weight: 
 .memory-edit { width: 100%; display: flex; flex-direction: column; gap: 8px; }
 .memory-notice { margin: 12px 0; color: #9edbaa; font-size: 9px; line-height: 1.5; overflow-wrap: anywhere; }
 @media (max-width: 560px) { .memory-item { flex-direction: column; } }
+
+
+/* Local user profile preferences */
+.settings-section .path-field { max-width: 560px; }
+.settings-section .path-field input { box-sizing: border-box; }

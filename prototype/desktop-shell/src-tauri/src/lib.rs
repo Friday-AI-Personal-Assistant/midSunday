@@ -11,7 +11,7 @@ mod runtime_manager;
 use tauri::{ipc::Channel, State};
 use runtime::{ConversationMessage, GenerationRequest, RuntimeConfig};
 use runtime_manager::{RuntimeManager, RuntimeStatusSnapshot};
-use conversation_store::{ConversationStore, ConversationSummary, ImportResult, SavedMemory, StoredMessage};
+use conversation_store::{ConversationStore, ConversationSummary, ImportResult, SavedMemory, StoredMessage, UserProfile};
 use engine_settings::{EngineSettings, EngineSettingsStore};
 use companion_settings::{CompanionSettings, CompanionSettingsStore};
 use model_catalog::{LocalModel, ModelCatalog, ModelVerification};
@@ -105,6 +105,16 @@ fn set_memory_enabled(store: State<'_, ConversationStore>, enabled: bool) -> Res
 #[tauri::command]
 fn export_saved_memories(store: State<'_, ConversationStore>) -> Result<String, String> {
     store.export_memories()
+}
+
+#[tauri::command]
+fn get_user_profile(store: State<'_, ConversationStore>) -> Result<UserProfile, String> {
+    store.get_user_profile()
+}
+
+#[tauri::command]
+fn save_user_profile(store: State<'_, ConversationStore>, profile: UserProfile) -> Result<UserProfile, String> {
+    store.save_user_profile(profile)
 }
 
 #[tauri::command]
@@ -294,6 +304,8 @@ pub fn run() {
             get_memory_enabled,
             set_memory_enabled,
             export_saved_memories,
+            get_user_profile,
+            save_user_profile,
             get_engine_settings,
             save_engine_settings,
             get_companion_settings,

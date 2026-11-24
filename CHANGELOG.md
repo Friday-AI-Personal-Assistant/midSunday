@@ -55,3 +55,10 @@ All notable project changes are recorded here. The project is in foundation/prot
 - Added editable custom style notes, bounded to 4,000 characters in the UI.
 - Added Rust-side 8 KiB system-prompt validation and ensured system instructions precede saved conversation context without entering the transcript.
 - Added regression tests for system-prompt size limits and system-message ordering.
+
+
+## 2026-11-24
+- Added optional, device-local preferred-name settings with an opt-in for natural use in conversations.
+- Added Rust validation and persistence tests for the user profile.
+- Clarified in Settings that 100 saved memories is the storage-entry cap, while only up to 20 recent entries / 4 KiB are included in a local model prompt when memory is enabled.
+- Clarified that full memory storage never triggers automatic deletion and that disabling memory keeps saved entries stored but out of model context.

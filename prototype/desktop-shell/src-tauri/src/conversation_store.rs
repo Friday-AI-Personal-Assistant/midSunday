@@ -2,6 +2,19 @@ use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use std::{path::Path, sync::Mutex, time::{SystemTime, UNIX_EPOCH}};
 
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct UserProfile {
+    pub preferred_name: String,
+    pub use_name: bool,
+}
+
+impl Default for UserProfile {
+    fn default() -> Self {
+        Self { preferred_name: String::new(), use_name: false }
+    }
+}
+
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct SavedMemory {
@@ -229,6 +242,41 @@ impl ConversationStore {
             params![if enabled { "true" } else { "false" }],
         ).map_err(|error| format!("Could not save memory preference: {error}"))?;
         Ok(enabled)
+    }
+
+    pub fn get_user_profile(&self) -> Result<UserProfile, String> {
+        let connection = self.lock()?;
+        let value: Option<String> = connection.query_row(
+            "SELECT value FROM app_preferences WHERE key = 'user_profile'", [], |row| row.get(0)
+        ).optional().map_err(|error| format!("Could not read user profile: {error}"))?;
+        match value {
+            Some(json) => serde_json::from_str(&json)
+                .map_err(|error| format!("Could not decode saved user profile: {error}")),
+            None => Ok(UserProfile::default()),
+        }
+    }
+
+    pub fn save_user_profile(&self, profile: UserProfile) -> Result<UserProfile, String> {
+        let preferred_name = profile.preferred_name.trim().to_owned();
+        if preferred_name.chars().count() > 48 {
+            return Err("Preferred names must be 48 characters or fewer.".to_owned());
+        }
+        if preferred_name.contains('\0') {
+            return Err("Preferred names cannot contain null characters.".to_owned());
+        }
+        let profile = UserProfile {
+            use_name: profile.use_name && !preferred_name.is_empty(),
+            preferred_name,
+        };
+        let json = serde_json::to_string(&profile)
+            .map_err(|error| format!("Could not encode user profile: {error}"))?;
+        let connection = self.lock()?;
+        connection.execute(
+            "INSERT INTO app_preferences(key, value) VALUES('user_profile', ?1)
+             ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            params![json],
+        ).map_err(|error| format!("Could not save user profile: {error}"))?;
+        Ok(profile)
     }
 
     pub fn export_memories(&self) -> Result<String, String> {
@@ -529,6 +577,28 @@ mod tests {
         assert_eq!(store.list_memories().unwrap()[0].content, "I prefer short, simple explanations.");
         store.delete_memory(created.id).unwrap();
         assert!(store.list_memories().unwrap().is_empty());
+    }
+
+    #[test]
+    fn preferred_name_is_local_persistent_and_validated() {
+        let store = store();
+        assert_eq!(store.get_user_profile().unwrap(), UserProfile::default());
+        let saved = store.save_user_profile(UserProfile {
+            preferred_name: "  Hasan  ".to_owned(),
+            use_name: true,
+        }).unwrap();
+        assert_eq!(saved.preferred_name, "Hasan");
+        assert!(saved.use_name);
+        assert_eq!(store.get_user_profile().unwrap(), saved);
+        let disabled = store.save_user_profile(UserProfile {
+            preferred_name: String::new(),
+            use_name: true,
+        }).unwrap();
+        assert!(!disabled.use_name);
+        assert!(store.save_user_profile(UserProfile {
+            preferred_name: "H".repeat(49),
+            use_name: true,
+        }).is_err());
     }
 
     #[test]
