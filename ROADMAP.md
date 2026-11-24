@@ -117,8 +117,8 @@ Release numbers are planning labels, not promises or dates. A stage is not compl
 
 **Research checkpoint (2026-11-23):** Initial desk research is recorded in [PHASE-1-RESEARCH.md](docs/PHASE-1-RESEARCH.md). Tauri 2, llama.cpp, Qwen3-0.6B, whisper.cpp, Kokoro, Piper, and SQLite remain candidates at different confidence levels. No candidate is approved. Pakistani Urdu STT/TTS quality, real hardware performance, exact asset licensing, and a fair desktop-framework comparison remain open. Phase 1 is in progress; desk research does not satisfy its benchmark exit gate.
 
-- [ ] Compare desktop frameworks for Windows-first distribution, performance, accessibility, updates, and licensing.
-- [ ] Validate Tauri 2 + Rust + React/TypeScript as the leading candidate.
+- [x] Complete desk comparison of Tauri 2 and Electron for Windows-first distribution, security, packaging, accessibility considerations, and maintenance; see [DESKTOP-FRAMEWORK-EVALUATION.md](docs/DESKTOP-FRAMEWORK-EVALUATION.md).
+- [ ] Build and measure the minimal Tauri 2 + Rust + React/TypeScript Windows prototype before approving the production framework.
 - [ ] Inspect FRIDAY's repository and document reusable patterns, limitations, and code that must remain separate.
 - [ ] Compare local LLM runtimes and their commercial distribution implications.
 - [x] Build a preliminary scalable model ladder from current Qwen3.5 and Gemma 4 candidates, with exact quantised file-size references and hardware-class test buckets.
