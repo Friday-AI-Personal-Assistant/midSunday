@@ -35,3 +35,10 @@ All notable project changes are recorded here. The project is in foundation/prot
 - Added offline-first, hardware compatibility, voice/language, personality/character, privacy/safety, and commercial licensing requirements.
 - Added a read-only FRIDAY reuse analysis based on the files listed in that document.
 - No application code or runtime features have been implemented.
+
+
+## 2026-11-24
+- Added GGUF magic-header validation when registering models and before launching the local engine.
+- Added on-demand SHA-256 and file-size verification for registered models, with clear missing/modified-file status.
+- Added launch preflight so a registered model cannot silently change after it was fingerprinted; unregistered GGUF files remain usable with a clear no-saved-fingerprint status.
+- Added Rust regression tests for invalid GGUF headers, modified/missing files, and unregistered model preflight.

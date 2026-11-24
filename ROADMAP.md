@@ -192,8 +192,9 @@ Release numbers are planning labels, not promises or dates. A stage is not compl
 **Goal:** Deliver the first useful, genuinely offline companion experience.
 
 - [x] Implement a device-local model catalogue for manually registered GGUF files, recording name, path, size, optional source/licence notes, and a streaming SHA-256 fingerprint. Duplicate content is tracked once; removing an entry never deletes the model file. No model downloads or copying occur.
+- [x] Validate the GGUF file signature on registration and before engine launch; recheck registered file size and SHA-256 before use, and provide an on-demand verification result in the model library.
 - [ ] Implement model download/import with source, size, hash, and licence information.
-- [ ] Verify downloaded model integrity.
+- [ ] Implement and verify downloaded-model integrity once a user-approved, licence-aware download/import flow exists. Existing local GGUF files are preflight-checked before launch.
 - [x] Implement local model discovery and selection from the registered catalogue; users can choose an existing model entry for the runtime path. Filesystem-wide automatic scanning remains deferred.
 - [ ] Integrate the selected inference runtime behind a replaceable adapter.
 - [ ] Implement streaming text generation.
@@ -793,3 +794,15 @@ The frontend now trims history to the newest messages that fit the same byte lim
 - [ ] Review bundled SQLite dependency licence and migration/backup strategy before release.
 
 Conversation history is separate from the future personal-memory system. It remains on-device in the app data directory; no cloud service or account is involved. Deleting a conversation removes its messages through the database foreign-key cascade. A real-device restart and data-recovery test is still required before calling persistence production-ready.
+
+
+### 2026-11-24 — Local GGUF integrity and launch preflight
+
+- [x] Reject files with a `gguf` extension but without the GGUF magic header.
+- [x] Verify registered model files against their saved size and SHA-256 fingerprint on demand.
+- [x] Recheck the selected file before starting the local engine; registered files must match their catalogue fingerprint.
+- [x] Permit an unregistered existing GGUF file to be selected, while clearly reporting that no saved fingerprint is available.
+- [x] Add regression tests for invalid headers, changed files, missing files, and unregistered model preflight.
+- [ ] Verify all changes on Windows, Linux, and macOS CI.
+
+The check is local and reads the selected model file; it does not upload, copy, or download model data. A matching fingerprint confirms that the file matches the local catalogue record, not that the model is safe, correctly licensed, or trustworthy.

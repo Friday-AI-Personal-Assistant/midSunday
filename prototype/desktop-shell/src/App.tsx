@@ -8,6 +8,7 @@ type Message = { id: number; role: "user" | "assistant" | "system"; text: string
 type RuntimeStatusSnapshot = { status: string; detail: string | null };
 type EngineSettings = { executablePath: string; modelPath: string; contextTokens: number; cpuThreads: number | null };
 type LocalModel = { id: string; displayName: string; filePath: string; sizeBytes: number; sha256: string; source: string; license: string; addedAt: number };
+type ModelVerification = { valid: boolean; status: string; detail: string };
 type ConversationSummary = { id: number; title: string; createdAt: number; updatedAt: number };
 type StoredMessage = { id: number; conversationId: number; role: "user" | "assistant"; content: string; createdAt: number };
 
@@ -68,6 +69,8 @@ export default function App() {
   const [modelSource, setModelSource] = useState("");
   const [modelLicense, setModelLicense] = useState("");
   const [modelCatalogBusy, setModelCatalogBusy] = useState(false);
+  const [modelVerifications, setModelVerifications] = useState<Record<string, ModelVerification>>({});
+  const [verifyingModelId, setVerifyingModelId] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [importBusy, setImportBusy] = useState(false);
   const importFileRef = useRef<HTMLInputElement>(null);
@@ -334,6 +337,18 @@ export default function App() {
     } catch (error) { setRuntimeError(String(error)); }
     finally { setModelCatalogBusy(false); }
   }
+  async function verifyLocalModel(model: LocalModel) {
+    setVerifyingModelId(model.id);
+    setRuntimeError("");
+    try {
+      const result = await invoke<ModelVerification>("verify_local_model", { id: model.id });
+      setModelVerifications((current) => ({ ...current, [model.id]: result }));
+    } catch (error) {
+      setRuntimeError(`Could not verify ${model.displayName}: ${String(error)}`);
+    } finally {
+      setVerifyingModelId(null);
+    }
+  }
   async function removeLocalModel(model: LocalModel) {
     if (!window.confirm(`Remove "${model.displayName}" from the midSunday library? The GGUF file itself will not be deleted.`)) return;
     try { await invoke<boolean>("remove_local_model", { id: model.id }); setLocalModels(await invoke<LocalModel[]>("list_local_models")); }
@@ -506,7 +521,7 @@ export default function App() {
               <div className="path-field"><label htmlFor="cpu-threads">CPU threads (blank = automatic)</label><input id="cpu-threads" type="number" min="1" max="256" step="1" value={cpuThreads} onChange={(event) => setCpuThreads(event.target.value)} placeholder="Automatic" disabled={runtimeBusy || runtimeStatus.status === "ready"} /></div>
               <div className="runtime-actions"><button className="primary-action" onClick={startLocalRuntime} disabled={runtimeBusy || runtimeStatus.status === "ready"}>{runtimeBusy ? "Please wait…" : "Start local engine"}</button><button className="secondary-action" onClick={stopLocalRuntime} disabled={runtimeBusy || runtimeStatus.status === "notInstalled" || runtimeStatus.status === "stopped"}>Stop engine</button></div>
               {runtimeError && <p className="runtime-error" role="alert">{runtimeError}</p>}
-              <p className="settings-footnote">Nothing is downloaded automatically. You must already have a compatible llama.cpp server executable and GGUF model. The engine listens only on this device (127.0.0.1).</p>
+              <p className="settings-footnote">Before starting, midSunday checks the GGUF file header. If the file is registered, its saved size and SHA-256 fingerprint are also rechecked. The engine listens only on this device (127.0.0.1).</p>
             </section>
             <section className="settings-section">
               <div className="settings-section-title"><div><h2>Local model library</h2><p>Register GGUF files already on this device. midSunday records their details and SHA-256 fingerprint without copying or downloading them.</p></div><span className="settings-symbol">▧</span></div>
@@ -514,7 +529,7 @@ export default function App() {
               <div className="path-field"><label htmlFor="model-source">Source (optional)</label><input id="model-source" value={modelSource} onChange={(event) => setModelSource(event.target.value)} placeholder="Where did you get this model?" maxLength={512} /></div>
               <div className="path-field"><label htmlFor="model-license">Licence (optional)</label><input id="model-license" value={modelLicense} onChange={(event) => setModelLicense(event.target.value)} placeholder="Record the model's licence" maxLength={512} /></div>
               <div className="runtime-actions"><button className="secondary-action" type="button" onClick={registerLocalModel} disabled={modelCatalogBusy || !modelPath.trim()}>{modelCatalogBusy ? "Fingerprinting model…" : "Add selected GGUF to library"}</button></div>
-              {localModels.length === 0 ? <p className="settings-footnote">No models registered yet. Browse for an existing GGUF file above, then add it here.</p> : <div className="model-library-list">{localModels.map((model) => <div className="setting-row" key={model.id}><div><strong>{model.displayName}</strong><p>{formatModelSize(model.sizeBytes)} · SHA-256: {model.sha256.slice(0, 16)}…</p><p>{model.source || "Source not recorded"} · {model.license || "Licence not recorded"}</p><p className="model-path-text">{model.filePath}</p></div><div className="model-library-actions"><button className="secondary-action" type="button" onClick={() => { setModelPath(model.filePath); setModelDisplayName(model.displayName); setModelSource(model.source); setModelLicense(model.license); }}>Use model</button><button className="danger-action" type="button" onClick={() => void removeLocalModel(model)}>Remove</button></div></div>)}</div>}
+              {localModels.length === 0 ? <p className="settings-footnote">No models registered yet. Browse for an existing GGUF file above, then add it here.</p> : <div className="model-library-list">{localModels.map((model) => <div className="setting-row" key={model.id}><div><strong>{model.displayName}</strong><p>{formatModelSize(model.sizeBytes)} · SHA-256: {model.sha256.slice(0, 16)}…</p><p>{model.source || "Source not recorded"} · {model.license || "Licence not recorded"}</p><p className="model-path-text">{model.filePath}</p>{modelVerifications[model.id] && <p className={modelVerifications[model.id].valid ? "model-verify-good" : "model-verify-bad"}>{modelVerifications[model.id].status}: {modelVerifications[model.id].detail}</p>}</div><div className="model-library-actions"><button className="secondary-action" type="button" onClick={() => void verifyLocalModel(model)} disabled={verifyingModelId !== null}>{verifyingModelId === model.id ? "Verifying…" : "Verify file"}</button><button className="secondary-action" type="button" onClick={() => { setModelPath(model.filePath); setModelDisplayName(model.displayName); setModelSource(model.source); setModelLicense(model.license); }}>Use model</button><button className="danger-action" type="button" onClick={() => void removeLocalModel(model)}>Remove</button></div></div>)}</div>}
               <p className="settings-footnote">Removing an entry only removes its catalogue record. It never deletes the original model file. Always check the model's licence before redistribution or commercial use.</p>
             </section>
             <section className="settings-section"><div className="settings-section-title"><div><h2>Conversation data</h2><p>Your chat history stays in the local app database. Export a portable copy or clear it from this device.</p></div><span className="settings-symbol">▤</span></div>

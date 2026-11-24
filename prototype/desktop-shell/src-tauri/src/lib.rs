@@ -12,7 +12,7 @@ use runtime::{ConversationMessage, GenerationRequest, RuntimeConfig};
 use runtime_manager::{RuntimeManager, RuntimeStatusSnapshot};
 use conversation_store::{ConversationStore, ConversationSummary, ImportResult, StoredMessage};
 use engine_settings::{EngineSettings, EngineSettingsStore};
-use model_catalog::{LocalModel, ModelCatalog};
+use model_catalog::{LocalModel, ModelCatalog, ModelVerification};
 use tauri::Manager;
 
 
@@ -77,6 +77,11 @@ fn register_local_model(catalog: State<'_, ModelCatalog>, file_path: String, dis
 fn remove_local_model(catalog: State<'_, ModelCatalog>, id: String) -> Result<bool, String> { catalog.remove(&id) }
 
 #[tauri::command]
+fn verify_local_model(catalog: State<'_, ModelCatalog>, id: String) -> Result<ModelVerification, String> {
+    catalog.verify(&id)
+}
+
+#[tauri::command]
 fn get_app_status() -> &'static str {
     "The midSunday Rust core is running. The desktop shell is connected."
 }
@@ -101,6 +106,7 @@ fn get_runtime_status(manager: State<'_, RuntimeManager>) -> Result<RuntimeStatu
 async fn start_local_runtime(
     manager: State<'_, RuntimeManager>,
     settings: State<'_, EngineSettingsStore>,
+    catalog: State<'_, ModelCatalog>,
     executable_path: String,
     model_path: String,
     host: String,
@@ -108,6 +114,10 @@ async fn start_local_runtime(
     context_tokens: u32,
     cpu_threads: Option<u16>,
 ) -> Result<RuntimeStatusSnapshot, String> {
+    let verification = catalog.verify_path(&model_path)?;
+    if !verification.valid {
+        return Err(format!("Model verification failed ({}): {}", verification.status, verification.detail));
+    }
     settings.save(EngineSettings { executable_path: executable_path.clone(), model_path: model_path.clone(), context_tokens, cpu_threads })?;
     let manager = manager.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
@@ -207,6 +217,7 @@ pub fn run() {
             list_local_models,
             register_local_model,
             remove_local_model,
+            verify_local_model,
             list_conversations,
             create_conversation,
             get_conversation_messages,
