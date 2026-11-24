@@ -122,6 +122,7 @@ Release numbers are planning labels, not promises or dates. A stage is not compl
 - [ ] Inspect FRIDAY's repository and document reusable patterns, limitations, and code that must remain separate.
 - [ ] Compare local LLM runtimes and their commercial distribution implications.
 - [x] Build a preliminary scalable model ladder from current Qwen3.5 and Gemma 4 candidates, with exact quantised file-size references and hardware-class test buckets.
+- [x] Design the repeatable benchmark protocol, scoring rubric, safety gates, hardware record, and results template; benchmark dataset authoring and test execution remain pending.
 - [ ] Benchmark compact local models for response quality, Pakistani Urdu/Roman Urdu capability, English capability, multilingual handling, and memory use.
 - [ ] Compare quantisation levels and model sizes.
 - [ ] Test cold-start time, first-token latency, generation speed, and sustained memory use.
@@ -139,6 +140,8 @@ Release numbers are planning labels, not promises or dates. A stage is not compl
 - [ ] Record benchmark machines, test scripts, model versions, and results.
 
 **Exit gate:** The stack and default model/voice choices are selected based on repeatable tests, documented licences, and realistic hardware profiles. Unverified claims remain clearly labelled as targets.
+
+**Benchmark protocol status (2026-11-24):** The repeatable protocol is documented in [BENCHMARK-PROTOCOL.md](docs/BENCHMARK-PROTOCOL.md). The versioned test dataset still needs to be authored and reviewed; no benchmark has been executed.
 
 ## Phase 2 — UX, visual identity, and interaction design
 
