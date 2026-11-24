@@ -11,7 +11,7 @@ mod runtime_manager;
 use tauri::{ipc::Channel, State};
 use runtime::{ConversationMessage, GenerationRequest, RuntimeConfig};
 use runtime_manager::{RuntimeManager, RuntimeStatusSnapshot};
-use conversation_store::{AwarenessSettings, ConversationStore, ConversationSummary, ImportResult, SavedMemory, StoredMessage, UserProfile};
+use conversation_store::{AwarenessItem, AwarenessSettings, ConversationStore, ConversationSummary, ImportResult, SavedMemory, StoredMessage, UserProfile};
 use engine_settings::{EngineSettings, EngineSettingsStore};
 use companion_settings::{CompanionSettings, CompanionSettingsStore};
 use model_catalog::{LocalModel, ModelCatalog, ModelVerification};
@@ -105,6 +105,36 @@ fn set_memory_enabled(store: State<'_, ConversationStore>, enabled: bool) -> Res
 #[tauri::command]
 fn export_saved_memories(store: State<'_, ConversationStore>) -> Result<String, String> {
     store.export_memories()
+}
+
+#[tauri::command]
+fn list_awareness_items(store: State<'_, ConversationStore>) -> Result<Vec<AwarenessItem>, String> {
+    store.list_awareness_items()
+}
+
+#[tauri::command]
+fn create_awareness_item(store: State<'_, ConversationStore>, content: String, category: String) -> Result<AwarenessItem, String> {
+    store.create_awareness_item(&content, &category)
+}
+
+#[tauri::command]
+fn update_awareness_item(store: State<'_, ConversationStore>, id: i64, content: String, category: String) -> Result<(), String> {
+    store.update_awareness_item(id, &content, &category)
+}
+
+#[tauri::command]
+fn delete_awareness_item(store: State<'_, ConversationStore>, id: i64) -> Result<(), String> {
+    store.delete_awareness_item(id)
+}
+
+#[tauri::command]
+fn clear_awareness_items(store: State<'_, ConversationStore>) -> Result<usize, String> {
+    store.clear_awareness_items()
+}
+
+#[tauri::command]
+fn export_awareness_items(store: State<'_, ConversationStore>) -> Result<String, String> {
+    store.export_awareness_items()
 }
 
 #[tauri::command]
@@ -319,6 +349,12 @@ pub fn run() {
             export_saved_memories,
             get_awareness_settings,
             save_awareness_settings,
+            list_awareness_items,
+            create_awareness_item,
+            update_awareness_item,
+            delete_awareness_item,
+            clear_awareness_items,
+            export_awareness_items,
             get_user_profile,
             save_user_profile,
             get_engine_settings,

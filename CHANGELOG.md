@@ -3,6 +3,8 @@
 All notable project changes are recorded here. The project is in foundation/prototype development; no application release has been made.
 
 ## 2026-11-24
+- Added local Awareness item management: deliberate user-entry, categories, provenance metadata, edit/delete/clear controls, JSON export, and a separate UI list.
+- Added conservative backend screening that rejects common password/credential labels, known token prefixes, email-like identifiers, and long numeric strings before saving Awareness items. This is a first-pass filter, not comprehensive sensitive-data detection; automatic learning remains disabled.
 - Added the first local Awareness foundation: SQLite schema v3 preserves existing conversations and saved memories while creating separate future Awareness-item and metadata-only activity-history tables.
 - Added persisted, independently controlled Awareness master, conversation-learning, and in-app-search-learning preferences; every switch defaults OFF, and source choices remain saved when the master switch is paused.
 - Added a Settings → Awareness panel that clearly explains that automatic learning is not active yet; these controls save preferences only and do not collect conversation or search content.

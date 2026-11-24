@@ -261,6 +261,14 @@ h1 { margin: 0; color: #eef5ef; font-size: clamp(25px, 3vw, 34px); font-weight: 
 
 
 /* Explicit, user-controlled local memory */
+.awareness-manager { padding: 12px 0 16px; border-top: 1px solid var(--line); }
+.awareness-create-row { display: flex; align-items: center; flex-wrap: wrap; gap: 9px; margin: 10px 0 15px; color: #9aab9f; font-size: 10px; }
+.awareness-create-row select, .awareness-edit select, .memory-edit select { min-height: 32px; padding: 0 9px; border: 1px solid var(--line); border-radius: 7px; background: #111a14; color: #dce8de; font-size: 10px; }
+.awareness-item-copy { min-width: 0; display: grid; gap: 6px; }
+.awareness-item-copy small { color: #718177; font-size: 9px; text-transform: capitalize; }
+.awareness-manager .path-field textarea { width: 100%; min-height: 72px; padding: 11px; border: 1px solid var(--line); border-radius: 8px; outline: 0; background: #111a14; color: #e1ece3; font: inherit; font-size: 10px; line-height: 1.6; resize: vertical; }
+.awareness-manager .path-field textarea:focus { border-color: rgba(169,230,183,.45); }
+.awareness-manager .path-field small { color: #718177; font-size: 9px; line-height: 1.5; }
 .memory-manager { padding: 12px 0 16px; border-top: 1px solid var(--line); }
 .memory-manager .path-field textarea, .memory-edit textarea { width: 100%; min-height: 72px; padding: 11px; border: 1px solid var(--line); border-radius: 8px; outline: 0; background: #111a14; color: #e1ece3; font: inherit; font-size: 10px; line-height: 1.6; resize: vertical; }
 .memory-manager .path-field textarea:focus, .memory-edit textarea:focus { border-color: rgba(169,230,183,.45); }

@@ -15,7 +15,9 @@ type SavedMemory = { id: number; content: string; createdAt: number; updatedAt: 
 type UserProfile = { preferredName: string; useName: boolean };
 const DEFAULT_USER_PROFILE: UserProfile = { preferredName: "", useName: false };
 type AwarenessSettings = { enabled: boolean; learnConversations: boolean; learnSearches: boolean };
+type AwarenessItem = { id: number; content: string; category: string; sourceType: string; knowledgeType: string; confidence: number; createdAt: number; updatedAt: number };
 const DEFAULT_AWARENESS_SETTINGS: AwarenessSettings = { enabled: false, learnConversations: false, learnSearches: false };
+const AWARENESS_CATEGORIES = ["interests", "preferences", "communication", "projects", "goals", "other"];
 type CompanionProfile = { id: string; name: string; instructions: string };
 type CompanionSettings = { schemaVersion: number; selectedPersonality: string; customInstructions: string; profiles: CompanionProfile[] };
 const DEFAULT_COMPANION_SETTINGS: CompanionSettings = { schemaVersion: 1, selectedPersonality: "best-friend", customInstructions: "", profiles: [] };
@@ -108,6 +110,12 @@ export default function App() {
   const [awarenessSettings, setAwarenessSettings] = useState<AwarenessSettings>(DEFAULT_AWARENESS_SETTINGS);
   const [awarenessBusy, setAwarenessBusy] = useState(false);
   const [awarenessNotice, setAwarenessNotice] = useState("");
+  const [awarenessItems, setAwarenessItems] = useState<AwarenessItem[]>([]);
+  const [awarenessDraft, setAwarenessDraft] = useState("");
+  const [awarenessCategory, setAwarenessCategory] = useState("interests");
+  const [awarenessEditingId, setAwarenessEditingId] = useState<number | null>(null);
+  const [awarenessEditDraft, setAwarenessEditDraft] = useState("");
+  const [awarenessEditCategory, setAwarenessEditCategory] = useState("interests");
   const [memories, setMemories] = useState<SavedMemory[]>([]);
   const [memoryDraft, setMemoryDraft] = useState("");
   const [editingMemoryId, setEditingMemoryId] = useState<number | null>(null);
@@ -173,13 +181,15 @@ export default function App() {
       invoke<boolean>("get_memory_enabled"),
       invoke<UserProfile>("get_user_profile"),
       invoke<AwarenessSettings>("get_awareness_settings"),
-    ]).then(([items, enabled, profile, awareness]) => {
+      invoke<AwarenessItem[]>("list_awareness_items"),
+    ]).then(([items, enabled, profile, awareness, awarenessRecords]) => {
       if (!active) return;
       setMemories(items);
       setMemoryEnabled(enabled);
       setUserProfile(profile);
       setUserProfileDraft(profile);
       setAwarenessSettings(awareness);
+      setAwarenessItems(awarenessRecords);
     }).catch(() => { if (active) setMemoryNotice("Could not load saved memory, Awareness, or profile settings."); });
     invoke<CompanionSettings>("get_companion_settings")
       .then((settings) => {
@@ -370,6 +380,90 @@ export default function App() {
 
   async function toggleAwarenessSetting(key: keyof AwarenessSettings) {
     await saveAwarenessSettings({ ...awarenessSettings, [key]: !awarenessSettings[key] });
+  }
+
+  async function refreshAwarenessItems() {
+    const items = await invoke<AwarenessItem[]>("list_awareness_items");
+    setAwarenessItems(items);
+  }
+
+  async function addAwarenessItem() {
+    if (!awarenessDraft.trim() || awarenessBusy) return;
+    setAwarenessBusy(true);
+    try {
+      await invoke<AwarenessItem>("create_awareness_item", { content: awarenessDraft, category: awarenessCategory });
+      await refreshAwarenessItems();
+      setAwarenessDraft("");
+      setAwarenessNotice("Awareness item saved locally. No activity was collected automatically.");
+    } catch (error) {
+      setAwarenessNotice(String(error));
+    } finally {
+      setAwarenessBusy(false);
+    }
+  }
+
+  async function saveAwarenessEdit() {
+    if (awarenessEditingId === null || awarenessBusy) return;
+    setAwarenessBusy(true);
+    try {
+      await invoke<void>("update_awareness_item", { id: awarenessEditingId, content: awarenessEditDraft, category: awarenessEditCategory });
+      await refreshAwarenessItems();
+      setAwarenessEditingId(null);
+      setAwarenessNotice("Awareness item updated on this device.");
+    } catch (error) {
+      setAwarenessNotice(String(error));
+    } finally {
+      setAwarenessBusy(false);
+    }
+  }
+
+  async function deleteAwarenessItem(item: AwarenessItem) {
+    if (awarenessBusy || !window.confirm("Permanently delete this Awareness item from this device?")) return;
+    setAwarenessBusy(true);
+    try {
+      await invoke<void>("delete_awareness_item", { id: item.id });
+      await refreshAwarenessItems();
+      if (awarenessEditingId === item.id) setAwarenessEditingId(null);
+      setAwarenessNotice("Awareness item deleted.");
+    } catch (error) {
+      setAwarenessNotice(String(error));
+    } finally {
+      setAwarenessBusy(false);
+    }
+  }
+
+  async function clearAwarenessItems() {
+    if (awarenessBusy || awarenessItems.length === 0) return;
+    if (!window.confirm("Delete every Awareness item? Saved memories and conversations will remain untouched.")) return;
+    setAwarenessBusy(true);
+    try {
+      await invoke<number>("clear_awareness_items");
+      setAwarenessItems([]);
+      setAwarenessEditingId(null);
+      setAwarenessNotice("All Awareness items deleted.");
+    } catch (error) {
+      setAwarenessNotice(String(error));
+    } finally {
+      setAwarenessBusy(false);
+    }
+  }
+
+  async function exportAwarenessItems() {
+    try {
+      const json = await invoke<string>("export_awareness_items");
+      const blob = new Blob([json], { type: "application/json;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `midsunday-awareness-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+      setAwarenessNotice("Awareness backup exported.");
+    } catch (error) {
+      setAwarenessNotice("Could not export Awareness: " + String(error));
+    }
   }
 
   async function toggleMemoryEnabled() {
@@ -860,7 +954,13 @@ export default function App() {
               <div className="setting-row"><div><strong>Enable Awareness</strong><p>Master switch. Turn this off at any time to pause all automatic learning without deleting saved information.</p></div><button className={awarenessSettings.enabled ? "toggle on" : "toggle"} type="button" role="switch" aria-checked={awarenessSettings.enabled} disabled={awarenessBusy} onClick={() => void toggleAwarenessSetting("enabled")}><i /></button></div>
               <div className="setting-row"><div><strong>Learn from conversations</strong><p>Allow future Awareness learning from conversations inside midSunday. Private data and credentials must be filtered out.</p></div><button className={awarenessSettings.learnConversations ? "toggle on" : "toggle"} type="button" role="switch" aria-checked={awarenessSettings.learnConversations} disabled={!awarenessSettings.enabled || awarenessBusy} onClick={() => void toggleAwarenessSetting("learnConversations")}><i /></button></div>
               <div className="setting-row"><div><strong>Learn from in-app searches</strong><p>Allow future Awareness learning from searches performed inside midSunday. This does not monitor browser or other-app activity.</p></div><button className={awarenessSettings.learnSearches ? "toggle on" : "toggle"} type="button" role="switch" aria-checked={awarenessSettings.learnSearches} disabled={!awarenessSettings.enabled || awarenessBusy} onClick={() => void toggleAwarenessSetting("learnSearches")}><i /></button></div>
-              <p className="settings-footnote">Important: these preferences are saved now, but automatic learning is not implemented yet. No conversation or search activity is collected by these switches in this build. All switches start OFF. Passwords, authentication secrets, payment credentials, private messages, and other private data are never permitted as Awareness data.</p>
+              <p className="settings-footnote">Important: automatic learning is not active. These switches do not collect conversation or search activity. All switches start OFF. The items below are only saved when you deliberately add them. Passwords, authentication secrets, payment credentials, private messages, and other private data must never be stored here.</p>
+              <div className="awareness-manager">
+                <div className="path-field"><label htmlFor="new-awareness-item">Add something you want midSunday to know</label><textarea id="new-awareness-item" value={awarenessDraft} onChange={(event) => setAwarenessDraft(event.target.value)} maxLength={2000} rows={3} placeholder="Example: I enjoy learning about technology and anime." /><small>{awarenessDraft.length.toLocaleString()} / 2,000 characters · Only this deliberate entry is saved.</small></div>
+                <div className="awareness-create-row"><label htmlFor="awareness-category">Category</label><select id="awareness-category" value={awarenessCategory} onChange={(event) => setAwarenessCategory(event.target.value)}>{AWARENESS_CATEGORIES.map((category) => <option key={category} value={category}>{category[0].toUpperCase() + category.slice(1)}</option>)}</select><button className="primary-action" type="button" onClick={() => void addAwarenessItem()} disabled={awarenessBusy || !awarenessDraft.trim()}>{awarenessBusy ? "Saving…" : "Add item"}</button></div>
+                <div className="memory-list-heading"><strong>Awareness items ({awarenessItems.length})</strong><div><button className="secondary-action" type="button" onClick={() => void exportAwarenessItems()} disabled={awarenessItems.length === 0}>Export JSON</button><button className="danger-action" type="button" onClick={() => void clearAwarenessItems()} disabled={awarenessBusy || awarenessItems.length === 0}>Clear all</button></div></div>
+                {awarenessItems.length === 0 ? <p className="settings-footnote">Nothing saved here yet. Add only non-sensitive details you want midSunday to remember.</p> : awarenessItems.map((item) => <div className="memory-item" key={item.id}>{awarenessEditingId === item.id ? <div className="memory-edit"><textarea value={awarenessEditDraft} onChange={(event) => setAwarenessEditDraft(event.target.value)} maxLength={2000} rows={3} /><select value={awarenessEditCategory} onChange={(event) => setAwarenessEditCategory(event.target.value)}>{AWARENESS_CATEGORIES.map((category) => <option key={category} value={category}>{category[0].toUpperCase() + category.slice(1)}</option>)}</select><div><button className="primary-action" type="button" onClick={() => void saveAwarenessEdit()} disabled={awarenessBusy || !awarenessEditDraft.trim()}>Save changes</button><button className="secondary-action" type="button" onClick={() => setAwarenessEditingId(null)}>Cancel</button></div></div> : <><div className="awareness-item-copy"><p>{item.content}</p><small>{item.category} · Added by you · {item.knowledgeType}</small></div><div><button className="secondary-action" type="button" onClick={() => { setAwarenessEditingId(item.id); setAwarenessEditDraft(item.content); setAwarenessEditCategory(item.category); }}>Edit</button><button className="danger-action" type="button" onClick={() => void deleteAwarenessItem(item)} disabled={awarenessBusy}>Delete</button></div></>}</div>)}
+              </div>
               {awarenessNotice && <p className="memory-notice" role="status">{awarenessNotice}</p>}
             </section>
             <section className="settings-section"><div className="settings-section-title"><div><h2>Memory & privacy</h2><p>Manage saved facts and decide whether they may be used in local conversations.</p></div><span className="settings-symbol">⌑</span></div>

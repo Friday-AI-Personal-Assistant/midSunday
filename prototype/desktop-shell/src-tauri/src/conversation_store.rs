@@ -23,6 +23,19 @@ impl Default for AwarenessSettings {
     }
 }
 
+#[derive(Clone, Debug, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct AwarenessItem {
+    pub id: i64,
+    pub content: String,
+    pub category: String,
+    pub source_type: String,
+    pub knowledge_type: String,
+    pub confidence: f64,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
 impl Default for UserProfile {
     fn default() -> Self {
         Self { preferred_name: String::new(), use_name: false }
@@ -244,6 +257,76 @@ impl ConversationStore {
             params![json],
         ).map_err(|error| format!("Could not save Awareness settings: {error}"))?;
         Ok(settings)
+    }
+
+    pub fn list_awareness_items(&self) -> Result<Vec<AwarenessItem>, String> {
+        let connection = self.lock()?;
+        let mut statement = connection.prepare(
+            "SELECT id, content, category, source_type, knowledge_type, confidence, created_at, updated_at
+             FROM awareness_items ORDER BY updated_at DESC, id DESC"
+        ).map_err(|error| format!("Could not read Awareness items: {error}"))?;
+        let rows = statement.query_map([], |row| Ok(AwarenessItem {
+            id: row.get(0)?, content: row.get(1)?, category: row.get(2)?,
+            source_type: row.get(3)?, knowledge_type: row.get(4)?, confidence: row.get(5)?,
+            created_at: row.get(6)?, updated_at: row.get(7)?,
+        })).map_err(|error| error.to_string())?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(|error| error.to_string())
+    }
+
+    pub fn create_awareness_item(&self, content: &str, category: &str) -> Result<AwarenessItem, String> {
+        let content = clean_awareness_content(content)?;
+        let category = clean_awareness_category(category)?;
+        let now = unix_time();
+        let connection = self.lock()?;
+        connection.execute(
+            "INSERT INTO awareness_items(content, category, source_type, knowledge_type, confidence, source_record_id, created_at, updated_at)
+             VALUES(?1, ?2, 'user_entered', 'observed', 1.0, NULL, ?3, ?3)",
+            params![content, category, now],
+        ).map_err(|error| format!("Could not save Awareness item: {error}"))?;
+        let id = connection.last_insert_rowid();
+        Ok(AwarenessItem {
+            id, content, category, source_type: "user_entered".to_owned(),
+            knowledge_type: "observed".to_owned(), confidence: 1.0,
+            created_at: now, updated_at: now,
+        })
+    }
+
+    pub fn update_awareness_item(&self, id: i64, content: &str, category: &str) -> Result<(), String> {
+        if id <= 0 { return Err("Invalid Awareness item identifier.".to_owned()); }
+        let content = clean_awareness_content(content)?;
+        let category = clean_awareness_category(category)?;
+        let connection = self.lock()?;
+        let changed = connection.execute(
+            "UPDATE awareness_items SET content = ?1, category = ?2, updated_at = ?3 WHERE id = ?4",
+            params![content, category, unix_time(), id],
+        ).map_err(|error| format!("Could not update Awareness item: {error}"))?;
+        if changed == 0 { return Err("Awareness item was not found.".to_owned()); }
+        Ok(())
+    }
+
+    pub fn delete_awareness_item(&self, id: i64) -> Result<(), String> {
+        if id <= 0 { return Err("Invalid Awareness item identifier.".to_owned()); }
+        let connection = self.lock()?;
+        let changed = connection.execute("DELETE FROM awareness_items WHERE id = ?1", params![id])
+            .map_err(|error| format!("Could not delete Awareness item: {error}"))?;
+        if changed == 0 { return Err("Awareness item was not found.".to_owned()); }
+        Ok(())
+    }
+
+    pub fn clear_awareness_items(&self) -> Result<usize, String> {
+        let connection = self.lock()?;
+        connection.execute("DELETE FROM awareness_items", [])
+            .map_err(|error| format!("Could not clear Awareness items: {error}"))
+    }
+
+    pub fn export_awareness_items(&self) -> Result<String, String> {
+        let items = self.list_awareness_items()?;
+        serde_json::to_string_pretty(&serde_json::json!({
+            "format": "midSunday-awareness-export",
+            "formatVersion": 1,
+            "exportedAt": unix_time(),
+            "items": items,
+        })).map_err(|error| format!("Could not export Awareness items: {error}"))
     }
 
     pub fn list_memories(&self) -> Result<Vec<SavedMemory>, String> {
@@ -610,6 +693,57 @@ impl ConversationStore {
     }
 }
 
+fn clean_awareness_category(category: &str) -> Result<String, String> {
+    let category = category.trim().to_ascii_lowercase();
+    match category.as_str() {
+        "interests" | "preferences" | "communication" | "projects" | "goals" | "other" => Ok(category),
+        _ => Err("Choose a valid Awareness category.".to_owned()),
+    }
+}
+
+fn clean_awareness_content(content: &str) -> Result<String, String> {
+    let content = content.trim();
+    if content.is_empty() { return Err("An Awareness item cannot be empty.".to_owned()); }
+    if content.len() > 4_096 || content.chars().count() > 2_000 {
+        return Err("Awareness items must be 2,000 characters or 4 KiB or smaller.".to_owned());
+    }
+    if content.chars().any(|ch| ch == '\\0') {
+        return Err("Awareness items cannot contain null characters.".to_owned());
+    }
+
+    let lower = content.to_ascii_lowercase();
+    let sensitive_markers = [
+        "password:", "passcode:", "pin code:", "one-time password", "one time password",
+        "verification code:", "authentication code:", "security code:", "otp:",
+        "api key:", "api_key=", "access token:", "refresh token:", "secret key:",
+        "private key:", "seed phrase:", "recovery phrase:", "credit card:", "debit card:",
+        "card number:", "cvv:", "cvc:", "bank account:", "routing number:",
+        "private message:", "direct message:", "dm from ",
+        "-----begin private key-----", "-----begin rsa private key-----",
+    ];
+    if sensitive_markers.iter().any(|marker| lower.contains(marker)) {
+        return Err("This looks like a password, private message, payment detail, or other sensitive data. It was not saved.".to_owned());
+    }
+    if ["sk-", "ghp_", "github_pat_", "xoxb-", "xoxp-", "bearer "]
+        .iter().any(|marker| lower.contains(marker))
+    {
+        return Err("This looks like an authentication token or secret. It was not saved.".to_owned());
+    }
+    for part in content.split_whitespace() {
+        let candidate = part.trim_matches(|ch: char| !ch.is_alphanumeric() && ch != '@' && ch != '.' && ch != '_' && ch != '-');
+        if let Some((local, domain)) = candidate.split_once('@') {
+            if !local.is_empty() && domain.contains('.') {
+                return Err("Email addresses are treated as private identifiers and are not saved in Awareness.".to_owned());
+            }
+        }
+    }
+    let digit_count = content.chars().filter(|ch| ch.is_ascii_digit()).count();
+    if (13..=19).contains(&digit_count) {
+        return Err("This may contain a payment-card or other long numeric identifier. It was not saved.".to_owned());
+    }
+    Ok(content.to_owned())
+}
+
 fn clean_memory(content: &str) -> Result<String, String> {
     let content = content.trim();
     if content.is_empty() { return Err("A saved memory cannot be empty.".to_owned()); }
@@ -650,6 +784,52 @@ mod tests {
         assert_eq!(store.list_memories().unwrap()[0].content, "I prefer short, simple explanations.");
         store.delete_memory(created.id).unwrap();
         assert!(store.list_memories().unwrap().is_empty());
+    }
+
+    #[test]
+    fn awareness_items_support_local_crud_export_and_sensitive_data_rejection() {
+        let store = store();
+        assert!(store.list_awareness_items().unwrap().is_empty());
+        let item = store.create_awareness_item("I enjoy technology and anime.", "interests").unwrap();
+        assert_eq!(item.source_type, "user_entered");
+        assert_eq!(item.knowledge_type, "observed");
+        assert_eq!(item.confidence, 1.0);
+        assert_eq!(store.list_awareness_items().unwrap()[0].content, "I enjoy technology and anime.");
+
+        store.update_awareness_item(item.id, "I enjoy technology, anime, and learning.", "preferences").unwrap();
+        let updated = store.list_awareness_items().unwrap();
+        assert_eq!(updated[0].category, "preferences");
+        assert_eq!(updated[0].content, "I enjoy technology, anime, and learning.");
+
+        assert!(store.create_awareness_item("My password: hunter2", "other").is_err());
+        assert!(store.create_awareness_item("My email is person@example.com", "other").is_err());
+        assert!(store.create_awareness_item("My card is 4111 1111 1111 1111", "other").is_err());
+        assert!(store.create_awareness_item("Token: ghp_abcdefghijklmnopqrstuvwxyz", "other").is_err());
+        assert!(store.create_awareness_item("A harmless fact", "unknown").is_err());
+
+        let export: serde_json::Value = serde_json::from_str(&store.export_awareness_items().unwrap()).unwrap();
+        assert_eq!(export["format"], "midSunday-awareness-export");
+        assert_eq!(export["formatVersion"], 1);
+        assert_eq!(export["items"].as_array().unwrap().len(), 1);
+
+        store.delete_awareness_item(item.id).unwrap();
+        assert!(store.list_awareness_items().unwrap().is_empty());
+        assert!(store.delete_awareness_item(item.id).is_err());
+    }
+
+    #[test]
+    fn clear_awareness_items_does_not_clear_saved_memories_or_conversations() {
+        let store = store();
+        let item = store.create_awareness_item("I like strategy games.", "interests").unwrap();
+        store.create_memory("Keep this separate").unwrap();
+        let chat = store.create("Keep this chat").unwrap();
+        store.append(chat.id, "user", "Hello").unwrap();
+
+        assert_eq!(store.clear_awareness_items().unwrap(), 1);
+        assert!(store.list_awareness_items().unwrap().is_empty());
+        assert_eq!(store.list_memories().unwrap()[0].content, "Keep this separate");
+        assert_eq!(store.list().unwrap()[0].title, "Keep this chat");
+        assert_ne!(item.id, 0);
     }
 
     #[test]

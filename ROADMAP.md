@@ -878,6 +878,19 @@ This milestone does not implement automatic memory extraction, memory import/res
 The profile is optional and device-local. midSunday uses the preferred name naturally and sparingly only when the user enables that preference. The memory cap stores up to 100 separate entries (up to 2,000 characters each); the prompt builder currently selects up to 20 recently updated entries within 4 KiB. Memory import/restore and automatic memory extraction remain unimplemented.
 
 
+### 2026-11-24 — Awareness item management and first privacy screening
+
+- [x] Add local Awareness item list, deliberate user-entry, category assignment, edit, individual delete, clear-all, and versioned JSON export commands.
+- [x] Keep Awareness records separate from saved memories and conversation history; clearing Awareness items leaves both other stores untouched.
+- [x] Record provenance as user-entered, knowledge type as observed, and confidence as explicit user-provided certainty for manually added items.
+- [x] Add conservative Rust-side rejection checks for common credential labels, token formats, email addresses, and long numeric identifiers before an Awareness item is saved.
+- [x] Add Settings UI to review, categorise, rewrite, delete, clear, and export every Awareness item.
+- [ ] Expand and independently test sensitive-data detection, including international identifiers and context-aware private-data handling; deterministic checks are not a complete guarantee.
+- [ ] Add source-evidence review and deletion/relearning suppression records before automatic ingestion is implemented.
+- [ ] Add automatic learning from conversations/searches only after all privacy filters, category exclusions, source controls, and review/deletion safeguards are tested.
+
+This batch supports only deliberate user-entered Awareness items. It does not read conversations, search activity, browser history, or other applications. The sensitive-data checks are conservative first-pass safeguards, not a promise that every possible secret or private detail can be detected; users should not enter secrets. Automatic learning remains disabled and unimplemented.
+
 ### 2026-11-24 — Awareness foundation and explicit learning preferences
 
 - [x] Upgrade the local SQLite database from schema v2 to v3 without deleting conversations or saved memories.
