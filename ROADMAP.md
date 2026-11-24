@@ -674,6 +674,18 @@ The HTTP client is local-only and uses the llama.cpp health and chat-completion 
 Cancellation is verified at the client transport boundary: the test server observes the client connection close after cancellation. This does not yet prove that llama.cpp promptly stops its internal CPU/GPU computation. Controlled child-process tests cover exit detection and safe shutdown; automatic session restart is not implemented. No external service is involved, and no model or server binary is downloaded. The desktop UI remains unconnected.
 
 
+
+### 2026-11-24 — Recovery integration verification
+
+- [ ] Add an injectable process boundary so lifecycle recovery can be tested without downloading or launching a real model.
+- [ ] Test successful process replacement and readiness.
+- [ ] Test retry after a startup failure.
+- [ ] Test recovery exhaustion, exact attempt count, and final Failed state.
+- [ ] Test that recovery is rejected while the session is Ready.
+- [ ] Verify the tests on Windows, Linux, and macOS CI.
+
+The test seam substitutes only the managed-process boundary. The HTTP readiness path remains real loopback TCP, while fake process handles make restart outcomes deterministic. These tests do not claim real llama.cpp compute cancellation or model inference behaviour.
+
 ### 2026-11-24 — Bounded runtime recovery implementation
 
 - [x] Define an explicit recovery policy with a default of two attempts and a hard maximum of three.

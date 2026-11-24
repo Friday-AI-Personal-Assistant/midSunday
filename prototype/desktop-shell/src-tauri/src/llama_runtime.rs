@@ -49,12 +49,29 @@ pub enum RuntimeSessionError {
     RecoveryExhausted { attempts: u8, last_error: String },
 }
 
+
+/// Minimal process boundary so recovery can be tested without launching a real model.
+trait ManagedServerProcess {
+    fn is_running(&mut self) -> std::io::Result<bool>;
+    fn stop(&mut self) -> std::io::Result<()>;
+}
+
+impl ManagedServerProcess for LlamaServerProcess {
+    fn is_running(&mut self) -> std::io::Result<bool> {
+        LlamaServerProcess::is_running(self)
+    }
+
+    fn stop(&mut self) -> std::io::Result<()> {
+        LlamaServerProcess::stop(self)
+    }
+}
+
 /// Owns the child process and its loopback client as one lifecycle-managed unit.
 ///
 /// The session is synchronous and bounded by the supplied HTTP/startup timeouts.
 /// Dropping it also drops the process supervisor, which performs best-effort cleanup.
 pub struct LlamaRuntimeSession {
-    process: LlamaServerProcess,
+    process: Box<dyn ManagedServerProcess>,
     client: LlamaHttpClient,
     lifecycle: RuntimeLifecycle,
     config: crate::runtime::RuntimeConfig,
@@ -73,8 +90,10 @@ impl LlamaRuntimeSession {
             return Err(RuntimeSessionError::InvalidTiming);
         }
 
-        let mut process = LlamaServerProcess::start(config, executable, model)
-            .map_err(RuntimeSessionError::ProcessStart)?;
+        let mut process: Box<dyn ManagedServerProcess> = Box::new(
+            LlamaServerProcess::start(config, executable, model)
+                .map_err(RuntimeSessionError::ProcessStart)?,
+        );
         let client = match LlamaHttpClient::new(config, request_timeout) {
             Ok(client) => client,
             Err(error) => {
@@ -174,6 +193,35 @@ impl LlamaRuntimeSession {
         poll_interval: Duration,
         policy: RecoveryPolicy,
     ) -> Result<(), RuntimeSessionError> {
+        self.recover_with(
+            startup_timeout,
+            poll_interval,
+            policy,
+            |config, executable, model| {
+                LlamaServerProcess::start(config, executable, model)
+                    .map(|process| Box::new(process) as Box<dyn ManagedServerProcess>)
+            },
+            executable,
+            model,
+        )
+    }
+
+    fn recover_with<F>(
+        &mut self,
+        startup_timeout: Duration,
+        poll_interval: Duration,
+        policy: RecoveryPolicy,
+        mut start_process: F,
+        executable: &Path,
+        model: &Path,
+    ) -> Result<(), RuntimeSessionError>
+    where
+        F: FnMut(
+            &crate::runtime::RuntimeConfig,
+            &Path,
+            &Path,
+        ) -> Result<Box<dyn ManagedServerProcess>, ProcessStartError>,
+    {
         policy.validate().map_err(RuntimeSessionError::RecoveryPolicy)?;
         if startup_timeout.is_zero() || poll_interval.is_zero() {
             return Err(RuntimeSessionError::InvalidTiming);
@@ -197,7 +245,7 @@ impl LlamaRuntimeSession {
             self.lifecycle.transition(RuntimeStatus::Starting)
                 .map_err(|_| RuntimeSessionError::InvalidState)?;
 
-            let mut process = match LlamaServerProcess::start(&self.config, executable, model) {
+            let mut process = match start_process(&self.config, executable, model) {
                 Ok(process) => process,
                 Err(error) => {
                     last_error = format!("process start failed: {error:?}");
@@ -284,3 +332,192 @@ mod recovery_policy_tests {
         assert_eq!(policy.validate(), Err(RecoveryPolicyError::InvalidAttemptCount));
     }
 }
+
+#[cfg(test)]
+mod recovery_integration_tests {
+    use super::*;
+    use std::io::{Read, Write};
+    use std::net::TcpListener;
+    use std::sync::{Arc, atomic::{AtomicBool, AtomicUsize, Ordering}};
+    use std::thread;
+
+    struct FakeProcess {
+        running: Arc<AtomicBool>,
+        stop_count: Arc<AtomicUsize>,
+    }
+
+    impl ManagedServerProcess for FakeProcess {
+        fn is_running(&mut self) -> std::io::Result<bool> {
+            Ok(self.running.load(Ordering::SeqCst))
+        }
+
+        fn stop(&mut self) -> std::io::Result<()> {
+            self.stop_count.fetch_add(1, Ordering::SeqCst);
+            self.running.store(false, Ordering::SeqCst);
+            Ok(())
+        }
+    }
+
+    fn ready_server() -> (u16, thread::JoinHandle<()>) {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let handle = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut request = [0_u8; 1024];
+            let _ = stream.read(&mut request);
+            let body = r#"{"status":"ok"}"#;
+            write!(
+                stream,
+                "HTTP/1.1 200 OK\\r\\nContent-Type: application/json\\r\\nContent-Length: {}\\r\\nConnection: close\\r\\n\\r\\n{}",
+                body.len(),
+                body
+            ).unwrap();
+            stream.flush().unwrap();
+        });
+        (port, handle)
+    }
+
+    fn failed_session(port: u16) -> (LlamaRuntimeSession, Arc<AtomicUsize>) {
+        let config = crate::runtime::RuntimeConfig {
+            host: "127.0.0.1".to_owned(),
+            port,
+            ..crate::runtime::RuntimeConfig::default()
+        };
+        let client = LlamaHttpClient::new(&config, Duration::from_secs(1)).unwrap();
+        let mut lifecycle = RuntimeLifecycle::default();
+        lifecycle.transition(RuntimeStatus::Stopped).unwrap();
+        lifecycle.transition(RuntimeStatus::Starting).unwrap();
+        lifecycle.transition(RuntimeStatus::Failed).unwrap();
+        let original_running = Arc::new(AtomicBool::new(true));
+        let stop_count = Arc::new(AtomicUsize::new(0));
+        let process = FakeProcess {
+            running: original_running,
+            stop_count: stop_count.clone(),
+        };
+        (
+            LlamaRuntimeSession {
+                process: Box::new(process),
+                client,
+                lifecycle,
+                config,
+            },
+            stop_count,
+        )
+    }
+
+    fn no_delay_policy(attempts: u8) -> RecoveryPolicy {
+        RecoveryPolicy { max_attempts: attempts, retry_delay: Duration::ZERO }
+    }
+
+    #[test]
+    fn recovery_replaces_failed_process_and_returns_to_ready() {
+        let (port, server) = ready_server();
+        let (mut session, old_stop_count) = failed_session(port);
+        let new_running = Arc::new(AtomicBool::new(true));
+        let new_stop_count = Arc::new(AtomicUsize::new(0));
+        let result = session.recover_with(
+            Duration::from_secs(1),
+            Duration::from_millis(5),
+            no_delay_policy(1),
+            {
+                let running = new_running.clone();
+                let stops = new_stop_count.clone();
+                move |_, _, _| Ok(Box::new(FakeProcess {
+                    running: running.clone(),
+                    stop_count: stops.clone(),
+                }) as Box<dyn ManagedServerProcess>)
+            },
+            Path::new("fake-server"),
+            Path::new("fake-model"),
+        );
+        assert!(result.is_ok());
+        assert_eq!(session.status(), RuntimeStatus::Ready);
+        assert_eq!(old_stop_count.load(Ordering::SeqCst), 1);
+        assert_eq!(new_stop_count.load(Ordering::SeqCst), 0);
+        server.join().unwrap();
+    }
+
+    #[test]
+    fn recovery_retries_startup_failure_then_succeeds() {
+        let (port, server) = ready_server();
+        let (mut session, _) = failed_session(port);
+        let attempts = Arc::new(AtomicUsize::new(0));
+        let running = Arc::new(AtomicBool::new(true));
+        let stops = Arc::new(AtomicUsize::new(0));
+        let result = session.recover_with(
+            Duration::from_secs(1),
+            Duration::from_millis(5),
+            no_delay_policy(2),
+            {
+                let attempts = attempts.clone();
+                let running = running.clone();
+                let stops = stops.clone();
+                move |_, _, _| {
+                    if attempts.fetch_add(1, Ordering::SeqCst) == 0 {
+                        Err(ProcessStartError::ExecutableNotFound)
+                    } else {
+                        Ok(Box::new(FakeProcess {
+                            running: running.clone(),
+                            stop_count: stops.clone(),
+                        }) as Box<dyn ManagedServerProcess>)
+                    }
+                }
+            },
+            Path::new("fake-server"),
+            Path::new("fake-model"),
+        );
+        assert!(result.is_ok());
+        assert_eq!(attempts.load(Ordering::SeqCst), 2);
+        assert_eq!(session.status(), RuntimeStatus::Ready);
+        server.join().unwrap();
+    }
+
+    #[test]
+    fn recovery_exhaustion_reports_attempt_count_and_leaves_failed_state() {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let port = listener.local_addr().unwrap().port();
+        drop(listener);
+        let (mut session, _) = failed_session(port);
+        let attempts = Arc::new(AtomicUsize::new(0));
+        let result = session.recover_with(
+            Duration::from_millis(20),
+            Duration::from_millis(5),
+            no_delay_policy(3),
+            {
+                let attempts = attempts.clone();
+                move |_, _, _| {
+                    attempts.fetch_add(1, Ordering::SeqCst);
+                    Err(ProcessStartError::ExecutableNotFound)
+                }
+            },
+            Path::new("missing-server"),
+            Path::new("missing-model"),
+        );
+        assert!(matches!(
+            result,
+            Err(RuntimeSessionError::RecoveryExhausted { attempts: 3, .. })
+        ));
+        assert_eq!(attempts.load(Ordering::SeqCst), 3);
+        assert_eq!(session.status(), RuntimeStatus::Failed);
+    }
+
+    #[test]
+    fn recovery_is_rejected_while_session_is_ready() {
+        let (port, _) = ready_server();
+        let (mut session, _) = failed_session(port);
+        session.lifecycle.transition(RuntimeStatus::Stopped).unwrap();
+        session.lifecycle.transition(RuntimeStatus::Starting).unwrap();
+        session.lifecycle.transition(RuntimeStatus::Ready).unwrap();
+        let result = session.recover_with(
+            Duration::from_secs(1),
+            Duration::from_millis(5),
+            no_delay_policy(1),
+            |_, _, _| Err(ProcessStartError::ExecutableNotFound),
+            Path::new("fake-server"),
+            Path::new("fake-model"),
+        );
+        assert!(matches!(result, Err(RuntimeSessionError::InvalidState)));
+        assert_eq!(session.status(), RuntimeStatus::Ready);
+    }
+}
+
