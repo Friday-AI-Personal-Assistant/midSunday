@@ -121,7 +121,8 @@ Release numbers are planning labels, not promises or dates. A stage is not compl
 - [ ] Validate Tauri 2 + Rust + React/TypeScript as the leading candidate.
 - [ ] Inspect FRIDAY's repository and document reusable patterns, limitations, and code that must remain separate.
 - [ ] Compare local LLM runtimes and their commercial distribution implications.
-- [ ] Benchmark compact local models for response quality, Urdu capability, English capability, multilingual handling, and memory use.
+- [x] Build a preliminary scalable model ladder from current Qwen3.5 and Gemma 4 candidates, with exact quantised file-size references and hardware-class test buckets.
+- [ ] Benchmark compact local models for response quality, Pakistani Urdu/Roman Urdu capability, English capability, multilingual handling, and memory use.
 - [ ] Compare quantisation levels and model sizes.
 - [ ] Test cold-start time, first-token latency, generation speed, and sustained memory use.
 - [ ] Compare local STT engines for English, Urdu script, Pakistani accents, Roman Urdu, and code-switching.
@@ -599,3 +600,16 @@ This is desk research and documentation only. No detection code or benchmark has
 - [ ] Validate all reported values against Windows system tools on multiple hardware configurations.
 
 This checkpoint completes initial desk research only. No crate was added and no code or hardware benchmark was run. See `docs/HARDWARE-INTELLIGENCE.md` sections 12 and 13.
+
+
+### 2026-11-24 — Preliminary scalable model ladder researched
+
+- [x] Add Qwen3.5 candidates from 0.8B through 27B to the Phase 1 research matrix.
+- [x] Add Gemma 4 E2B/E4B as edge-oriented comparison candidates.
+- [x] Record observed Q4 GGUF file sizes, licensing/provenance gates, and warnings that file size is not runtime RAM.
+- [x] Define 4/6–8/16/32/64 GB+ benchmark buckets without turning them into compatibility promises.
+- [ ] Run the fixed English, Pakistani Urdu, Roman Urdu, code-switching, companion-personality, and reasoning evaluation suite.
+- [ ] Measure context, load time, first-token latency, tokens/second, peak RAM, GPU budget, and stability on real Windows PCs.
+- [ ] Select model defaults only after benchmark and licence evidence.
+
+Research is recorded in `docs/PHASE-1-RESEARCH.md` section 16. This is a desk-research shortlist; no models have been downloaded or run.
