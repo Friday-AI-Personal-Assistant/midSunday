@@ -346,33 +346,6 @@ impl ConversationStore {
             .map_err(|error| format!("Could not clear Awareness history: {error}"))
     }
 
-    pub fn list_awareness_suppressions(&self) -> Result<Vec<AwarenessSuppression>, String> {
-        let connection = self.lock()?;
-        let mut statement = connection.prepare(
-            "SELECT category, source_type, created_at FROM awareness_suppressions ORDER BY created_at DESC"
-        ).map_err(|error| format!("Could not read Awareness exclusions: {error}"))?;
-        let rows = statement.query_map([], |row| Ok(AwarenessSuppression {
-            category: row.get(0)?, source_type: row.get(1)?, created_at: row.get(2)?,
-        })).map_err(|error| error.to_string())?;
-        rows.collect::<Result<Vec<_>, _>>().map_err(|error| error.to_string())
-    }
-
-    pub fn clear_awareness_suppressions(&self) -> Result<usize, String> {
-        let connection = self.lock()?;
-        connection.execute("DELETE FROM awareness_suppressions", [])
-            .map_err(|error| format!("Could not clear Awareness exclusions: {error}"))
-    }
-
-    pub fn is_awareness_suppressed(&self, content: &str) -> Result<bool, String> {
-        let fingerprint = awareness_content_fingerprint(content);
-        let connection = self.lock()?;
-        let exists: bool = connection.query_row(
-            "SELECT EXISTS(SELECT 1 FROM awareness_suppressions WHERE content_hash = ?1)",
-            params![fingerprint], |row| row.get(0),
-        ).map_err(|error| format!("Could not check Awareness exclusion: {error}"))?;
-        Ok(exists)
-    }
-
     pub fn list_awareness_items(&self) -> Result<Vec<AwarenessItem>, String> {
         let connection = self.lock()?;
         let mut statement = connection.prepare(
