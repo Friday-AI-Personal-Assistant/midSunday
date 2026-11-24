@@ -3,6 +3,7 @@
 All notable project changes are recorded here. The project is in foundation/prototype development; no application release has been made.
 
 ## 2026-11-24
+- Replaced the static welcome screen with the first interactive companion workspace: conversation navigation, local-session message composer, suggested prompts, companion selection, privacy/system settings prototypes, responsive layouts, and a Rust-core status indicator. The UI clearly labels the chat as a prototype; it does not generate AI replies or persist messages. No model, voice, memory store, or hardware detector is connected.
 - Added a manual-only GitHub Actions workflow to compile the prototype on a hosted Windows runner and retain the NSIS installer artifact for 7 days. Two manual attempts stopped during setup because the pinned artifact-upload action v3 was deprecated; the workflow now pins the official v4 action. No frontend, Rust, or installer build has completed yet. Further runs remain manual and subject to the zero-cost rule.
 - Added instructions for manually starting the Windows build and retrieving its artifact.
 - Completed the Tauri 2 versus Electron desk evaluation and recorded Tauri 2 as the provisional direction for the first Windows shell prototype; production approval remains pending measurements.
