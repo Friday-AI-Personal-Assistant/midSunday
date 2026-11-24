@@ -199,7 +199,7 @@ Release numbers are planning labels, not promises or dates. A stage is not compl
 - [ ] Implement streaming text generation.
 - [ ] Implement stop generation, retry, and error recovery.
 - [ ] Implement system prompts and bounded context management.
-- [ ] Implement conversation creation, rename, delete, and history.
+- [x] Implement local SQLite conversation creation, rename, delete, and message history through a narrow Rust command boundary; frontend lists, opens, creates, renames, and deletes saved conversations. (Initial implementation; real-device crash/restart verification remains pending.)
 - [ ] Add model load/unload lifecycle and explicit resource status.
 - [ ] Add low-memory safeguards and graceful fallback.
 - [ ] Ensure no internet connection is required after model assets are available.
@@ -528,7 +528,7 @@ This repository is the durable source of truth. ChatGPT conversations are workin
 
 ## 11. Current status and immediate next actions
 
-**Current stage:** Phase 3 — Engineering foundation and desktop shell. Run #39 passed Windows, Linux, and macOS. The local runtime now has a frontend IPC path for setup, streaming, and cancellation; multi-turn context and native file selection are the next integration slice. Explicit bounded recovery is implemented and its initial integration tests pass; the remaining unhealthy-replacement cleanup case is being verified before runtime coordinator/UI integration.
+**Current stage:** Phase 4 — Offline local chat engine integration. Runs #40–#42 passed Windows, Linux, and macOS. The app now has a frontend IPC path for local runtime setup, streaming, cancellation, multi-turn context, native model-file selection, bounded prompt/history validation, and a local SQLite conversation store with create/list/open/rename/delete/message-history commands. Actual model inference and persistence across real desktop restarts still require manual device testing.
 
 **Completed:**
 - [x] Product name selected: midSunday.
@@ -771,3 +771,19 @@ The chat now sends previous visible user/assistant turns with each new prompt, b
 - [ ] Verify TypeScript, Rust tests, and desktop packaging on Windows, Linux, and macOS CI.
 
 The frontend now trims history to the newest messages that fit the same byte limits enforced by Rust, preventing long sessions from failing simply because the visible transcript grows. Empty streaming placeholders are excluded. The current prompt is separately capped at 32 KiB of UTF-8 content. This does not persist chat history or change the session-only privacy behaviour.
+
+
+### 2026-11-24 — Local conversation persistence implementation
+
+- [x] Add a SQLite-backed local conversation store under the operating system's application-data directory.
+- [x] Create conversation and message tables with foreign-key cascade deletion and ordered message retrieval.
+- [x] Add Rust commands for listing, creating, reading, appending, renaming, and deleting conversations.
+- [x] Validate message roles, non-empty content, 32 KiB message size, and conversation titles.
+- [x] Add Rust tests for create/list/rename, ordered message storage, invalid message rejection, and delete cascade.
+- [x] Load the most recently updated conversation at app startup and show saved conversations in the sidebar.
+- [x] Save user messages before generation and assistant replies after generation completes or stops.
+- [x] Add local conversation open, rename, and delete controls.
+- [ ] Verify SQLite persistence and the full workflow on real Windows, Linux, and macOS devices.
+- [ ] Review bundled SQLite dependency licence and migration/backup strategy before release.
+
+Conversation history is separate from the future personal-memory system. It remains on-device in the app data directory; no cloud service or account is involved. Deleting a conversation removes its messages through the database foreign-key cascade. A real-device restart and data-recovery test is still required before calling persistence production-ready.

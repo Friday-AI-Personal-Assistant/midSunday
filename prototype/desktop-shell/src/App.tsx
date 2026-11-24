@@ -6,6 +6,8 @@ type BackendState = "checking" | "connected" | "error";
 type Section = "chat" | "characters" | "settings";
 type Message = { id: number; role: "user" | "assistant" | "system"; text: string };
 type RuntimeStatusSnapshot = { status: string; detail: string | null };
+type ConversationSummary = { id: number; title: string; createdAt: number; updatedAt: number };
+type StoredMessage = { id: number; conversationId: number; role: "user" | "assistant"; content: string; createdAt: number };
 
 const MAX_HISTORY_MESSAGES = 64;
 const MAX_HISTORY_MESSAGE_BYTES = 32_768;
@@ -47,6 +49,8 @@ export default function App() {
   const [personality, setPersonality] = useState("Best friend");
   const [draft, setDraft] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
+  const [conversations, setConversations] = useState<ConversationSummary[]>([]);
+  const [activeConversationId, setActiveConversationId] = useState<number | null>(null);
   const [conversationName, setConversationName] = useState("A fresh start");
   const [memoryEnabled, setMemoryEnabled] = useState(false);
   const [startWithWindows, setStartWithWindows] = useState(false);
@@ -75,6 +79,18 @@ export default function App() {
         .then((snapshot) => { if (active) setRuntimeStatus(snapshot); })
         .catch(() => { if (active) setRuntimeError("Could not read local engine status."); });
     };
+    invoke<ConversationSummary[]>("list_conversations")
+      .then(async (items) => {
+        if (!active || items.length === 0) return;
+        setConversations(items);
+        const latest = items[0];
+        const saved = await invoke<StoredMessage[]>("get_conversation_messages", { conversationId: latest.id });
+        if (!active) return;
+        setActiveConversationId(latest.id);
+        setConversationName(latest.title);
+        setMessages(saved.map((message) => ({ id: message.id, role: message.role, text: message.content })));
+      })
+      .catch(() => { if (active) setRuntimeError("Could not load local conversations."); });
     refreshRuntimeStatus();
     const statusTimer = window.setInterval(refreshRuntimeStatus, 1500);
     return () => { active = false; window.clearInterval(statusTimer); };
@@ -83,9 +99,48 @@ export default function App() {
   function startNewChat() {
     if (isGenerating) void cancelGeneration();
     setMessages([]);
+    setActiveConversationId(null);
     setDraft("");
     setConversationName("A fresh start");
     setSection("chat");
+  }
+
+  async function openConversation(conversation: ConversationSummary) {
+    if (isGenerating) return;
+    try {
+      const saved = await invoke<StoredMessage[]>("get_conversation_messages", { conversationId: conversation.id });
+      setActiveConversationId(conversation.id);
+      setConversationName(conversation.title);
+      setMessages(saved.map((message) => ({ id: message.id, role: message.role, text: message.content })));
+      setDraft("");
+      setRuntimeError("");
+      setSection("chat");
+    } catch (error) { setRuntimeError(`Could not open conversation: ${String(error)}`); }
+  }
+
+  async function renameConversation(conversation: ConversationSummary) {
+    const title = window.prompt("Rename conversation", conversation.title);
+    if (title === null) return;
+    try {
+      await invoke<void>("rename_conversation", { conversationId: conversation.id, title });
+      const items = await invoke<ConversationSummary[]>("list_conversations");
+      setConversations(items);
+      if (activeConversationId === conversation.id) setConversationName(title.trim());
+    } catch (error) { setRuntimeError(`Could not rename conversation: ${String(error)}`); }
+  }
+
+  async function deleteConversation(conversation: ConversationSummary) {
+    if (!window.confirm(`Delete “${conversation.title}” and its saved messages from this device?`)) return;
+    try {
+      await invoke<void>("delete_conversation", { conversationId: conversation.id });
+      const items = await invoke<ConversationSummary[]>("list_conversations");
+      setConversations(items);
+      if (activeConversationId === conversation.id) {
+        setActiveConversationId(null);
+        setMessages([]);
+        setConversationName("A fresh start");
+      }
+    } catch (error) { setRuntimeError(`Could not delete conversation: ${String(error)}`); }
   }
 
   async function sendMessage(event: FormEvent<HTMLFormElement>) {
@@ -102,6 +157,19 @@ export default function App() {
       return;
     }
     const history = buildBoundedHistory(messages);
+    let conversationId = activeConversationId;
+    try {
+      if (conversationId === null) {
+        const created = await invoke<ConversationSummary>("create_conversation", { title: text.slice(0, 80) || "New conversation" });
+        conversationId = created.id;
+        setActiveConversationId(created.id);
+      }
+      await invoke<void>("append_conversation_message", { conversationId, role: "user", content: text });
+      setConversations(await invoke<ConversationSummary[]>("list_conversations"));
+    } catch (error) {
+      setRuntimeError(`Could not save this conversation locally: ${String(error)}`);
+      return;
+    }
     const userId = Date.now();
     const assistantId = userId + 1;
     setMessages((current) => [
@@ -114,8 +182,10 @@ export default function App() {
     setRuntimeError("");
     setIsGenerating(true);
 
+    let responseText = "";
     const channel = new Channel<string>();
     channel.onmessage = (delta) => {
+      responseText += delta;
       setMessages((current) => current.map((message) =>
         message.id === assistantId ? { ...message, text: message.text + delta } : message
       ));
@@ -137,8 +207,17 @@ export default function App() {
           ? { ...message, text: message.text || (detail.includes("cancel") ? "Generation stopped." : "I couldn't generate a response. Check the local engine status in Settings.") }
           : message
       ));
+      responseText = responseText || (detail.includes("cancel") ? "Generation stopped." : "I couldn't generate a response. Check the local engine status in Settings.");
       setRuntimeError(detail);
     } finally {
+      try {
+        if (conversationId !== null && responseText.trim()) {
+          await invoke<void>("append_conversation_message", { conversationId, role: "assistant", content: responseText });
+          setConversations(await invoke<ConversationSummary[]>("list_conversations"));
+        }
+      } catch (error) {
+        setRuntimeError(`The reply appeared, but could not be saved: ${String(error)}`);
+      }
       setIsGenerating(false);
     }
   }
@@ -231,7 +310,7 @@ export default function App() {
         </nav>
 
         <div className="side-label recent-label">RECENT</div>
-        <button className="recent-chat" onClick={() => setSection("chat")}><span className="recent-dot" />{conversationName}</button>
+        <div className="conversation-list">{conversations.slice(0, 8).map((conversation) => <div className="conversation-list-row" key={conversation.id}><button className={activeConversationId === conversation.id ? "recent-chat selected" : "recent-chat"} onClick={() => void openConversation(conversation)}><span className="recent-dot" />{conversation.title}</button><button className="conversation-action" title="Rename conversation" aria-label={`Rename ${conversation.title}`} onClick={() => void renameConversation(conversation)}>✎</button><button className="conversation-action delete" title="Delete conversation" aria-label={`Delete ${conversation.title}`} onClick={() => void deleteConversation(conversation)}>×</button></div>)}</div>
 
         <div className="sidebar-bottom">
           <div className="privacy-mini"><span className="privacy-icon">⌑</span><div><strong>Private by design</strong><span>Your space stays yours.</span></div></div>
@@ -266,7 +345,7 @@ export default function App() {
                 </div>
               ) : (
                 <div className="message-list" aria-live="polite">
-                  <div className="date-divider"><span>THIS SESSION · NOT SAVED</span></div>
+                  <div className="date-divider"><span>SAVED ON THIS DEVICE</span></div>
                   {messages.map((message) => (
                     <div className={`message-row ${message.role === "user" ? "user-message" : "assistant-message"}`} key={message.id}>
                       <div className="message-avatar">{message.role === "user" ? "Y" : "m"}</div>
@@ -282,7 +361,7 @@ export default function App() {
                 <textarea value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={handleComposerKey} placeholder="Message your companion…" rows={2} aria-label="Message your companion" />
                 <div className="composer-tools"><div className="composer-hint"><span>↵</span> to send <span className="hint-divider">·</span> Shift + ↵ for a new line</div><div className="composer-actions">{isGenerating ? <button className="stop-button" type="button" onClick={cancelGeneration}>Stop generating</button> : <><span className="voice-disabled" title="Voice will be added in a later phase">◖ Voice</span><button className="send-button" type="submit" disabled={!draft.trim() || runtimeStatus.status !== "ready"} aria-label="Send message">↑</button></>}</div></div>
               </form>
-              <p className="composer-disclaimer">{runtimeStatus.status === "ready" ? "Local model connected · Messages stay in this session" : "Connect a local model in Settings to start chatting · No cloud service is used"}</p>
+              <p className="composer-disclaimer">{runtimeStatus.status === "ready" ? "Local model connected · Conversations are stored on this device" : "Connect a local model in Settings to start chatting · Local conversation storage"}</p>
             </div>
           </div>
         )}

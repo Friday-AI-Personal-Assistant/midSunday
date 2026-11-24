@@ -1,3 +1,4 @@
+mod conversation_store;
 mod llama_client;
 mod llama_process;
 mod llama_runtime;
@@ -7,6 +8,43 @@ mod runtime_manager;
 use tauri::{ipc::Channel, State};
 use runtime::{ConversationMessage, GenerationRequest, RuntimeConfig};
 use runtime_manager::{RuntimeManager, RuntimeStatusSnapshot};
+use conversation_store::{ConversationStore, ConversationSummary, StoredMessage};
+use tauri::Manager;
+
+
+#[tauri::command]
+fn list_conversations(store: State<'_, ConversationStore>) -> Result<Vec<ConversationSummary>, String> {
+    store.list()
+}
+
+#[tauri::command]
+fn create_conversation(store: State<'_, ConversationStore>, title: String) -> Result<ConversationSummary, String> {
+    store.create(&title)
+}
+
+#[tauri::command]
+fn get_conversation_messages(store: State<'_, ConversationStore>, conversation_id: i64) -> Result<Vec<StoredMessage>, String> {
+    store.messages(conversation_id)
+}
+
+#[tauri::command]
+fn append_conversation_message(
+    store: State<'_, ConversationStore>, conversation_id: i64, role: String, content: String,
+) -> Result<(), String> {
+    store.append(conversation_id, &role, &content)
+}
+
+#[tauri::command]
+fn rename_conversation(
+    store: State<'_, ConversationStore>, conversation_id: i64, title: String,
+) -> Result<(), String> {
+    store.rename(conversation_id, &title)
+}
+
+#[tauri::command]
+fn delete_conversation(store: State<'_, ConversationStore>, conversation_id: i64) -> Result<(), String> {
+    store.delete(conversation_id)
+}
 
 #[tauri::command]
 fn get_app_status() -> &'static str {
@@ -105,10 +143,24 @@ async fn recover_local_runtime(
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .setup(|app| {
+            let data_dir = app.path().app_data_dir()?;
+            let database_path = data_dir.join("midsunday.sqlite3");
+            let store = ConversationStore::open(&database_path)
+                .map_err(|error| std::io::Error::new(std::io::ErrorKind::Other, error))?;
+            app.manage(store);
+            Ok(())
+        })
         .plugin(tauri_plugin_dialog::init())
         .manage(RuntimeManager::default())
         .invoke_handler(tauri::generate_handler![
             get_app_status,
+            list_conversations,
+            create_conversation,
+            get_conversation_messages,
+            append_conversation_message,
+            rename_conversation,
+            delete_conversation,
             get_runtime_status,
             start_local_runtime,
             generate_local_response,

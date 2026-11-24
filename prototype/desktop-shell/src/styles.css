@@ -212,3 +212,13 @@ h1 { margin: 0; color: #eef5ef; font-size: clamp(25px, 3vw, 34px); font-weight: 
 .path-input-row input { min-width: 0; flex: 1; }
 .browse-button { flex: 0 0 auto; min-width: 64px; padding: 0 11px; border: 1px solid var(--line); border-radius: 8px; background: #1a281e; color: #c8d9cc; font-size: 10px; cursor: pointer; }
 .browse-button:hover { border-color: rgba(169,230,183,.45); background: #203329; }
+
+/* Locally saved conversation navigation */
+.conversation-list { display: grid; gap: 3px; }
+.conversation-list-row { display: flex; align-items: center; gap: 2px; min-width: 0; }
+.conversation-list-row .recent-chat { flex: 1; min-width: 0; }
+.conversation-list-row .recent-chat.selected { background: rgba(169,230,183,.075); color: #dce9df; }
+.conversation-action { width: 25px; height: 27px; flex: 0 0 auto; border: 0; border-radius: 6px; background: transparent; color: #728479; font-size: 12px; cursor: pointer; }
+.conversation-action:hover { background: rgba(255,255,255,.06); color: #dce9df; }
+.conversation-action.delete:hover { color: #e6a59b; }
+@media (max-width: 560px) { .conversation-list { display: none; } }

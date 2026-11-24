@@ -3,6 +3,7 @@
 All notable project changes are recorded here. The project is in foundation/prototype development; no application release has been made.
 
 ## 2026-11-24
+- Added local SQLite conversation persistence: create/list/open/rename/delete conversations, save user and assistant messages, and reload the latest conversation at startup. The database lives in the OS application-data directory; real-device restart testing remains pending.
 - Hardened multi-turn context handling: the frontend now excludes empty/system messages and sends the newest eligible history within the backend byte/count limits; current prompts are capped at 32 KiB in both frontend and Rust validation.
 - Added multi-turn user/assistant conversation context to local llama.cpp requests, with strict history size/content validation and ordering tests.
 - Added native file pickers for an existing llama-server executable and GGUF model using the Tauri dialog plugin with a narrowly scoped open permission. No model download or cloud service was introduced.
