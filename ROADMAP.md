@@ -528,7 +528,7 @@ This repository is the durable source of truth. ChatGPT conversations are workin
 
 ## 11. Current status and immediate next actions
 
-**Current stage:** Phase 3 — Engineering foundation and desktop shell. The interactive workspace UI, managed local llama.cpp process supervisor, loopback HTTP client, readiness polling, streaming generation, and cooperative cancellation are implemented as backend prototypes. Run #31 passed the frontend build, Rust tests, and packaging checks on Windows, Linux, and macOS. Controlled crash/shutdown and cancellation-disconnect tests are the current verification batch. Phase 1 feasibility research continues in parallel.
+**Current stage:** Phase 3 — Engineering foundation and desktop shell. Run #32 passed Windows, Linux, and macOS. Runtime reliability work is underway: explicit bounded recovery from a failed/stopped local inference session is being implemented and will be verified before any UI integration.
 
 **Completed:**
 - [x] Product name selected: midSunday.
@@ -672,3 +672,18 @@ The HTTP client is local-only and uses the llama.cpp health and chat-completion 
 - [ ] Connect the runtime coordinator to Tauri commands only after lifecycle and cancellation behaviour are verified.
 
 Cancellation is verified at the client transport boundary: the test server observes the client connection close after cancellation. This does not yet prove that llama.cpp promptly stops its internal CPU/GPU computation. Controlled child-process tests cover exit detection and safe shutdown; automatic session restart is not implemented. No external service is involved, and no model or server binary is downloaded. The desktop UI remains unconnected.
+
+
+### 2026-11-24 — Bounded runtime recovery implementation
+
+- [x] Define an explicit recovery policy with a default of two attempts and a hard maximum of three.
+- [x] Restrict recovery to Failed or Stopped session states; reject attempts during active startup/generation/ready states.
+- [x] Stop and reap the previous child process before launching a replacement.
+- [x] Reuse the validated loopback client and require the replacement server to pass bounded readiness checks.
+- [x] Clean up failed replacement processes and stop after the configured attempt budget.
+- [x] Add policy validation tests for defaults, zero attempts, and attempts above the hard limit.
+- [ ] Add controlled integration tests for successful restart, repeated startup failure, and recovery exhaustion.
+- [ ] Verify the recovery implementation on Windows, Linux, and macOS CI.
+- [ ] Confirm real llama.cpp cancellation and restart behaviour under representative workloads.
+
+Recovery is explicit rather than automatic: the future coordinator must decide when a retry is appropriate and present the failure to the user if the bounded budget is exhausted. This change does not connect the runtime to the UI, install a model, or download a server binary.
