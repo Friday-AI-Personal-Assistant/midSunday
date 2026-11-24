@@ -528,7 +528,7 @@ This repository is the durable source of truth. ChatGPT conversations are workin
 
 ## 11. Current status and immediate next actions
 
-**Current stage:** Phase 3 — Engineering foundation and desktop shell (first interactive workspace UI implemented; automatic Windows, Linux, and macOS CI workflows are configured for pushes to main and pull requests; platform build results and runtime validation pending). Phase 1 feasibility research continues in parallel.
+**Current stage:** Phase 3 — Engineering foundation and desktop shell (first interactive workspace UI implemented; automatic Windows, Linux, and macOS CI workflows are configured for pushes to main and pull requests; the latest three-platform build and Rust test run passed). Phase 1 feasibility research continues in parallel.
 
 **Completed:**
 - [x] Product name selected: midSunday.
