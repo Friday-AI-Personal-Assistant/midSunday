@@ -22,19 +22,19 @@ Do not run repeatedly while diagnosing one failure; inspect the first run's logs
 - Installs frontend dependencies.
 - Builds the React/Vite frontend.
 - Builds the Tauri Windows application and NSIS installer.
-- Uploads the installer as a workflow artifact for 7 days.
+- Uploads the NSIS installer (if the build succeeds) and generated `package-lock.json` as a workflow artifact for 7 days, even if a later build step fails.
 
-The workflow does not publish a release, deploy anything, upload source code elsewhere, run AI models, or invoke paid third-party services. It uses GitHub-hosted Actions minutes and artifact storage, which are subject to the repository/account's current included quota and billing settings. Check GitHub Actions usage before starting a run; disable Actions or stop here if GitHub indicates that charges would apply.
+The workflow does not publish a release, deploy anything, upload source code elsewhere, run AI models, or invoke paid third-party services. The repository is public and the workflow uses the standard `windows-latest` GitHub-hosted runner; GitHub documents standard hosted runners in public repositories as free. Do not change this to a larger runner, which can be paid. Artifact storage is a separate consideration, so outputs are limited to the installer and lockfile with a 7-day retention period. See [GitHub-hosted runners](https://docs.github.com/en/actions/reference/runners/github-hosted-runners) and [Actions billing](https://docs.github.com/en/billing/concepts/product-billing/github-actions).
 
 ## Current limitations
 
 - The workflow was manually attempted twice, but both attempts failed during GitHub Actions setup before checkout or compilation because the pinned artifact-upload action v3 had been deprecated. The workflow now pins the official v4 action. No frontend, Rust, or installer build has completed.
 - A successful compile would not prove that the app has been tested on a user's PC.
 - The first build may expose missing configuration or dependency issues; fix those before treating the installer as test-ready.
-- The dependency install currently uses the package ranges in package.json; a committed lockfile should be generated and reviewed before repeatable release builds.
+- The dependency install currently uses the package ranges in package.json. The workflow now retains the generated lockfile as an artifact so it can be reviewed and committed before repeatable release builds.
 - The NSIS installer is a development artifact, not a signed public release.
 - WebView2 installation behaviour, startup, idle memory, accessibility, and offline installation still need separate validation.
 
 ## Artifact retrieval
 
-After a successful run, open its summary and download the artifact named midsunday-windows-prototype-installer. GitHub keeps it for 7 days.
+After a run, open its summary and download the artifact named `midsunday-windows-prototype-build`. It contains the generated `package-lock.json` and, if compilation succeeds, the NSIS installer. GitHub keeps it for 7 days.
