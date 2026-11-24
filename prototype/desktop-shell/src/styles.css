@@ -258,3 +258,19 @@ h1 { margin: 0; color: #eef5ef; font-size: clamp(25px, 3vw, 34px); font-weight: 
 .profile-actions { display: flex; flex-wrap: wrap; gap: 9px; }
 .companion-notice { margin-top: 12px; color: #9edbaa; font-size: 10px; line-height: 1.5; overflow-wrap: anywhere; }
 .personality-card:disabled { opacity: .55; cursor: wait; }
+
+
+/* Explicit, user-controlled local memory */
+.memory-manager { padding: 12px 0 16px; border-top: 1px solid var(--line); }
+.memory-manager .path-field textarea, .memory-edit textarea { width: 100%; min-height: 72px; padding: 11px; border: 1px solid var(--line); border-radius: 8px; outline: 0; background: #111a14; color: #e1ece3; font: inherit; font-size: 10px; line-height: 1.6; resize: vertical; }
+.memory-manager .path-field textarea:focus, .memory-edit textarea:focus { border-color: rgba(169,230,183,.45); }
+.memory-manager .path-field small { color: #718177; font-size: 9px; line-height: 1.5; }
+.memory-list-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin: 20px 0 8px; }
+.memory-list-heading strong { color: #cad8cd; font-size: 10px; }
+.memory-list-heading > div, .memory-item > div, .memory-edit > div { display: flex; flex-wrap: wrap; gap: 8px; }
+.memory-item { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 12px 0; border-top: 1px solid var(--line); }
+.memory-item p { margin: 0; color: #9aab9f; font-size: 10px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
+.memory-item > div { flex: 0 0 auto; }
+.memory-edit { width: 100%; display: flex; flex-direction: column; gap: 8px; }
+.memory-notice { margin: 12px 0; color: #9edbaa; font-size: 9px; line-height: 1.5; overflow-wrap: anywhere; }
+@media (max-width: 560px) { .memory-item { flex-direction: column; } }

@@ -11,7 +11,7 @@ mod runtime_manager;
 use tauri::{ipc::Channel, State};
 use runtime::{ConversationMessage, GenerationRequest, RuntimeConfig};
 use runtime_manager::{RuntimeManager, RuntimeStatusSnapshot};
-use conversation_store::{ConversationStore, ConversationSummary, ImportResult, StoredMessage};
+use conversation_store::{ConversationStore, ConversationSummary, ImportResult, SavedMemory, StoredMessage};
 use engine_settings::{EngineSettings, EngineSettingsStore};
 use companion_settings::{CompanionSettings, CompanionSettingsStore};
 use model_catalog::{LocalModel, ModelCatalog, ModelVerification};
@@ -65,6 +65,46 @@ fn import_conversations(store: State<'_, ConversationStore>, json: String) -> Re
 #[tauri::command]
 fn clear_conversations(store: State<'_, ConversationStore>) -> Result<usize, String> {
     store.clear_all()
+}
+
+#[tauri::command]
+fn list_saved_memories(store: State<'_, ConversationStore>) -> Result<Vec<SavedMemory>, String> {
+    store.list_memories()
+}
+
+#[tauri::command]
+fn create_saved_memory(store: State<'_, ConversationStore>, content: String) -> Result<SavedMemory, String> {
+    store.create_memory(&content)
+}
+
+#[tauri::command]
+fn update_saved_memory(store: State<'_, ConversationStore>, id: i64, content: String) -> Result<(), String> {
+    store.update_memory(id, &content)
+}
+
+#[tauri::command]
+fn delete_saved_memory(store: State<'_, ConversationStore>, id: i64) -> Result<(), String> {
+    store.delete_memory(id)
+}
+
+#[tauri::command]
+fn clear_saved_memories(store: State<'_, ConversationStore>) -> Result<usize, String> {
+    store.clear_memories()
+}
+
+#[tauri::command]
+fn get_memory_enabled(store: State<'_, ConversationStore>) -> Result<bool, String> {
+    store.memory_enabled()
+}
+
+#[tauri::command]
+fn set_memory_enabled(store: State<'_, ConversationStore>, enabled: bool) -> Result<bool, String> {
+    store.set_memory_enabled(enabled)
+}
+
+#[tauri::command]
+fn export_saved_memories(store: State<'_, ConversationStore>) -> Result<String, String> {
+    store.export_memories()
 }
 
 #[tauri::command]
@@ -246,6 +286,14 @@ pub fn run() {
             export_conversations,
             import_conversations,
             clear_conversations,
+            list_saved_memories,
+            create_saved_memory,
+            update_saved_memory,
+            delete_saved_memory,
+            clear_saved_memories,
+            get_memory_enabled,
+            set_memory_enabled,
+            export_saved_memories,
             get_engine_settings,
             save_engine_settings,
             get_companion_settings,

@@ -4,6 +4,24 @@ use std::{path::Path, sync::Mutex, time::{SystemTime, UNIX_EPOCH}};
 
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+pub struct SavedMemory {
+    pub id: i64,
+    pub content: String,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct MemoryExportFile {
+    format: &'static str,
+    format_version: u32,
+    exported_at: i64,
+    memories: Vec<SavedMemory>,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct ConversationSummary {
     pub id: i64,
     pub title: String,
@@ -84,7 +102,7 @@ impl ConversationStore {
             .map_err(|error| format!("Could not enable local database constraints: {error}"))?;
         let schema_version: i64 = connection.pragma_query_value(None, "user_version", |row| row.get(0))
             .map_err(|error| format!("Could not read local database version: {error}"))?;
-        if schema_version > 1 {
+        if schema_version > 2 {
             return Err(format!("This midSunday database uses a newer schema version ({schema_version}) than this app supports."));
         }
         if schema_version == 0 {
@@ -112,11 +130,117 @@ impl ConversationStore {
             ).map_err(|error| format!("Could not apply local database migration 1: {error}"))?;
             transaction.commit().map_err(|error| format!("Could not finish local database migration: {error}"))?;
         }
+        let current_version: i64 = connection.pragma_query_value(None, "user_version", |row| row.get(0))
+            .map_err(|error| format!("Could not recheck local database version: {error}"))?;
+        if current_version == 1 {
+            let transaction = connection.unchecked_transaction()
+                .map_err(|error| format!("Could not prepare local memory migration: {error}"))?;
+            transaction.execute_batch(
+                "CREATE TABLE IF NOT EXISTS saved_memories (
+                   id INTEGER PRIMARY KEY AUTOINCREMENT,
+                   content TEXT NOT NULL,
+                   created_at INTEGER NOT NULL,
+                   updated_at INTEGER NOT NULL
+                 );
+                 CREATE INDEX IF NOT EXISTS idx_saved_memories_updated
+                   ON saved_memories(updated_at DESC, id DESC);
+                 CREATE TABLE IF NOT EXISTS app_preferences (
+                   key TEXT PRIMARY KEY,
+                   value TEXT NOT NULL
+                 );
+                 INSERT OR IGNORE INTO app_preferences(key, value) VALUES('memory_enabled', 'false');
+                 PRAGMA user_version = 2;"
+            ).map_err(|error| format!("Could not apply local memory migration: {error}"))?;
+            transaction.commit().map_err(|error| format!("Could not finish local memory migration: {error}"))?;
+        }
         Ok(Self { connection: Mutex::new(connection) })
     }
 
     fn lock(&self) -> Result<std::sync::MutexGuard<'_, Connection>, String> {
         self.connection.lock().map_err(|_| "Local conversation database is unavailable.".to_owned())
+    }
+
+    pub fn list_memories(&self) -> Result<Vec<SavedMemory>, String> {
+        let connection = self.lock()?;
+        let mut statement = connection.prepare(
+            "SELECT id, content, created_at, updated_at FROM saved_memories ORDER BY updated_at DESC, id DESC"
+        ).map_err(|error| error.to_string())?;
+        let rows = statement.query_map([], |row| Ok(SavedMemory {
+            id: row.get(0)?, content: row.get(1)?, created_at: row.get(2)?, updated_at: row.get(3)?,
+        })).map_err(|error| error.to_string())?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(|error| error.to_string())
+    }
+
+    pub fn create_memory(&self, content: &str) -> Result<SavedMemory, String> {
+        let content = clean_memory(content)?;
+        let connection = self.lock()?;
+        let count: i64 = connection.query_row("SELECT COUNT(*) FROM saved_memories", [], |row| row.get(0))
+            .map_err(|error| error.to_string())?;
+        if count >= 100 { return Err("You can save up to 100 memories.".to_owned()); }
+        let now = unix_time();
+        connection.execute(
+            "INSERT INTO saved_memories(content, created_at, updated_at) VALUES(?1, ?2, ?2)",
+            params![content, now],
+        ).map_err(|error| format!("Could not save memory: {error}"))?;
+        Ok(SavedMemory { id: connection.last_insert_rowid(), content, created_at: now, updated_at: now })
+    }
+
+    pub fn update_memory(&self, id: i64, content: &str) -> Result<(), String> {
+        if id <= 0 { return Err("Invalid memory identifier.".to_owned()); }
+        let content = clean_memory(content)?;
+        let connection = self.lock()?;
+        let changed = connection.execute(
+            "UPDATE saved_memories SET content = ?1, updated_at = ?2 WHERE id = ?3",
+            params![content, unix_time(), id],
+        ).map_err(|error| error.to_string())?;
+        if changed == 0 { return Err("Saved memory was not found.".to_owned()); }
+        Ok(())
+    }
+
+    pub fn delete_memory(&self, id: i64) -> Result<(), String> {
+        if id <= 0 { return Err("Invalid memory identifier.".to_owned()); }
+        let connection = self.lock()?;
+        let changed = connection.execute("DELETE FROM saved_memories WHERE id = ?1", params![id])
+            .map_err(|error| error.to_string())?;
+        if changed == 0 { return Err("Saved memory was not found.".to_owned()); }
+        Ok(())
+    }
+
+    pub fn clear_memories(&self) -> Result<usize, String> {
+        let connection = self.lock()?;
+        let count = connection.execute("DELETE FROM saved_memories", [])
+            .map_err(|error| error.to_string())?;
+        Ok(count)
+    }
+
+    pub fn memory_enabled(&self) -> Result<bool, String> {
+        let connection = self.lock()?;
+        let value: Option<String> = connection.query_row(
+            "SELECT value FROM app_preferences WHERE key = 'memory_enabled'", [], |row| row.get(0)
+        ).optional().map_err(|error| error.to_string())?;
+        Ok(value.as_deref() == Some("true"))
+    }
+
+    pub fn set_memory_enabled(&self, enabled: bool) -> Result<bool, String> {
+        let connection = self.lock()?;
+        connection.execute(
+            "INSERT INTO app_preferences(key, value) VALUES('memory_enabled', ?1)
+             ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            params![if enabled { "true" } else { "false" }],
+        ).map_err(|error| format!("Could not save memory preference: {error}"))?;
+        Ok(enabled)
+    }
+
+    pub fn export_memories(&self) -> Result<String, String> {
+        let memories = self.list_memories()?;
+        let export = MemoryExportFile {
+            format: "midSunday-memory-export",
+            format_version: 1,
+            exported_at: unix_time(),
+            memories,
+        };
+        serde_json::to_string_pretty(&export)
+            .map_err(|error| format!("Could not create memory export: {error}"))
     }
 
     pub fn create(&self, title: &str) -> Result<ConversationSummary, String> {
@@ -365,6 +489,18 @@ impl ConversationStore {
     }
 }
 
+fn clean_memory(content: &str) -> Result<String, String> {
+    let content = content.trim();
+    if content.is_empty() { return Err("A saved memory cannot be empty.".to_owned()); }
+    if content.len() > 4_096 || content.chars().count() > 2_000 {
+        return Err("Saved memories must be 2,000 characters or 4 KiB or smaller.".to_owned());
+    }
+    if content.chars().any(|ch| ch == '\0') {
+        return Err("Saved memories cannot contain null characters.".to_owned());
+    }
+    Ok(content.to_owned())
+}
+
 fn clean_title(title: &str) -> Result<String, String> {
     let title = title.trim();
     if title.is_empty() { return Err("Conversation title cannot be empty.".to_owned()); }
@@ -382,6 +518,44 @@ mod tests {
 
     fn store() -> ConversationStore {
         ConversationStore::from_connection(Connection::open_in_memory().unwrap()).unwrap()
+    }
+
+    #[test]
+    fn creates_edits_lists_and_deletes_explicit_memories() {
+        let store = store();
+        let created = store.create_memory("I prefer simple explanations.").unwrap();
+        assert_eq!(store.list_memories().unwrap()[0].content, "I prefer simple explanations.");
+        store.update_memory(created.id, "I prefer short, simple explanations.").unwrap();
+        assert_eq!(store.list_memories().unwrap()[0].content, "I prefer short, simple explanations.");
+        store.delete_memory(created.id).unwrap();
+        assert!(store.list_memories().unwrap().is_empty());
+    }
+
+    #[test]
+    fn memory_is_disabled_by_default_and_preference_persists() {
+        let store = store();
+        assert!(!store.memory_enabled().unwrap());
+        assert!(store.set_memory_enabled(true).unwrap());
+        assert!(store.memory_enabled().unwrap());
+        assert!(!store.set_memory_enabled(false).unwrap());
+        assert!(!store.memory_enabled().unwrap());
+    }
+
+    #[test]
+    fn validates_memory_size_and_limit_and_exports_separately() {
+        let store = store();
+        assert!(store.create_memory("  ").is_err());
+        assert!(store.create_memory(&"x".repeat(4_097)).is_err());
+        for index in 0..100 {
+            store.create_memory(&format!("Memory {index}")).unwrap();
+        }
+        assert!(store.create_memory("One too many").is_err());
+        let export: serde_json::Value = serde_json::from_str(&store.export_memories().unwrap()).unwrap();
+        assert_eq!(export["format"], "midSunday-memory-export");
+        assert_eq!(export["formatVersion"], 1);
+        assert_eq!(export["memories"].as_array().unwrap().len(), 100);
+        assert!(store.clear_memories().unwrap() == 100);
+        assert!(store.list_memories().unwrap().is_empty());
     }
 
     #[test]
@@ -451,7 +625,9 @@ mod tests {
         assert_eq!(store.messages(1).unwrap()[0].content, "Keep this");
         let version: i64 = store.lock().unwrap()
             .pragma_query_value(None, "user_version", |row| row.get(0)).unwrap();
-        assert_eq!(version, 1);
+        assert_eq!(version, 2);
+        assert!(!store.memory_enabled().unwrap());
+        assert!(store.list_memories().unwrap().is_empty());
     }
 
     #[test]

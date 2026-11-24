@@ -45,6 +45,9 @@ All notable project changes are recorded here. The project is in foundation/prot
 
 
 ## 2026-11-24
+- Added explicit, user-controlled local memory with separate SQLite storage, edit/delete controls, persistent enable/disable preference, bounded prompt context, and versioned JSON export.
+- Strengthened Girlfriend style to be loving, sweet, playful, romantic, and confidently flirty when welcomed; strengthened Boyfriend style to be loving, attentive, caring, and reassuring.
+- Added database schema version 2 migration and regression tests for memory CRUD, limits, export, disabled-by-default behaviour, and preserving existing conversations.
 - Added Girlfriend and Boyfriend companion styles with warm, affectionate, playful guidance and explicit boundaries against exclusivity pressure, isolation, guilt, and dependency-building.
 - Added device-local persistence for selected companion preferences and custom style notes, plus create/edit/delete support for up to 20 named custom character profiles.
 - Added a versioned, validated companion-settings store with Rust tests for persistence, malformed files, duplicate names, invalid selections, and size limits. Real desktop restart testing remains pending.
