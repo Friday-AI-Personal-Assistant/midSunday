@@ -330,12 +330,12 @@ mod tests {
         assert_eq!(client.generate(&request).unwrap(), "Hello from a local model.");
         server.join().unwrap();
     }
-}
+
     #[test]
     fn streaming_emits_text_deltas_from_server_sent_events() {
         let body = concat!(
-            "data: {\\"choices\\":[{\\"delta\\":{\\"content\\":\\"Hello\\"}}]}\n\n",
-            "data: {\\"choices\\":[{\\"delta\\":{\\"content\\":\\" world\\"}}]}\n\n",
+            "data: {\"choices\":[{\"delta\":{\"content\":\"Hello\"}}]}\n\n",
+            "data: {\"choices\":[{\"delta\":{\"content\":\" world\"}}]}\n\n",
             "data: [DONE]\n\n"
         );
         let (port, server) = mock_server(vec![(200, body)]);
@@ -354,8 +354,8 @@ mod tests {
     #[test]
     fn streaming_cancellation_stops_after_current_event() {
         let body = concat!(
-            "data: {\\"choices\\":[{\\"delta\\":{\\"content\\":\\"first\\"}}]}\n\n",
-            "data: {\\"choices\\":[{\\"delta\\":{\\"content\\":\\"second\\"}}]}\n\n",
+            "data: {\"choices\":[{\"delta\":{\"content\":\"first\"}}]}\n\n",
+            "data: {\"choices\":[{\"delta\":{\"content\":\"second\"}}]}\n\n",
             "data: [DONE]\n\n"
         );
         let (port, server) = mock_server(vec![(200, body)]);
@@ -391,3 +391,4 @@ mod tests {
         );
     }
 
+}
