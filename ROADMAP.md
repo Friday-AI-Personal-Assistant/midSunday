@@ -632,7 +632,7 @@ Research is recorded in `docs/PHASE-1-RESEARCH.md` section 16. This is a desk-re
 - [x] Validate loopback-only host configuration before process launch.
 - [x] Add explicit process status inspection, stop/wait handling, and best-effort cleanup on drop.
 - [x] Add unit tests for argument construction and optional CPU thread configuration.
-- [ ] Verify the new module with Windows, Linux, and macOS CI.
+- [x] Verify the new module with Windows, Linux, and macOS CI (Run #24 passed).
 - [ ] Add bounded startup/readiness polling and detect early process exit.
 - [ ] Add a typed loopback HTTP client for health and chat-completion requests.
 - [ ] Add cancellation, timeout, and crash-recovery integration tests using a controlled test server.
@@ -647,7 +647,7 @@ This is the first process-management implementation, not a working model integra
 - [x] Add bounded HTTP request timeouts and bounded startup polling.
 - [x] Treat the model-loading health response as not-yet-ready and detect an exited child process.
 - [x] Add mock-server tests for health, loading-to-ready transitions, early process exit, timeout, loopback validation, and chat-completion response parsing.
-- [ ] Verify this milestone with Windows, Linux, and macOS CI.
+- [x] Verify this milestone with Windows, Linux, and macOS CI (Run #24 passed).
 - [ ] Add cancellation-safe generation and explicit request cancellation.
 - [ ] Add crash-recovery integration tests with a controlled child process.
 - [ ] Connect the runtime coordinator to the desktop application only after lifecycle and cancellation behaviour are verified.

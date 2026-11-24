@@ -2,7 +2,7 @@
 //!
 //! This module never invokes a shell, never downloads binaries/models, and
 //! only constructs a loopback-bound server command from validated inputs.
-//! HTTP readiness and inference are intentionally handled by a later adapter.
+//! HTTP readiness and inference are handled by the managed runtime session.
 
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
