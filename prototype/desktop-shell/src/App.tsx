@@ -319,7 +319,7 @@ export default function App() {
   async function browseForModel() {
     try {
       const selected = await open({ multiple: false, directory: false, title: "Select GGUF model file", filters: [{ name: "GGUF model", extensions: ["gguf"] }] });
-      if (typeof selected === "string") { setModelPath(selected); const fileName = selected.split(/[\\\\/]/).pop() ?? "Local model"; setModelDisplayName(fileName.replace(/\\.gguf$/i, "")); }
+      if (typeof selected === "string") { setModelPath(selected); const fileName = selected.split(/[\\/]/).pop() ?? "Local model"; setModelDisplayName(fileName.replace(/\.gguf$/i, "")); }
     } catch (error) { setRuntimeError(`Could not open the file picker: ${String(error)}`); }
   }
 

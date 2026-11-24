@@ -194,7 +194,7 @@ Release numbers are planning labels, not promises or dates. A stage is not compl
 - [x] Implement a device-local model catalogue for manually registered GGUF files, recording name, path, size, optional source/licence notes, and a streaming SHA-256 fingerprint. Duplicate content is tracked once; removing an entry never deletes the model file. No model downloads or copying occur.
 - [ ] Implement model download/import with source, size, hash, and licence information.
 - [ ] Verify downloaded model integrity.
-- [ ] Implement local model discovery and selection.
+- [x] Implement local model discovery and selection from the registered catalogue; users can choose an existing model entry for the runtime path. Filesystem-wide automatic scanning remains deferred.
 - [ ] Integrate the selected inference runtime behind a replaceable adapter.
 - [ ] Implement streaming text generation.
 - [ ] Implement stop generation, retry, and error recovery.
