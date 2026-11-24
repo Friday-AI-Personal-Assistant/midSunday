@@ -124,3 +124,14 @@ Statuses: **Confirmed**, **Proposed**, **Under review**, **Superseded**.
 - **Decision proposal:** Add a dedicated local Hardware Intelligence & Adaptive Resource Manager to midSunday. It should detect CPU, cores, installed and available RAM, GPU/VRAM, supported acceleration, OS, and storage capacity; recommend suitable model/runtime/settings; and adapt workload scheduling to live resource pressure.
 - **Rationale:** OpenJarvis demonstrates a useful separation between hardware detection and engine/model recommendation. midSunday needs a more complete Windows-first design that also considers storage and live resource headroom.
 - **Consequences:** Research documented in `docs/HARDWARE-INTELLIGENCE.md`. Do not treat this proposal as owner-approved implementation scope or as a final API/runtime choice until the owner reviews it. No hidden telemetry, automatic paid/cloud use, silent model downloads, or forced model switches.
+
+
+## D-017 — Tauri 2 as the first desktop-shell prototype direction
+
+- **Date:** 2026-11-24
+- **Status:** Proposed — prototype direction only; not a production framework approval.
+- **Decision:** Use Tauri 2 + Rust + React + TypeScript + Vite for the first minimal Windows desktop-shell prototype.
+- **Rationale:** Tauri aligns with the planned Rust-native hardware and permission layers, supports a React frontend, has granular frontend capabilities, and reuses FRIDAY's existing stack as a read-only engineering reference. On supported Windows versions, WebView2 is supplied with the OS, avoiding a separately bundled Chromium runtime for the app itself.
+- **Trade-offs:** Tauri depends on WebView2 and its installation/update state. Fully offline first-time installation may require a larger bundled WebView2 installer. Electron remains a viable fallback with a bundled Chromium runtime and a mature ecosystem. Neither framework has been benchmarked with midSunday.
+- **Consequences:** Prototype measurements must cover installer/installed size, startup, idle and interactive memory, CPU, accessibility, Urdu/English rendering, offline launch, and WebView2 behaviour. Do not approve production packaging, updater, signing purchase, or framework lock until those tests and owner review are complete.
+- **Reference:** [Windows desktop framework evaluation](DESKTOP-FRAMEWORK-EVALUATION.md).
