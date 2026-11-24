@@ -448,3 +448,12 @@ The protocol requires versioned cases, exact provenance, repeated runs, median/r
 A first draft of the benchmark cases is now in [BENCHMARK-DATASET-V1.md](BENCHMARK-DATASET-V1.md). It includes English companion conversation, Urdu script, Roman Urdu, code-switching, multi-turn personality consistency, instruction following, reasoning, factuality, safe tool-intent proposals, and companion boundaries. All prompts are synthetic and include expected-behaviour notes for evaluators.
 
 **Not yet ready for formal scoring:** Urdu/Roman Urdu cases need review by fluent Pakistani Urdu evaluators; STT needs permissioned audio with reference transcripts; TTS needs a fixed sentence corpus and listener rating sheets; adversarial and hidden holdout cases still need to be added. Dataset v1 must be reviewed and frozen before candidate rankings are treated as evidence. No benchmark has been run.
+
+
+## 19. Windows desktop framework comparison (2026-11-24)
+
+The Tauri 2 versus Electron desk evaluation is recorded in [DESKTOP-FRAMEWORK-EVALUATION.md](DESKTOP-FRAMEWORK-EVALUATION.md). Tauri 2 + Rust + React + TypeScript + Vite is recommended for the first Windows shell prototype because it aligns with the native Rust hardware/permission architecture and FRIDAY's existing stack reference. This is a prototype direction only; no midSunday performance benchmark has been run and production framework approval remains pending.
+
+The comparison records Tauri's WebView2 dependency and the distinction between a small app-specific package and an offline-ready installer: the documented offline WebView2 installer adds about 127 MB, while the default bootstrapper may need internet if WebView2 is missing. Electron bundles its runtime, Chromium, and Node.js, offering consistent rendering but a larger app payload and a separate security-hardening checklist. No generic memory winner is assumed.
+
+**Next engineering step:** Build a minimal Tauri Windows shell prototype with a Rust health command, narrowly scoped frontend capabilities, and no AI model, cloud service, telemetry, or paid dependency. Measure startup, idle memory, package size, accessibility, offline launch, and WebView2 behaviour on an actual Windows machine before production approval.
