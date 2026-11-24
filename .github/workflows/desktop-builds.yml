@@ -14,7 +14,7 @@ permissions:
 
 concurrency:
   group: midsunday-desktop-builds
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   build:
