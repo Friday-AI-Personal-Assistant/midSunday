@@ -105,6 +105,7 @@ async fn recover_local_runtime(
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .manage(RuntimeManager::default())
         .invoke_handler(tauri::generate_handler![
             get_app_status,
