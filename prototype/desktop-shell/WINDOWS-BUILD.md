@@ -4,7 +4,7 @@ This workflow builds the first midSunday Tauri desktop-shell prototype on a GitH
 
 ## Trigger
 
-It is deliberately **manual only** (workflow_dispatch). Commits and pull requests do not start builds automatically.
+It is deliberately **on-demand only** (workflow_dispatch). Commits and pull requests do not start builds automatically.
 
 To start it:
 1. Open the repository on GitHub.
