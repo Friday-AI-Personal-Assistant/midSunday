@@ -528,7 +528,7 @@ This repository is the durable source of truth. ChatGPT conversations are workin
 
 ## 11. Current status and immediate next actions
 
-**Current stage:** Phase 3 — Engineering foundation and desktop shell. Run #35 passed Windows, Linux, and macOS. Explicit bounded recovery is implemented and its initial integration tests pass; the remaining unhealthy-replacement cleanup case is being verified before runtime coordinator/UI integration.
+**Current stage:** Phase 3 — Engineering foundation and desktop shell. Run #39 passed Windows, Linux, and macOS. The local runtime now has a frontend IPC path for setup, streaming, and cancellation; multi-turn context and native file selection are the next integration slice. Explicit bounded recovery is implemented and its initial integration tests pass; the remaining unhealthy-replacement cleanup case is being verified before runtime coordinator/UI integration.
 
 **Completed:**
 - [x] Product name selected: midSunday.
@@ -541,9 +541,9 @@ This repository is the durable source of truth. ChatGPT conversations are workin
 - [x] Initial complete roadmap drafted.
 
 **Next actions:**
-1. Generate and commit a reviewed npm lockfile, then use it for reproducible dependency installation.
-2. Review the automatic Windows, Linux, and macOS CI runs triggered by the workflow changes; all three platforms should build independently and in parallel.
-3. Fix platform-specific TypeScript, Rust, Tauri, or packaging issues exposed by CI. Use manual workflow dispatch only when package artifacts or the generated npm lockfile are needed.
+1. Verify native local-file selection and multi-turn chat context on Windows, Linux, and macOS CI.
+2. Fix platform-specific TypeScript, Rust, Tauri, plugin-permission, or packaging issues exposed by CI.
+3. Generate and commit a reviewed npm lockfile, then use it for reproducible dependency installation.
 4. Test the app on real Windows, Linux, and macOS devices when available; CI compilation is not a substitute for runtime testing.
 5. Continue the read-only FRIDAY review and record reusable patterns without modifying FRIDAY.
 6. Continue local-model, Pakistani Urdu/Roman Urdu speech, hardware-intelligence, and licensing research; no model or speech engine is selected until evidence supports it.
@@ -743,3 +743,19 @@ Cancellation closes the local HTTP response stream. Whether the actual llama.cpp
 - [ ] Add native file/folder selection after reviewing the minimal Tauri dialog-plugin dependency and permission surface.
 
 The frontend now has a real IPC path for local runtime setup, live generation deltas, cancellation, and lifecycle status. This does not mean a model is bundled or automatically installed. The user must provide an existing compatible server executable and GGUF model. Until a real engine/model is tested, end-to-end inference remains unverified. Conversation persistence, memory, voice, and hardware detection remain separate future milestones.
+
+
+### 2026-11-24 — Multi-turn chat context and native local file selection
+
+- [x] Add typed user/assistant conversation-history messages to the generation request.
+- [x] Validate history count, individual message size, empty content, and aggregate history size before sending requests.
+- [x] Preserve chronological message order and append the current user prompt for both streaming and non-streaming llama.cpp requests.
+- [x] Add unit tests for conversation message ordering and history validation.
+- [x] Add native single-file selection for the llama-server executable and GGUF model through the Tauri dialog plugin.
+- [x] Add only the dialog open permission; no filesystem-wide frontend permission is granted.
+- [x] Cancel active generation when starting a new conversation so a previous stream cannot continue filling a cleared chat.
+- [ ] Verify TypeScript, Rust tests, and desktop packaging on Windows, Linux, and macOS CI (Run #40).
+- [ ] Test real multi-turn inference with a local llama.cpp server and model; no model or server is bundled.
+- [ ] Review exact plugin/dependency licences and generate a committed npm lockfile before distribution.
+
+The chat now sends previous visible user/assistant turns with each new prompt, bounded to 64 prior messages and 128 KiB of prior message content. This is session-only context, not saved to disk. The native picker only returns selected paths; Rust still validates that the executable and model exist. No model download, cloud service, or paid dependency has been added.

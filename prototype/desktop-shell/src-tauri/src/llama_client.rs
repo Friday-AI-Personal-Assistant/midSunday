@@ -67,7 +67,7 @@ impl LlamaHttpClient {
     pub fn generate(&self, request: &GenerationRequest) -> Result<String, LlamaClientError> {
         request.validate().map_err(|_| LlamaClientError::InvalidGenerationRequest)?;
         let body = ChatCompletionRequest {
-            messages: vec![ChatMessageRequest { role: "user", content: request.prompt.as_str() }],
+            messages: build_chat_messages(request),
             max_tokens: request.max_tokens, temperature: request.temperature,
             top_p: request.top_p, stream: false,
         };
@@ -98,7 +98,7 @@ impl LlamaHttpClient {
         }
 
         let body = ChatCompletionRequest {
-            messages: vec![ChatMessageRequest { role: "user", content: request.prompt.as_str() }],
+            messages: build_chat_messages(request),
             max_tokens: request.max_tokens,
             temperature: request.temperature,
             top_p: request.top_p,
@@ -175,7 +175,16 @@ struct ChatCompletionRequest<'a> {
     temperature: f32, top_p: f32, stream: bool,
 }
 #[derive(Serialize)]
-struct ChatMessageRequest<'a> { role: &'static str, content: &'a str }
+struct ChatMessageRequest<'a> { role: &'a str, content: &'a str }
+fn build_chat_messages(request: &GenerationRequest) -> Vec<ChatMessageRequest<'_>> {
+    let mut messages: Vec<_> = request.history.iter().map(|message| ChatMessageRequest {
+        role: match message.role { crate::runtime::ConversationRole::User => "user", crate::runtime::ConversationRole::Assistant => "assistant" },
+        content: message.content.as_str(),
+    }).collect();
+    messages.push(ChatMessageRequest { role: "user", content: request.prompt.as_str() });
+    messages
+}
+
 #[derive(Deserialize)]
 struct ChatCompletionResponse { choices: Vec<ChatCompletionChoice> }
 #[derive(Deserialize)]
@@ -358,6 +367,7 @@ mod tests {
         let (port, server) = mock_server(vec![(200, r#"{"choices":[{"message":{"content":"Hello from a local model."}}]}"#)]);
         let client = LlamaHttpClient::new(&config(port), Duration::from_secs(2)).unwrap();
         let request = GenerationRequest {
+            history: Vec::new(),
             prompt: "Hello, midSunday.".to_owned(), max_tokens: 64,
             temperature: 0.7, top_p: 0.9,
         };
@@ -375,6 +385,7 @@ mod tests {
         let (port, server) = mock_server(vec![(200, body)]);
         let client = LlamaHttpClient::new(&config(port), Duration::from_secs(2)).unwrap();
         let request = GenerationRequest {
+            history: Vec::new(),
             prompt: "Hello, midSunday.".to_owned(), max_tokens: 64,
             temperature: 0.7, top_p: 0.9,
         };
@@ -395,6 +406,7 @@ mod tests {
         let (port, server) = mock_server(vec![(200, body)]);
         let client = LlamaHttpClient::new(&config(port), Duration::from_secs(2)).unwrap();
         let request = GenerationRequest {
+            history: Vec::new(),
             prompt: "Cancel me.".to_owned(), max_tokens: 64,
             temperature: 0.7, top_p: 0.9,
         };
@@ -435,6 +447,7 @@ mod tests {
 
         let client = LlamaHttpClient::new(&config(port), Duration::from_secs(2)).unwrap();
         let request = GenerationRequest {
+            history: Vec::new(),
             prompt: "Stop after the first token.".to_owned(),
             max_tokens: 64,
             temperature: 0.7,
@@ -451,6 +464,7 @@ mod tests {
     fn already_cancelled_stream_does_not_send_a_request() {
         let client = LlamaHttpClient::new(&RuntimeConfig::default(), Duration::from_millis(100)).unwrap();
         let request = GenerationRequest {
+            history: Vec::new(),
             prompt: "Do not send.".to_owned(), max_tokens: 64,
             temperature: 0.7, top_p: 0.9,
         };
@@ -460,6 +474,20 @@ mod tests {
             client.generate_streaming(&request, &cancellation, |_| {}),
             Err(LlamaClientError::Cancelled)
         );
+    }
+
+    #[test]
+    fn chat_message_builder_keeps_history_order_and_appends_current_prompt() {
+        use crate::runtime::{ConversationMessage, ConversationRole};
+        let request = GenerationRequest {
+            history: vec![ConversationMessage { role: ConversationRole::User, content: "Hi".to_owned() }, ConversationMessage { role: ConversationRole::Assistant, content: "Hello".to_owned() }],
+            prompt: "How are you?".to_owned(), max_tokens: 32, temperature: 0.7, top_p: 0.9,
+        };
+        let messages = build_chat_messages(&request);
+        assert_eq!(messages.len(), 3);
+        assert_eq!((messages[0].role, messages[0].content), ("user", "Hi"));
+        assert_eq!((messages[1].role, messages[1].content), ("assistant", "Hello"));
+        assert_eq!((messages[2].role, messages[2].content), ("user", "How are you?"));
     }
 
     #[test]

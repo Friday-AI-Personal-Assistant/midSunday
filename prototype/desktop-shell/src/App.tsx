@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent, type KeyboardEvent } from "react";
 import { Channel, invoke } from "@tauri-apps/api/core";
+import { open } from "@tauri-apps/plugin-dialog";
 
 type BackendState = "checking" | "connected" | "error";
 type Section = "chat" | "characters" | "settings";
@@ -54,6 +55,7 @@ export default function App() {
   }, []);
 
   function startNewChat() {
+    if (isGenerating) void cancelGeneration();
     setMessages([]);
     setDraft("");
     setConversationName("A fresh start");
@@ -69,6 +71,7 @@ export default function App() {
       return;
     }
 
+    const history = messages.filter((message) => message.role === "user" || message.role === "assistant").map((message) => ({ role: message.role as "user" | "assistant", content: message.text }));
     const userId = Date.now();
     const assistantId = userId + 1;
     setMessages((current) => [
@@ -89,8 +92,9 @@ export default function App() {
     };
 
     try {
-      await invoke<string>("generate_local_response", {
+      await invoke<void>("generate_local_response", {
         prompt: text,
+        history,
         maxTokens: 512,
         temperature: 0.7,
         topP: 0.9,
@@ -107,6 +111,20 @@ export default function App() {
     } finally {
       setIsGenerating(false);
     }
+  }
+
+  async function browseForExecutable() {
+    try {
+      const selected = await open({ multiple: false, directory: false, title: "Select llama-server executable" });
+      if (typeof selected === "string") setExecutablePath(selected);
+    } catch (error) { setRuntimeError(`Could not open the file picker: ${String(error)}`); }
+  }
+
+  async function browseForModel() {
+    try {
+      const selected = await open({ multiple: false, directory: false, title: "Select GGUF model file", filters: [{ name: "GGUF model", extensions: ["gguf"] }] });
+      if (typeof selected === "string") setModelPath(selected);
+    } catch (error) { setRuntimeError(`Could not open the file picker: ${String(error)}`); }
   }
 
   async function startLocalRuntime() {
@@ -254,8 +272,8 @@ export default function App() {
             <p className="eyebrow">YOUR CONTROL CENTRE</p><h1>Settings.</h1><p className="page-lead">Clear controls. No surprises.</p>
             <section className="settings-section runtime-settings"><div className="settings-section-title"><div><h2>Local AI engine</h2><p>Connect an existing llama.cpp server executable and a GGUF model stored on this device.</p></div><span className="settings-symbol">◈</span></div>
               <div className="runtime-status-line"><span className={runtimeStatus.status === "ready" ? "core-dot good" : runtimeStatus.status === "failed" ? "core-dot bad" : "core-dot"} />Engine status: <strong>{runtimeStatus.status}</strong></div>
-              <label className="path-field"><span>llama-server executable path</span><input value={executablePath} onChange={(event) => setExecutablePath(event.target.value)} placeholder="Full path to llama-server / llama-server.exe" spellCheck={false} /></label>
-              <label className="path-field"><span>GGUF model file path</span><input value={modelPath} onChange={(event) => setModelPath(event.target.value)} placeholder="Full path to your .gguf model file" spellCheck={false} /></label>
+              <div className="path-field"><label htmlFor="server-path">llama-server executable</label><div className="path-input-row"><input id="server-path" value={executablePath} onChange={(event) => setExecutablePath(event.target.value)} placeholder="Choose the llama-server file…" spellCheck={false} /><button type="button" className="browse-button" onClick={browseForExecutable}>Browse</button></div></div>
+              <div className="path-field"><label htmlFor="model-path">GGUF model file</label><div className="path-input-row"><input id="model-path" value={modelPath} onChange={(event) => setModelPath(event.target.value)} placeholder="Choose a .gguf model…" spellCheck={false} /><button type="button" className="browse-button" onClick={browseForModel}>Browse</button></div></div>
               <div className="runtime-actions"><button className="primary-action" onClick={startLocalRuntime} disabled={runtimeBusy || runtimeStatus.status === "ready"}>{runtimeBusy ? "Please wait…" : "Start local engine"}</button><button className="secondary-action" onClick={stopLocalRuntime} disabled={runtimeBusy || runtimeStatus.status === "notInstalled" || runtimeStatus.status === "stopped"}>Stop engine</button></div>
               {runtimeError && <p className="runtime-error" role="alert">{runtimeError}</p>}
               <p className="settings-footnote">Nothing is downloaded automatically. You must already have a compatible llama.cpp server executable and GGUF model. The engine listens only on this device (127.0.0.1).</p>

@@ -5,7 +5,7 @@ mod runtime;
 mod runtime_manager;
 
 use tauri::{ipc::Channel, State};
-use runtime::{GenerationRequest, RuntimeConfig};
+use runtime::{ConversationMessage, GenerationRequest, RuntimeConfig};
 use runtime_manager::{RuntimeManager, RuntimeStatusSnapshot};
 
 #[tauri::command]
@@ -48,6 +48,7 @@ async fn start_local_runtime(
 async fn generate_local_response(
     manager: State<'_, RuntimeManager>,
     prompt: String,
+    history: Vec<ConversationMessage>,
     max_tokens: u32,
     temperature: f32,
     top_p: f32,
@@ -55,7 +56,7 @@ async fn generate_local_response(
 ) -> Result<(), String> {
     let manager = manager.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
-        manager.generate_with_callback(GenerationRequest { prompt, max_tokens, temperature, top_p }, |delta| {
+        manager.generate_with_callback(GenerationRequest { prompt, history, max_tokens, temperature, top_p }, |delta| {
             let _ = on_delta.send(delta.to_owned());
         })
     })

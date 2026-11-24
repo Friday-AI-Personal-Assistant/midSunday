@@ -7,6 +7,7 @@
 
 use std::net::IpAddr;
 use std::path::Path;
+use serde::Deserialize;
 
 /// Runtime implementation selected by the application.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -74,10 +75,19 @@ impl RuntimeConfig {
     }
 }
 
+/// A prior user or assistant turn supplied as context for the next response.
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum ConversationRole { User, Assistant }
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
+pub struct ConversationMessage { pub role: ConversationRole, pub content: String }
+
 /// A bounded request passed from the application coordinator to a runtime.
 #[derive(Clone, Debug, PartialEq)]
 pub struct GenerationRequest {
     pub prompt: String,
+    pub history: Vec<ConversationMessage>,
     pub max_tokens: u32,
     pub temperature: f32,
     pub top_p: f32,
@@ -88,6 +98,13 @@ impl GenerationRequest {
         if self.prompt.trim().is_empty() {
             return Err(GenerationRequestError::EmptyPrompt);
         }
+        if self.history.len() > 64 { return Err(GenerationRequestError::TooManyHistoryMessages); }
+        let mut history_bytes = 0usize;
+        for message in &self.history {
+            if message.content.trim().is_empty() || message.content.len() > 32_768 { return Err(GenerationRequestError::InvalidHistoryMessage); }
+            history_bytes = history_bytes.saturating_add(message.content.len());
+        }
+        if history_bytes > 131_072 { return Err(GenerationRequestError::HistoryTooLarge); }
         if self.max_tokens == 0 || self.max_tokens > 8_192 {
             return Err(GenerationRequestError::InvalidTokenLimit);
         }
@@ -107,6 +124,9 @@ pub enum GenerationRequestError {
     InvalidTokenLimit,
     InvalidTemperature,
     InvalidTopP,
+    TooManyHistoryMessages,
+    InvalidHistoryMessage,
+    HistoryTooLarge,
 }
 
 /// Errors exposed by a concrete runtime adapter.
@@ -258,6 +278,7 @@ mod tests {
 
     fn valid_request() -> GenerationRequest {
         GenerationRequest {
+            history: Vec::new(),
             prompt: "Hello, midSunday.".to_owned(),
             max_tokens: 256,
             temperature: 0.7,
@@ -305,6 +326,21 @@ mod tests {
         let mut request = valid_request();
         request.top_p = 1.1;
         assert_eq!(request.validate(), Err(GenerationRequestError::InvalidTopP));
+    }
+
+
+    #[test]
+    fn generation_history_is_bounded() {
+        let mut request = valid_request();
+        request.history = (0..65).map(|_| ConversationMessage { role: ConversationRole::User, content: "hi".to_owned() }).collect();
+        assert_eq!(request.validate(), Err(GenerationRequestError::TooManyHistoryMessages));
+    }
+
+    #[test]
+    fn empty_history_message_is_rejected() {
+        let mut request = valid_request();
+        request.history.push(ConversationMessage { role: ConversationRole::Assistant, content: "  ".to_owned() });
+        assert_eq!(request.validate(), Err(GenerationRequestError::InvalidHistoryMessage));
     }
 
     #[test]
