@@ -411,6 +411,43 @@ mod tests {
     }
 
     #[test]
+    fn cancellation_closes_the_local_http_connection() {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let server = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let _ = read_request(&mut stream);
+            stream.set_read_timeout(Some(Duration::from_secs(3))).unwrap();
+            let headers = concat!(
+                "HTTP/1.1 200 OK\r\n",
+                "Content-Type: text/event-stream\r\n",
+                "Transfer-Encoding: chunked\r\n",
+                "Connection: keep-alive\r\n\r\n"
+            );
+            stream.write_all(headers.as_bytes()).unwrap();
+            let event = "data: {\"choices\":[{\"delta\":{\"content\":\"first\"}}]}\n\n";
+            write!(stream, "{:X}\r\n{}\r\n", event.len(), event).unwrap();
+            stream.flush().unwrap();
+            let mut probe = [0_u8; 1];
+            let count = stream.read(&mut probe).expect("read disconnect");
+            assert_eq!(count, 0, "client should close the response connection");
+        });
+
+        let client = LlamaHttpClient::new(&config(port), Duration::from_secs(2)).unwrap();
+        let request = GenerationRequest {
+            prompt: "Stop after the first token.".to_owned(),
+            max_tokens: 64,
+            temperature: 0.7,
+            top_p: 0.9,
+        };
+        let cancellation = GenerationCancellation::default();
+        let signal = cancellation.clone();
+        let result = client.generate_streaming(&request, &cancellation, |_| signal.cancel());
+        assert_eq!(result, Err(LlamaClientError::Cancelled));
+        server.join().unwrap();
+    }
+
+    #[test]
     fn already_cancelled_stream_does_not_send_a_request() {
         let client = LlamaHttpClient::new(&RuntimeConfig::default(), Duration::from_millis(100)).unwrap();
         let request = GenerationRequest {

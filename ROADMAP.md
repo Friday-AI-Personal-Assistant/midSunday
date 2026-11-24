@@ -528,7 +528,7 @@ This repository is the durable source of truth. ChatGPT conversations are workin
 
 ## 11. Current status and immediate next actions
 
-**Current stage:** Phase 3 — Engineering foundation and desktop shell (first interactive workspace UI implemented; automatic Windows, Linux, and macOS CI workflows are configured for pushes to main and pull requests; the latest streaming/cancellation build is implemented, but the three-platform Rust test run is currently failing to compile; the shared dependency and Urdu test-syntax fixes are being applied). Phase 1 feasibility research continues in parallel.
+**Current stage:** Phase 3 — Engineering foundation and desktop shell. The interactive workspace UI, managed local llama.cpp process supervisor, loopback HTTP client, readiness polling, streaming generation, and cooperative cancellation are implemented as backend prototypes. Run #31 passed the frontend build, Rust tests, and packaging checks on Windows, Linux, and macOS. Controlled crash/shutdown and cancellation-disconnect tests are the current verification batch. Phase 1 feasibility research continues in parallel.
 
 **Completed:**
 - [x] Product name selected: midSunday.
@@ -657,16 +657,18 @@ The HTTP client is local-only and uses the llama.cpp health and chat-completion 
 
 ### 2026-11-24 — Streaming generation and cancellation milestone
 
-**CI correction:** Runs #27, #28, and #29 all reached the Rust test step and failed on the same shared compile errors: `serde_json` was used without a direct dependency declaration, and the Urdu Unicode test used a non-ASCII raw byte string. The fix adds the direct dependency and tests UTF-8 bytes from a normal Rust string. The milestone remains unverified until all three platform jobs pass.
-
+**CI correction:** Runs #27, #28, and #29 exposed a missing direct `serde_json` dependency and an invalid non-ASCII raw byte-string test. Both were corrected; Run #31 then passed all three platform jobs.
 
 - [x] Add server-sent-event streaming for local chat completions.
 - [x] Add a cloneable cancellation signal that can be triggered from another thread.
 - [x] Stop delivering deltas after cancellation and drop the local HTTP response stream.
 - [x] Return the runtime lifecycle to Ready after a cancelled request; mark it Failed on other communication errors.
 - [x] Add mock-server tests for streaming deltas, cancellation between events, and cancellation before any request is sent.
-- [ ] Verify this milestone with Windows, Linux, and macOS CI.
-- [ ] Confirm llama.cpp server disconnect handling stops CPU/GPU generation promptly under real workloads.
-- [ ] Add end-to-end tests with a controlled local server and child-process failure/restart scenarios.
+- [x] Verify this milestone with Windows, Linux, and macOS CI (Run #31 passed all three jobs).
+- [x] Add controlled child-process tests for unexpected exit detection, stop/wait cleanup, and idempotent shutdown.
+- [x] Add a controlled streaming-server test proving cancellation closes the client HTTP connection.
+- [ ] Verify that the actual llama.cpp server promptly stops CPU/GPU generation after client disconnect under real workloads.
+- [ ] Add a managed-session restart/recovery API with explicit state and bounded restart policy.
+- [ ] Connect the runtime coordinator to Tauri commands only after lifecycle and cancellation behaviour are verified.
 
-Cancellation is cooperative at the HTTP-stream boundary: midSunday closes its local response stream and stops forwarding tokens. The server's speed in noticing the disconnect and stopping its internal computation must still be verified. No external service is involved, and no model or server binary is downloaded. The desktop UI remains unconnected.
+Cancellation is verified at the client transport boundary: the test server observes the client connection close after cancellation. This does not yet prove that llama.cpp promptly stops its internal CPU/GPU computation. Controlled child-process tests cover exit detection and safe shutdown; automatic session restart is not implemented. No external service is involved, and no model or server binary is downloaded. The desktop UI remains unconnected.

@@ -66,8 +66,17 @@ impl LlamaServerProcess {
             match child.try_wait() {
                 Ok(Some(_)) => {}
                 Ok(None) => {
-                    child.kill()?;
-                    let _ = child.wait()?;
+                    if let Err(kill_error) = child.kill() {
+                        // The process may have exited between try_wait and kill.
+                        // Re-check so that an already-exited child is still reaped.
+                        match child.try_wait() {
+                            Ok(Some(_)) => {}
+                            Ok(None) => return Err(kill_error),
+                            Err(status_error) => return Err(status_error),
+                        }
+                    } else {
+                        let _ = child.wait()?;
+                    }
                 }
                 Err(error) => {
                     // If status inspection fails, still attempt to terminate
@@ -119,6 +128,55 @@ fn build_server_arguments(config: &RuntimeConfig, model: &Path) -> Vec<OsString>
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::thread;
+    use std::time::Duration;
+
+    // Also launched as a child test process by the supervisor tests.
+    #[test]
+    fn controlled_child_process_fixture() {
+        match std::env::var("MIDSUNDAY_TEST_CHILD_MODE").as_deref() {
+            Ok("sleep") => thread::sleep(Duration::from_secs(30)),
+            Ok("exit") => {}
+            _ => {}
+        }
+    }
+
+    fn spawn_test_child(mode: &str) -> Child {
+        Command::new(std::env::current_exe().expect("test executable path"))
+            .arg("--exact")
+            .arg("llama_process::tests::controlled_child_process_fixture")
+            .arg("--nocapture")
+            .env("MIDSUNDAY_TEST_CHILD_MODE", mode)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("spawn controlled child")
+    }
+
+    #[test]
+    fn supervisor_detects_a_child_that_exits_unexpectedly() {
+        let child = spawn_test_child("exit");
+        let mut process = LlamaServerProcess { child: Some(child) };
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        loop {
+            if !process.is_running().expect("inspect child") { break; }
+            assert!(std::time::Instant::now() < deadline, "child did not exit in time");
+            thread::sleep(Duration::from_millis(10));
+        }
+        assert!(!process.is_running().expect("inspect exited child again"));
+        process.stop().expect("reap already-exited child");
+    }
+
+    #[test]
+    fn supervisor_stop_is_idempotent_and_reaps_child() {
+        let child = spawn_test_child("sleep");
+        let mut process = LlamaServerProcess { child: Some(child) };
+        assert!(process.is_running().expect("child should be running"));
+        process.stop().expect("stop child");
+        assert!(!process.is_running().expect("stopped process"));
+        process.stop().expect("second stop is harmless");
+    }
 
     #[test]
     fn arguments_bind_only_to_loopback_and_use_explicit_model_path() {
