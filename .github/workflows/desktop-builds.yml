@@ -104,6 +104,10 @@ jobs:
         working-directory: prototype/desktop-shell
         run: npm run build
 
+      - name: Test the same Rust core on this platform
+        working-directory: prototype/desktop-shell
+        run: cargo test --manifest-path src-tauri/Cargo.toml --lib
+
       - name: Package midSunday for this platform
         working-directory: prototype/desktop-shell
         shell: bash
