@@ -11,7 +11,7 @@ pub struct ConversationSummary {
     pub updated_at: i64,
 }
 
-#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct StoredMessage {
     pub id: i64,
@@ -266,10 +266,12 @@ impl ConversationStore {
                         "SELECT role, content, created_at FROM conversation_messages
                          WHERE conversation_id = ?1 ORDER BY id ASC"
                     ).map_err(|error| error.to_string())?;
-                    statement.query_map(params![existing_id], |row| Ok((
+                    let rows = statement.query_map(params![existing_id], |row| Ok((
                         row.get::<_, String>(0)?, row.get::<_, String>(1)?, row.get::<_, i64>(2)?
-                    ))).map_err(|error| error.to_string())?
-                    .collect::<Result<Vec<_>, _>>().map_err(|error| error.to_string())?
+                    ))).map_err(|error| error.to_string())?;
+                    let collected = rows.collect::<Result<Vec<_>, _>>()
+                        .map_err(|error| error.to_string())?;
+                    collected
                 };
                 let imported_messages: Vec<(String, String, i64)> = item.messages.iter()
                     .map(|message| (message.role.clone(), message.content.clone(), message.created_at))
