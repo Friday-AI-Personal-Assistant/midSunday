@@ -38,7 +38,7 @@ The following reflect decisions and priorities already expressed by the product 
 - Product name: **midSunday** (exact casing).
 - Product descriptor: **AI Personal Companion**.
 - Independent product and repository, separate from FRIDAY.
-- Initial target platform: Windows. Linux and macOS are later targets.
+- Cross-platform target: Windows, Linux, and macOS, using one shared application codebase and separate native builds. Windows remains the first feature and debugging priority.
 - Offline/local operation is a central product requirement, not a marketing afterthought.
 - Local chat, voice, memory, and carefully controlled PC interaction are intended core capabilities.
 - Online capabilities, such as web, Google, and YouTube search, naturally require an internet connection.
@@ -73,15 +73,15 @@ Build in vertical slices: each milestone should produce something testable. Do n
 ### Release stages
 
 - **R0 — Product foundation:** Requirements, architecture, risk register, licensing policy, and recovery documentation.
-- **R1 — Desktop shell:** Installable Windows application with a polished, responsive interface and settings.
+- **R1 — Desktop shell:** Installable Windows application first, with Linux and macOS builds maintained in parallel where practical.
 - **R2 — Offline text companion:** Local model integration, basic chat, conversation history, and resource controls.
 - **R3 — Local memory:** User-controlled persistent memory, inspect/edit/delete/export, and privacy controls.
 - **R4 — Voice companion:** Speech input/output, push-to-talk, interruption, device selection, and language testing.
 - **R5 — Personalities and characters:** Character profiles, persona settings, visual identity, and customisation.
 - **R6 — Useful assistant tools:** Safe allow-listed desktop actions, reminders, file assistance, and browser-based online search.
 - **R7 — Reliability and public beta:** Installer, updates, recovery, security review, accessibility, telemetry policy, and beta testing.
-- **R8 — Stable Windows release:** Release process, documentation, support policy, and commercial readiness.
-- **R9 — Expansion:** Linux/macOS, optional integrations, additional models/languages, and advanced character presentation.
+- **R8 — Stable cross-platform release:** Release process, documentation, support policy, and commercial readiness for validated platforms.
+- **R9 — Expansion:** Additional models/languages, optional integrations, and advanced character presentation.
 
 Release numbers are planning labels, not promises or dates. A stage is not complete merely because its code exists; its exit criteria must pass.
 
@@ -119,7 +119,7 @@ Release numbers are planning labels, not promises or dates. A stage is not compl
 
 - [x] Complete desk comparison of Tauri 2 and Electron for Windows-first distribution, security, packaging, accessibility considerations, and maintenance; see [DESKTOP-FRAMEWORK-EVALUATION.md](docs/DESKTOP-FRAMEWORK-EVALUATION.md).
 - [x] Scaffold the first minimal Tauri 2 + Rust + React/TypeScript desktop shell, including a harmless Rust status command and a minimal capability file.
-- [x] Add a manual-only GitHub Actions Windows build workflow. It was manually attempted twice; both attempts stopped during setup because the artifact-upload action was deprecated. The action pin is now updated to v4; a clean build attempt remains pending.
+- [x] Add manual-only GitHub Actions workflows for Windows, Linux, and macOS. Each uses a standard hosted runner and uploads its platform package plus generated npm lockfile when available. All builds remain pending validation.
 - [ ] Install dependencies, build, and run the shell on Windows; measure installer size, startup, idle memory, accessibility, and WebView2 behaviour before approving the production framework.
 - [ ] Inspect FRIDAY's repository and document reusable patterns, limitations, and code that must remain separate.
 - [ ] Compare local LLM runtimes and their commercial distribution implications.
@@ -395,8 +395,8 @@ Release numbers are planning labels, not promises or dates. A stage is not compl
 
 **Goal:** Expand carefully without undermining the offline-first product.
 
-- [ ] Evaluate Linux support.
-- [ ] Evaluate macOS support.
+- [ ] Expand Linux distribution coverage and validate supported package formats.
+- [ ] Expand macOS architecture coverage (Apple Silicon and Intel where feasible), signing/notarisation, and release distribution.
 - [ ] Improve Urdu and additional language support based on real user testing.
 - [ ] Add more model choices after licence and performance review.
 - [ ] Add optional provider/BYOK integrations behind clear settings.
@@ -528,22 +528,22 @@ This repository is the durable source of truth. ChatGPT conversations are workin
 
 ## 11. Current status and immediate next actions
 
-**Current stage:** Phase 3 — Engineering foundation and desktop shell (first interactive workspace UI implemented; Windows compilation and runtime validation pending). Phase 1 feasibility research continues in parallel.
+**Current stage:** Phase 3 — Engineering foundation and desktop shell (first interactive workspace UI implemented; manual Windows, Linux, and macOS build workflows are configured; platform builds and runtime validation pending). Phase 1 feasibility research continues in parallel.
 
 **Completed:**
 - [x] Product name selected: midSunday.
 - [x] Create the first interactive workspace UI prototype with conversation view, local-session composer, companion selection, settings screens, responsive layout, and Rust-core status indicator. This is UI-only; no AI response, persistent storage, voice, or hardware detection is claimed.
 - [x] Independent private GitHub repository created under the Friday organisation.
-- [x] Windows-first direction established.
+- [x] Cross-platform direction established: Windows, Linux, and macOS builds; Windows remains the first priority.
 - [x] Offline-first, no-hidden-cost principles established.
 - [x] Core companion, local voice, memory, personalities, and safe PC interaction identified as intended product areas.
 - [x] Initial complete roadmap drafted.
 
 **Next actions:**
 1. Generate and commit a reviewed npm lockfile, then use it for reproducible dependency installation.
-2. Run the corrected manual Windows build on the standard hosted runner; keep the workflow manual-only and confirm the public-repository standard-runner cost rules before each workflow change.
-3. Fix any TypeScript, Rust, Tauri, or packaging issues exposed by the build; retrieve and inspect the installer artifact.
-4. Test the app on a real Windows PC when one is available; do not treat a successful CI build as a substitute for runtime testing.
+2. Run the manual Windows build first, then Linux and macOS builds on their standard hosted runners; all workflows remain manual-only.
+3. Fix platform-specific TypeScript, Rust, Tauri, or packaging issues exposed by CI; retrieve and inspect each produced artifact.
+4. Test the app on real Windows, Linux, and macOS devices when available; CI compilation is not a substitute for runtime testing.
 5. Continue the read-only FRIDAY review and record reusable patterns without modifying FRIDAY.
 6. Continue local-model, Pakistani Urdu/Roman Urdu speech, hardware-intelligence, and licensing research; no model or speech engine is selected until evidence supports it.
 
