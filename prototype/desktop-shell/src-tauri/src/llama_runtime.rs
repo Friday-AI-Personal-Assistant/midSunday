@@ -368,7 +368,7 @@ mod recovery_integration_tests {
             let body = r#"{"status":"ok"}"#;
             write!(
                 stream,
-                "HTTP/1.1 200 OK\\r\\nContent-Type: application/json\\r\\nContent-Length: {}\\r\\nConnection: close\\r\\n\\r\\n{}",
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
                 body.len(),
                 body
             ).unwrap();
@@ -503,8 +503,7 @@ mod recovery_integration_tests {
 
     #[test]
     fn recovery_is_rejected_while_session_is_ready() {
-        let (port, _) = ready_server();
-        let (mut session, _) = failed_session(port);
+        let (mut session, _) = failed_session(1);
         session.lifecycle.transition(RuntimeStatus::Stopped).unwrap();
         session.lifecycle.transition(RuntimeStatus::Starting).unwrap();
         session.lifecycle.transition(RuntimeStatus::Ready).unwrap();
