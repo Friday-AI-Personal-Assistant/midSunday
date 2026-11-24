@@ -1,4 +1,5 @@
 mod conversation_store;
+mod engine_settings;
 mod llama_client;
 mod llama_process;
 mod llama_runtime;
@@ -9,6 +10,7 @@ use tauri::{ipc::Channel, State};
 use runtime::{ConversationMessage, GenerationRequest, RuntimeConfig};
 use runtime_manager::{RuntimeManager, RuntimeStatusSnapshot};
 use conversation_store::{ConversationStore, ConversationSummary, ImportResult, StoredMessage};
+use engine_settings::{EngineSettings, EngineSettingsStore};
 use tauri::Manager;
 
 
@@ -67,6 +69,17 @@ fn get_app_status() -> &'static str {
 }
 
 #[tauri::command]
+fn get_engine_settings(settings: State<'_, EngineSettingsStore>) -> Result<EngineSettings, String> {
+    settings.get()
+}
+
+#[tauri::command]
+fn save_engine_settings(settings: State<'_, EngineSettingsStore>, value: EngineSettings) -> Result<EngineSettings, String> {
+    settings.save(value.clone())?;
+    Ok(value)
+}
+
+#[tauri::command]
 fn get_runtime_status(manager: State<'_, RuntimeManager>) -> Result<RuntimeStatusSnapshot, String> {
     manager.snapshot()
 }
@@ -74,6 +87,7 @@ fn get_runtime_status(manager: State<'_, RuntimeManager>) -> Result<RuntimeStatu
 #[tauri::command]
 async fn start_local_runtime(
     manager: State<'_, RuntimeManager>,
+    settings: State<'_, EngineSettingsStore>,
     executable_path: String,
     model_path: String,
     host: String,
@@ -82,7 +96,9 @@ async fn start_local_runtime(
     cpu_threads: Option<u16>,
 ) -> Result<RuntimeStatusSnapshot, String> {
     let manager = manager.inner().clone();
+    let settings = settings.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
+        settings.save(EngineSettings { executable_path: executable_path.clone(), model_path: model_path.clone(), context_tokens, cpu_threads })?;
         manager.start(
             RuntimeConfig { host, port, context_tokens, cpu_threads },
             &executable_path,
@@ -163,7 +179,10 @@ pub fn run() {
             let database_path = data_dir.join("midsunday.sqlite3");
             let store = ConversationStore::open(&database_path)
                 .map_err(|error| std::io::Error::new(std::io::ErrorKind::Other, error))?;
+            let settings = EngineSettingsStore::open(&data_dir.join("engine-settings.json"))
+                .map_err(|error| std::io::Error::new(std::io::ErrorKind::Other, error))?;
             app.manage(store);
+            app.manage(settings);
             Ok(())
         })
         .plugin(tauri_plugin_dialog::init())
@@ -179,6 +198,8 @@ pub fn run() {
             export_conversations,
             import_conversations,
             clear_conversations,
+            get_engine_settings,
+            save_engine_settings,
             get_runtime_status,
             start_local_runtime,
             generate_local_response,

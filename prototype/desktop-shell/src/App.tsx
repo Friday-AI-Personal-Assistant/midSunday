@@ -6,6 +6,7 @@ type BackendState = "checking" | "connected" | "error";
 type Section = "chat" | "characters" | "settings";
 type Message = { id: number; role: "user" | "assistant" | "system"; text: string };
 type RuntimeStatusSnapshot = { status: string; detail: string | null };
+type EngineSettings = { executablePath: string; modelPath: string; contextTokens: number; cpuThreads: number | null };
 type ConversationSummary = { id: number; title: string; createdAt: number; updatedAt: number };
 type StoredMessage = { id: number; conversationId: number; role: "user" | "assistant"; content: string; createdAt: number };
 
@@ -59,6 +60,8 @@ export default function App() {
   const [runtimeError, setRuntimeError] = useState("");
   const [executablePath, setExecutablePath] = useState("");
   const [modelPath, setModelPath] = useState("");
+  const [contextTokens, setContextTokens] = useState("2048");
+  const [cpuThreads, setCpuThreads] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [importBusy, setImportBusy] = useState(false);
   const importFileRef = useRef<HTMLInputElement>(null);
@@ -93,6 +96,15 @@ export default function App() {
         setMessages(saved.map((message) => ({ id: message.id, role: message.role, text: message.content })));
       })
       .catch(() => { if (active) setRuntimeError("Could not load local conversations."); });
+    invoke<EngineSettings>("get_engine_settings")
+      .then((settings) => {
+        if (!active) return;
+        setExecutablePath(settings.executablePath);
+        setModelPath(settings.modelPath);
+        setContextTokens(String(settings.contextTokens));
+        setCpuThreads(settings.cpuThreads === null ? "" : String(settings.cpuThreads));
+      })
+      .catch(() => { if (active) setRuntimeError("Could not load saved local engine settings."); });
     refreshRuntimeStatus();
     const statusTimer = window.setInterval(refreshRuntimeStatus, 1500);
     return () => { active = false; window.clearInterval(statusTimer); };
@@ -309,6 +321,16 @@ export default function App() {
       setRuntimeError("Enter both the llama-server executable path and the GGUF model path.");
       return;
     }
+    const parsedContext = Number(contextTokens);
+    const parsedThreads = cpuThreads.trim() === "" ? null : Number(cpuThreads);
+    if (!Number.isInteger(parsedContext) || parsedContext < 512 || parsedContext > 32768) {
+      setRuntimeError("Context length must be a whole number from 512 to 32,768.");
+      return;
+    }
+    if (parsedThreads !== null && (!Number.isInteger(parsedThreads) || parsedThreads < 1 || parsedThreads > 256)) {
+      setRuntimeError("CPU threads must be a whole number from 1 to 256, or left blank for automatic.");
+      return;
+    }
     setRuntimeBusy(true);
     setRuntimeError("");
     try {
@@ -317,8 +339,8 @@ export default function App() {
         modelPath: modelPath.trim(),
         host: "127.0.0.1",
         port: 9931,
-        contextTokens: 2048,
-        cpuThreads: null,
+        contextTokens: parsedContext,
+        cpuThreads: parsedThreads,
       });
       setRuntimeStatus(snapshot);
     } catch (error) {
@@ -451,6 +473,8 @@ export default function App() {
               <div className="runtime-status-line"><span className={runtimeStatus.status === "ready" ? "core-dot good" : runtimeStatus.status === "failed" ? "core-dot bad" : "core-dot"} />Engine status: <strong>{runtimeStatus.status}</strong></div>
               <div className="path-field"><label htmlFor="server-path">llama-server executable</label><div className="path-input-row"><input id="server-path" value={executablePath} onChange={(event) => setExecutablePath(event.target.value)} placeholder="Choose the llama-server file…" spellCheck={false} /><button type="button" className="browse-button" onClick={browseForExecutable}>Browse</button></div></div>
               <div className="path-field"><label htmlFor="model-path">GGUF model file</label><div className="path-input-row"><input id="model-path" value={modelPath} onChange={(event) => setModelPath(event.target.value)} placeholder="Choose a .gguf model…" spellCheck={false} /><button type="button" className="browse-button" onClick={browseForModel}>Browse</button></div></div>
+              <div className="path-field"><label htmlFor="context-tokens">Context length (tokens)</label><input id="context-tokens" type="number" min="512" max="32768" step="256" value={contextTokens} onChange={(event) => setContextTokens(event.target.value)} disabled={runtimeBusy || runtimeStatus.status === "ready"} /></div>
+              <div className="path-field"><label htmlFor="cpu-threads">CPU threads (blank = automatic)</label><input id="cpu-threads" type="number" min="1" max="256" step="1" value={cpuThreads} onChange={(event) => setCpuThreads(event.target.value)} placeholder="Automatic" disabled={runtimeBusy || runtimeStatus.status === "ready"} /></div>
               <div className="runtime-actions"><button className="primary-action" onClick={startLocalRuntime} disabled={runtimeBusy || runtimeStatus.status === "ready"}>{runtimeBusy ? "Please wait…" : "Start local engine"}</button><button className="secondary-action" onClick={stopLocalRuntime} disabled={runtimeBusy || runtimeStatus.status === "notInstalled" || runtimeStatus.status === "stopped"}>Stop engine</button></div>
               {runtimeError && <p className="runtime-error" role="alert">{runtimeError}</p>}
               <p className="settings-footnote">Nothing is downloaded automatically. You must already have a compatible llama.cpp server executable and GGUF model. The engine listens only on this device (127.0.0.1).</p>

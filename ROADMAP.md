@@ -204,8 +204,10 @@ Release numbers are planning labels, not promises or dates. A stage is not compl
 - [x] Add a versioned JSON conversation export and a clear-all-history control, separate from the future memory store.
 - [x] Add validated version-1 JSON import with size/count/content checks, normalised titles, new local identifiers, exact-duplicate detection, and transactional rollback; existing conversations are never overwritten. Full database restore and backup/restore across future schema versions remain pending.
 - [x] Make conversation export a consistent SQLite read snapshot and add import/export round-trip plus malformed-title/timestamp regression tests.
+- [x] Add explicit local engine start/stop lifecycle and status reporting through the runtime manager; the UI can start, stop, cancel, and inspect the active state. (Runtime memory/CPU telemetry remains future work.)
+- [x] Persist the selected llama-server path, GGUF model path, context length, and optional CPU-thread setting in a separate local settings file; validate values and reload them on app startup.
 - [ ] Add model load/unload lifecycle and explicit resource status.
-- [ ] Add low-memory safeguards and graceful fallback.
+- [ ] Add low-memory safeguards and graceful fallback; configurable context/thread controls are now available but are not a substitute for measured hardware-aware limits.
 - [ ] Ensure no internet connection is required after model assets are available.
 - [ ] Verify that no prompt or conversation is sent externally by default.
 - [ ] Test long sessions, malformed input, model failures, and app restarts.
