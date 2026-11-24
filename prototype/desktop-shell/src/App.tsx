@@ -1,9 +1,10 @@
 import { useEffect, useState, type FormEvent, type KeyboardEvent } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { Channel, invoke } from "@tauri-apps/api/core";
 
 type BackendState = "checking" | "connected" | "error";
 type Section = "chat" | "characters" | "settings";
-type Message = { id: number; role: "user" | "system"; text: string };
+type Message = { id: number; role: "user" | "assistant" | "system"; text: string };
+type RuntimeStatusSnapshot = { status: string; detail: string | null };
 
 const personalities = [
   { name: "Best friend", detail: "Easygoing, honest and supportive", mark: "B" },
@@ -22,6 +23,12 @@ export default function App() {
   const [conversationName, setConversationName] = useState("A fresh start");
   const [memoryEnabled, setMemoryEnabled] = useState(false);
   const [startWithWindows, setStartWithWindows] = useState(false);
+  const [runtimeStatus, setRuntimeStatus] = useState<RuntimeStatusSnapshot>({ status: "notInstalled", detail: null });
+  const [runtimeBusy, setRuntimeBusy] = useState(false);
+  const [runtimeError, setRuntimeError] = useState("");
+  const [executablePath, setExecutablePath] = useState("");
+  const [modelPath, setModelPath] = useState("");
+  const [isGenerating, setIsGenerating] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -36,7 +43,14 @@ export default function App() {
         setBackendMessage("The local Rust core could not be reached.");
         setBackendState("error");
       });
-    return () => { active = false; };
+    const refreshRuntimeStatus = () => {
+      invoke<RuntimeStatusSnapshot>("get_runtime_status")
+        .then((snapshot) => { if (active) setRuntimeStatus(snapshot); })
+        .catch(() => { if (active) setRuntimeError("Could not read local engine status."); });
+    };
+    refreshRuntimeStatus();
+    const statusTimer = window.setInterval(refreshRuntimeStatus, 1500);
+    return () => { active = false; window.clearInterval(statusTimer); };
   }, []);
 
   function startNewChat() {
@@ -46,13 +60,100 @@ export default function App() {
     setSection("chat");
   }
 
-  function sendMessage(event: FormEvent<HTMLFormElement>) {
+  async function sendMessage(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const text = draft.trim();
-    if (!text) return;
-    setMessages((current) => [...current, { id: Date.now(), role: "user", text }]);
+    if (!text || isGenerating) return;
+    if (runtimeStatus.status !== "ready") {
+      setRuntimeError("Start a local model from Settings before sending a message.");
+      return;
+    }
+
+    const userId = Date.now();
+    const assistantId = userId + 1;
+    setMessages((current) => [
+      ...current,
+      { id: userId, role: "user", text },
+      { id: assistantId, role: "assistant", text: "" },
+    ]);
     setConversationName(text.length > 28 ? text.slice(0, 28) + "…" : text);
     setDraft("");
+    setRuntimeError("");
+    setIsGenerating(true);
+
+    const channel = new Channel<string>();
+    channel.onmessage = (delta) => {
+      setMessages((current) => current.map((message) =>
+        message.id === assistantId ? { ...message, text: message.text + delta } : message
+      ));
+    };
+
+    try {
+      await invoke<string>("generate_local_response", {
+        prompt: text,
+        maxTokens: 512,
+        temperature: 0.7,
+        topP: 0.9,
+        onDelta: channel,
+      });
+    } catch (error) {
+      const detail = String(error);
+      setMessages((current) => current.map((message) =>
+        message.id === assistantId
+          ? { ...message, text: message.text || (detail.includes("cancel") ? "Generation stopped." : "I couldn't generate a response. Check the local engine status in Settings.") }
+          : message
+      ));
+      setRuntimeError(detail);
+    } finally {
+      setIsGenerating(false);
+    }
+  }
+
+  async function startLocalRuntime() {
+    if (!executablePath.trim() || !modelPath.trim()) {
+      setRuntimeError("Enter both the llama-server executable path and the GGUF model path.");
+      return;
+    }
+    setRuntimeBusy(true);
+    setRuntimeError("");
+    try {
+      const snapshot = await invoke<RuntimeStatusSnapshot>("start_local_runtime", {
+        executablePath: executablePath.trim(),
+        modelPath: modelPath.trim(),
+        host: "127.0.0.1",
+        port: 9931,
+        contextTokens: 2048,
+        cpuThreads: null,
+      });
+      setRuntimeStatus(snapshot);
+    } catch (error) {
+      setRuntimeError(String(error));
+      const snapshot = await invoke<RuntimeStatusSnapshot>("get_runtime_status").catch(() => null);
+      if (snapshot) setRuntimeStatus(snapshot);
+    } finally {
+      setRuntimeBusy(false);
+    }
+  }
+
+  async function stopLocalRuntime() {
+    setRuntimeBusy(true);
+    setRuntimeError("");
+    try {
+      const snapshot = await invoke<RuntimeStatusSnapshot>("stop_local_runtime");
+      setRuntimeStatus(snapshot);
+    } catch (error) {
+      setRuntimeError(String(error));
+    } finally {
+      setRuntimeBusy(false);
+    }
+  }
+
+  async function cancelGeneration() {
+    try {
+      await invoke<boolean>("cancel_local_generation");
+    } catch (error) {
+      setRuntimeError(String(error));
+    }
   }
 
   function handleComposerKey(event: KeyboardEvent<HTMLTextAreaElement>) {
@@ -119,9 +220,11 @@ export default function App() {
                 <div className="message-list" aria-live="polite">
                   <div className="date-divider"><span>THIS SESSION · NOT SAVED</span></div>
                   {messages.map((message) => (
-                    <div className="message-row user-message" key={message.id}><div className="message-avatar">Y</div><div className="message-bubble">{message.text}</div></div>
+                    <div className={`message-row ${message.role === "user" ? "user-message" : "assistant-message"}`} key={message.id}>
+                      <div className="message-avatar">{message.role === "user" ? "Y" : "m"}</div>
+                      <div className="message-bubble">{message.text || (isGenerating && message.role === "assistant" ? "Thinking…" : "")}</div>
+                    </div>
                   ))}
-                  <div className="prototype-note"><span>✧</span><div><strong>Your message is shown in this prototype.</strong><p>The local AI engine is not connected yet, so midSunday has not generated a reply. Messages currently remain only in this session and are cleared when the app closes.</p></div></div>
                 </div>
               )}
             </div>
@@ -129,9 +232,9 @@ export default function App() {
             <div className="composer-wrap">
               <form className="composer" onSubmit={sendMessage}>
                 <textarea value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={handleComposerKey} placeholder="Message your companion…" rows={2} aria-label="Message your companion" />
-                <div className="composer-tools"><div className="composer-hint"><span>↵</span> to send <span className="hint-divider">·</span> Shift + ↵ for a new line</div><div className="composer-actions"><span className="voice-disabled" title="Voice will be added in a later phase">◖ Voice</span><button className="send-button" type="submit" disabled={!draft.trim()} aria-label="Send message">↑</button></div></div>
+                <div className="composer-tools"><div className="composer-hint"><span>↵</span> to send <span className="hint-divider">·</span> Shift + ↵ for a new line</div><div className="composer-actions">{isGenerating ? <button className="stop-button" type="button" onClick={cancelGeneration}>Stop generating</button> : <><span className="voice-disabled" title="Voice will be added in a later phase">◖ Voice</span><button className="send-button" type="submit" disabled={!draft.trim() || runtimeStatus.status !== "ready"} aria-label="Send message">↑</button></>}</div></div>
               </form>
-              <p className="composer-disclaimer">Prototype workspace · No AI model or microphone is active</p>
+              <p className="composer-disclaimer">{runtimeStatus.status === "ready" ? "Local model connected · Messages stay in this session" : "Connect a local model in Settings to start chatting · No cloud service is used"}</p>
             </div>
           </div>
         )}
@@ -149,6 +252,14 @@ export default function App() {
         {section === "settings" && (
           <div className="page-content settings-page">
             <p className="eyebrow">YOUR CONTROL CENTRE</p><h1>Settings.</h1><p className="page-lead">Clear controls. No surprises.</p>
+            <section className="settings-section runtime-settings"><div className="settings-section-title"><div><h2>Local AI engine</h2><p>Connect an existing llama.cpp server executable and a GGUF model stored on this device.</p></div><span className="settings-symbol">◈</span></div>
+              <div className="runtime-status-line"><span className={runtimeStatus.status === "ready" ? "core-dot good" : runtimeStatus.status === "failed" ? "core-dot bad" : "core-dot"} />Engine status: <strong>{runtimeStatus.status}</strong></div>
+              <label className="path-field"><span>llama-server executable path</span><input value={executablePath} onChange={(event) => setExecutablePath(event.target.value)} placeholder="Full path to llama-server / llama-server.exe" spellCheck={false} /></label>
+              <label className="path-field"><span>GGUF model file path</span><input value={modelPath} onChange={(event) => setModelPath(event.target.value)} placeholder="Full path to your .gguf model file" spellCheck={false} /></label>
+              <div className="runtime-actions"><button className="primary-action" onClick={startLocalRuntime} disabled={runtimeBusy || runtimeStatus.status === "ready"}>{runtimeBusy ? "Please wait…" : "Start local engine"}</button><button className="secondary-action" onClick={stopLocalRuntime} disabled={runtimeBusy || runtimeStatus.status === "notInstalled" || runtimeStatus.status === "stopped"}>Stop engine</button></div>
+              {runtimeError && <p className="runtime-error" role="alert">{runtimeError}</p>}
+              <p className="settings-footnote">Nothing is downloaded automatically. You must already have a compatible llama.cpp server executable and GGUF model. The engine listens only on this device (127.0.0.1).</p>
+            </section>
             <section className="settings-section"><div className="settings-section-title"><div><h2>Privacy & memory</h2><p>Choose what midSunday may remember on this device.</p></div><span className="settings-symbol">⌑</span></div>
               <div className="setting-row"><div><strong>Local memory</strong><p>Allow the future memory system to keep useful details locally.</p></div><button className={memoryEnabled ? "toggle on" : "toggle"} role="switch" aria-checked={memoryEnabled} onClick={() => setMemoryEnabled(!memoryEnabled)}><i /></button></div>
               <div className="setting-row"><div><strong>Cloud connection</strong><p>Cloud features are not connected or enabled in this prototype.</p></div><span className="locked-label">OFF</span></div>
@@ -163,7 +274,7 @@ export default function App() {
 
         <footer className="statusbar">
           <div className="core-status"><span className={backendState === "connected" ? "core-dot good" : backendState === "error" ? "core-dot bad" : "core-dot"} />{statusLabel}</div>
-          <div className="statusbar-right"><span>AI engine <b>Not installed</b></span><span>Hardware <b>Not detected</b></span><span className="status-detail" title={backendMessage}>Rust foundation</span></div>
+          <div className="statusbar-right"><span>AI engine <b>{runtimeStatus.status === "ready" ? "Ready" : runtimeStatus.status}</b></span><span>Hardware <b>Not detected</b></span><span className="status-detail" title={backendMessage}>Rust foundation</span></div>
         </footer>
       </section>
     </main>

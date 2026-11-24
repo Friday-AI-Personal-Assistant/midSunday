@@ -99,9 +99,23 @@ impl RuntimeManager {
         }
     }
 
-    /// Generate a complete response using the cancellable streaming transport.
-    /// Deltas are accumulated here until the frontend gains its event stream.
+    /// Generate a complete response while forwarding each received text delta.
     pub fn generate(&self, request: GenerationRequest) -> Result<String, String> {
+        let mut response = String::new();
+        self.generate_with_callback(request, |delta| response.push_str(delta))?;
+        Ok(response)
+    }
+
+    /// Stream text deltas to the caller while preserving the same lifecycle,
+    /// serialization, and cancellation guarantees as complete-response calls.
+    pub fn generate_with_callback<F>(
+        &self,
+        request: GenerationRequest,
+        mut on_delta: F,
+    ) -> Result<(), String>
+    where
+        F: FnMut(&str),
+    {
         let _operation = self.inner.operation.lock()
             .map_err(|_| "Runtime operation lock is unavailable.".to_owned())?;
         let mut session = self.inner.session.lock()
@@ -115,9 +129,8 @@ impl RuntimeManager {
             Some(cancellation.clone());
         self.set_status(RuntimeStatus::Generating, None)?;
 
-        let mut response = String::new();
         let result = session.generate_streaming(&request, &cancellation, |delta| {
-            response.push_str(delta);
+            on_delta(delta);
         });
 
         if let Ok(mut active) = self.inner.active_cancellation.lock() {
@@ -126,8 +139,7 @@ impl RuntimeManager {
 
         match result {
             Ok(()) => {
-                self.set_status(session.status(), None)?;
-                Ok(response)
+                self.set_status(session.status(), None)
             }
             Err(RuntimeSessionError::Cancelled) => {
                 self.set_status(session.status(), Some("Generation cancelled.".to_owned()))?;

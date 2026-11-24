@@ -4,7 +4,7 @@ mod llama_runtime;
 mod runtime;
 mod runtime_manager;
 
-use tauri::State;
+use tauri::{ipc::Channel, State};
 use runtime::{GenerationRequest, RuntimeConfig};
 use runtime_manager::{RuntimeManager, RuntimeStatusSnapshot};
 
@@ -51,10 +51,13 @@ async fn generate_local_response(
     max_tokens: u32,
     temperature: f32,
     top_p: f32,
-) -> Result<String, String> {
+    on_delta: Channel<String>,
+) -> Result<(), String> {
     let manager = manager.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
-        manager.generate(GenerationRequest { prompt, max_tokens, temperature, top_p })
+        manager.generate_with_callback(GenerationRequest { prompt, max_tokens, temperature, top_p }, |delta| {
+            let _ = on_delta.send(delta.to_owned());
+        })
     })
     .await
     .map_err(|error| format!("Generation worker failed: {error}"))?

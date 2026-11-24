@@ -723,7 +723,23 @@ This is an application IPC foundation, not a user-ready model setup flow. The cu
 - [x] Route manager generation through the already-tested streaming transport and collect deltas until the UI event-stream integration is implemented.
 - [x] Make the runtime manager safely cloneable for worker tasks while keeping one shared process/session owner.
 - [x] Add tests for status visibility during a busy operation and immediate cancellation signalling.
-- [ ] Verify responsive commands and cancellation on Windows, Linux, and macOS CI.
-- [ ] Add frontend event delivery for streaming text and a visible Stop generating control.
+- [x] Verify responsive commands and cancellation on Windows, Linux, and macOS CI (Run #38 passed all three jobs).
+- [x] Add frontend event delivery for streaming text and a visible Stop generating control.
 
 Cancellation closes the local HTTP response stream. Whether the actual llama.cpp process stops its internal CPU/GPU work immediately remains server-dependent and requires real-engine testing. The frontend is still not connected to these commands; no model is bundled or downloaded.
+
+
+### 2026-11-24 — Frontend runtime connection and live chat streaming
+
+- [x] Poll the Rust runtime status from the desktop UI and display the real lifecycle state.
+- [x] Add a local-engine setup panel that accepts existing llama.cpp executable and GGUF model paths.
+- [x] Start and stop the local runtime through the Tauri command boundary.
+- [x] Forward streaming text deltas from the Rust runtime manager to the React chat through a Tauri IPC channel.
+- [x] Add a visible Stop generating action that signals the existing cancellation command.
+- [x] Keep generation disabled until the local runtime reports Ready.
+- [x] Preserve the no-download policy: paths must refer to files already present on the user's device.
+- [ ] Verify TypeScript compilation, frontend build, Rust tests, and desktop packaging on Windows, Linux, and macOS CI.
+- [ ] Test the complete UI-to-model path with a real user-installed llama.cpp server and a legally compatible GGUF model.
+- [ ] Add native file/folder selection after reviewing the minimal Tauri dialog-plugin dependency and permission surface.
+
+The frontend now has a real IPC path for local runtime setup, live generation deltas, cancellation, and lifecycle status. This does not mean a model is bundled or automatically installed. The user must provide an existing compatible server executable and GGUF model. Until a real engine/model is tested, end-to-end inference remains unverified. Conversation persistence, memory, voice, and hardware detection remain separate future milestones.

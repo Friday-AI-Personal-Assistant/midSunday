@@ -189,3 +189,20 @@ h1 { margin: 0; color: #eef5ef; font-size: clamp(25px, 3vw, 34px); font-weight: 
   .setting-row p { max-width: 220px; }
   .prototype-note { margin-left: 0; }
 }
+
+
+/* Local runtime connection and live generation controls */
+.assistant-message .message-avatar { background: #203a29; color: #b9edc4; }
+.stop-button, .secondary-action { min-height: 30px; padding: 0 12px; border: 1px solid rgba(220,160,140,.25); border-radius: 8px; background: rgba(180,95,75,.1); color: #e6b1a3; font-size: 10px; cursor: pointer; }
+.stop-button:hover, .secondary-action:hover { background: rgba(180,95,75,.18); }
+.runtime-settings { padding-bottom: 17px; }
+.runtime-status-line { display: flex; align-items: center; gap: 8px; padding: 11px 0 15px; color: #87988d; font-size: 10px; text-transform: capitalize; }
+.runtime-status-line strong { color: #cbd9ce; font-weight: 650; }
+.path-field { display: flex; flex-direction: column; gap: 7px; margin: 10px 0 13px; color: #aebfb2; font-size: 10px; }
+.path-field input { width: 100%; min-height: 38px; padding: 0 11px; border: 1px solid var(--line); border-radius: 8px; outline: 0; background: #111a14; color: #e1ece3; font: inherit; font-size: 10px; }
+.path-field input:focus { border-color: rgba(169,230,183,.45); }
+.path-field input::placeholder { color: #617268; }
+.runtime-actions { display: flex; flex-wrap: wrap; gap: 9px; margin-top: 15px; }
+.primary-action { min-height: 33px; padding: 0 13px; border: 0; border-radius: 8px; background: #a9e6b7; color: #142219; font-size: 10px; font-weight: 700; cursor: pointer; }
+.primary-action:disabled, .secondary-action:disabled { opacity: .45; cursor: not-allowed; }
+.runtime-error { margin: 12px 0 0; color: #e6a59b; font-size: 10px; line-height: 1.5; overflow-wrap: anywhere; }
