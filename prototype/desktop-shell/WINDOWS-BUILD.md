@@ -28,7 +28,7 @@ The workflow does not publish a release, deploy anything, upload source code els
 
 ## Current limitations
 
-- No build has been run yet.
+- The workflow was manually attempted twice, but both attempts failed during GitHub Actions setup before checkout or compilation because the pinned artifact-upload action v3 had been deprecated. The workflow now pins the official v4 action. No frontend, Rust, or installer build has completed.
 - A successful compile would not prove that the app has been tested on a user's PC.
 - The first build may expose missing configuration or dependency issues; fix those before treating the installer as test-ready.
 - The dependency install currently uses the package ranges in package.json; a committed lockfile should be generated and reviewed before repeatable release builds.
