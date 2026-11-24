@@ -15,8 +15,9 @@ type SavedMemory = { id: number; content: string; createdAt: number; updatedAt: 
 type UserProfile = { preferredName: string; useName: boolean };
 const DEFAULT_USER_PROFILE: UserProfile = { preferredName: "", useName: false };
 type AwarenessSettings = { enabled: boolean; learnConversations: boolean; learnSearches: boolean };
-type AwarenessItem = { id: number; content: string; category: string; sourceType: string; knowledgeType: string; confidence: number; createdAt: number; updatedAt: number };
+type AwarenessItem = { id: number; content: string; category: string; sourceType: string; knowledgeType: string; confidence: number; sourceRecordId: number | null; createdAt: number; updatedAt: number };
 type AwarenessHistoryEntry = { id: number; eventType: string; awarenessItemId: number | null; category: string | null; occurredAt: number };
+type AwarenessSuppression = { category: string | null; sourceType: string; createdAt: number };
 const DEFAULT_AWARENESS_SETTINGS: AwarenessSettings = { enabled: false, learnConversations: false, learnSearches: false };
 const AWARENESS_CATEGORIES = ["interests", "preferences", "communication", "projects", "goals", "other"];
 type CompanionProfile = { id: string; name: string; instructions: string };
@@ -113,6 +114,7 @@ export default function App() {
   const [awarenessNotice, setAwarenessNotice] = useState("");
   const [awarenessItems, setAwarenessItems] = useState<AwarenessItem[]>([]);
   const [awarenessHistory, setAwarenessHistory] = useState<AwarenessHistoryEntry[]>([]);
+  const [awarenessSuppressions, setAwarenessSuppressions] = useState<AwarenessSuppression[]>([]);
   const [awarenessDraft, setAwarenessDraft] = useState("");
   const [awarenessCategory, setAwarenessCategory] = useState("interests");
   const [awarenessEditingId, setAwarenessEditingId] = useState<number | null>(null);
@@ -387,12 +389,14 @@ export default function App() {
   }
 
   async function refreshAwarenessItems() {
-    const [items, history] = await Promise.all([
+    const [items, history, suppressions] = await Promise.all([
       invoke<AwarenessItem[]>("list_awareness_items"),
       invoke<AwarenessHistoryEntry[]>("list_awareness_history"),
+      invoke<AwarenessSuppression[]>("list_awareness_suppressions"),
     ]);
     setAwarenessItems(items);
     setAwarenessHistory(history);
+    setAwarenessSuppressions(suppressions);
   }
 
   async function clearAwarenessHistory() {
@@ -403,6 +407,21 @@ export default function App() {
       await invoke<number>("clear_awareness_history");
       setAwarenessHistory([]);
       setAwarenessNotice("Awareness activity history cleared. Your saved Awareness items remain.");
+    } catch (error) {
+      setAwarenessNotice(String(error));
+    } finally {
+      setAwarenessBusy(false);
+    }
+  }
+
+  async function clearAwarenessSuppressions() {
+    if (awarenessBusy || awarenessSuppressions.length === 0) return;
+    if (!window.confirm("Clear all relearning exclusions? Matching information may become eligible for future automatic learning if you enable it later.")) return;
+    setAwarenessBusy(true);
+    try {
+      await invoke<number>("clear_awareness_suppressions");
+      setAwarenessSuppressions([]);
+      setAwarenessNotice("Relearning exclusions cleared. This does not restore deleted Awareness items.");
     } catch (error) {
       setAwarenessNotice(String(error));
     } finally {
@@ -441,13 +460,13 @@ export default function App() {
   }
 
   async function deleteAwarenessItem(item: AwarenessItem) {
-    if (awarenessBusy || !window.confirm("Permanently delete this Awareness item from this device?")) return;
+    if (awarenessBusy || !window.confirm("Delete this Awareness item and block matching information from future automatic learning? Only a fingerprint and source metadata will remain in the exclusion list.")) return;
     setAwarenessBusy(true);
     try {
       await invoke<void>("delete_awareness_item", { id: item.id });
       await refreshAwarenessItems();
       if (awarenessEditingId === item.id) setAwarenessEditingId(null);
-      setAwarenessNotice("Awareness item deleted.");
+      setAwarenessNotice("Awareness item deleted. A content fingerprint now blocks matching automatic relearning.");
     } catch (error) {
       setAwarenessNotice(String(error));
     } finally {
@@ -457,13 +476,13 @@ export default function App() {
 
   async function clearAwarenessItems() {
     if (awarenessBusy || awarenessItems.length === 0) return;
-    if (!window.confirm("Delete every Awareness item? Saved memories and conversations will remain untouched.")) return;
+    if (!window.confirm("Delete every Awareness item and block matching information from future automatic learning? Saved memories and conversations will remain untouched.")) return;
     setAwarenessBusy(true);
     try {
       await invoke<number>("clear_awareness_items");
       setAwarenessItems([]);
       setAwarenessEditingId(null);
-      setAwarenessNotice("All Awareness items deleted.");
+      setAwarenessNotice("All Awareness items deleted. Matching content fingerprints remain blocked from automatic relearning.");
     } catch (error) {
       setAwarenessNotice(String(error));
     } finally {
@@ -982,10 +1001,15 @@ export default function App() {
                 <div className="path-field"><label htmlFor="new-awareness-item">Add something you want midSunday to know</label><textarea id="new-awareness-item" value={awarenessDraft} onChange={(event) => setAwarenessDraft(event.target.value)} maxLength={2000} rows={3} placeholder="Example: I enjoy learning about technology and anime." /><small>{awarenessDraft.length.toLocaleString()} / 2,000 characters · Only this deliberate entry is saved.</small></div>
                 <div className="awareness-create-row"><label htmlFor="awareness-category">Category</label><select id="awareness-category" value={awarenessCategory} onChange={(event) => setAwarenessCategory(event.target.value)}>{AWARENESS_CATEGORIES.map((category) => <option key={category} value={category}>{category[0].toUpperCase() + category.slice(1)}</option>)}</select><button className="primary-action" type="button" onClick={() => void addAwarenessItem()} disabled={awarenessBusy || !awarenessDraft.trim()}>{awarenessBusy ? "Saving…" : "Add item"}</button></div>
                 <div className="memory-list-heading"><strong>Awareness items ({awarenessItems.length})</strong><div><button className="secondary-action" type="button" onClick={() => void exportAwarenessItems()} disabled={awarenessItems.length === 0}>Export JSON</button><button className="danger-action" type="button" onClick={() => void clearAwarenessItems()} disabled={awarenessBusy || awarenessItems.length === 0}>Clear all</button></div></div>
-                {awarenessItems.length === 0 ? <p className="settings-footnote">Nothing saved here yet. Add only non-sensitive details you want midSunday to remember.</p> : awarenessItems.map((item) => <div className="memory-item" key={item.id}>{awarenessEditingId === item.id ? <div className="memory-edit"><textarea value={awarenessEditDraft} onChange={(event) => setAwarenessEditDraft(event.target.value)} maxLength={2000} rows={3} /><select value={awarenessEditCategory} onChange={(event) => setAwarenessEditCategory(event.target.value)}>{AWARENESS_CATEGORIES.map((category) => <option key={category} value={category}>{category[0].toUpperCase() + category.slice(1)}</option>)}</select><div><button className="primary-action" type="button" onClick={() => void saveAwarenessEdit()} disabled={awarenessBusy || !awarenessEditDraft.trim()}>Save changes</button><button className="secondary-action" type="button" onClick={() => setAwarenessEditingId(null)}>Cancel</button></div></div> : <><div className="awareness-item-copy"><p>{item.content}</p><small>{item.category} · Added by you · {item.knowledgeType}</small></div><div><button className="secondary-action" type="button" onClick={() => { setAwarenessEditingId(item.id); setAwarenessEditDraft(item.content); setAwarenessEditCategory(item.category); }}>Edit</button><button className="danger-action" type="button" onClick={() => void deleteAwarenessItem(item)} disabled={awarenessBusy}>Delete</button></div></>}</div>)}
+                {awarenessItems.length === 0 ? <p className="settings-footnote">Nothing saved here yet. Add only non-sensitive details you want midSunday to remember.</p> : awarenessItems.map((item) => <div className="memory-item" key={item.id}>{awarenessEditingId === item.id ? <div className="memory-edit"><textarea value={awarenessEditDraft} onChange={(event) => setAwarenessEditDraft(event.target.value)} maxLength={2000} rows={3} /><select value={awarenessEditCategory} onChange={(event) => setAwarenessEditCategory(event.target.value)}>{AWARENESS_CATEGORIES.map((category) => <option key={category} value={category}>{category[0].toUpperCase() + category.slice(1)}</option>)}</select><div><button className="primary-action" type="button" onClick={() => void saveAwarenessEdit()} disabled={awarenessBusy || !awarenessEditDraft.trim()}>Save changes</button><button className="secondary-action" type="button" onClick={() => setAwarenessEditingId(null)}>Cancel</button></div></div> : <><div className="awareness-item-copy"><p>{item.content}</p><small>{item.category} · {item.sourceType === "user_entered" ? "Source: Added manually by you" : item.sourceRecordId ? `Source: ${item.sourceType} #${item.sourceRecordId}` : `Source: ${item.sourceType}`} · {item.knowledgeType} · Confidence {Math.round(item.confidence * 100)}%</small></div><div><button className="secondary-action" type="button" onClick={() => { setAwarenessEditingId(item.id); setAwarenessEditDraft(item.content); setAwarenessEditCategory(item.category); }}>Edit</button><button className="danger-action" type="button" onClick={() => void deleteAwarenessItem(item)} disabled={awarenessBusy}>Delete</button></div></>}</div>)}
+                <div className="awareness-history">
+                  <div className="memory-list-heading"><strong>Relearning exclusions ({awarenessSuppressions.length})</strong><button className="danger-action" type="button" onClick={() => void clearAwarenessSuppressions()} disabled={awarenessBusy || awarenessSuppressions.length === 0}>Clear exclusions</button></div>
+                  <p className="settings-footnote">When you delete or replace an item, midSunday keeps a one-way content fingerprint plus category, source type, and date—not the original text. Future automatic learning must check these exclusions first. Deliberate entries you add yourself are still allowed.</p>
+                  {awarenessSuppressions.length === 0 ? <p className="settings-footnote">No relearning exclusions yet.</p> : awarenessSuppressions.map((entry, index) => <div className="awareness-history-entry" key={index}><span><strong>Matching information blocked</strong><small>{entry.category ? entry.category[0].toUpperCase() + entry.category.slice(1) : "General"} · {entry.sourceType}</small></span><time>{new Date(entry.createdAt * 1000).toLocaleString()}</time></div>)}
+                </div>
                 <div className="awareness-history">
                   <div className="memory-list-heading"><strong>Activity history ({awarenessHistory.length})</strong><button className="danger-action" type="button" onClick={() => void clearAwarenessHistory()} disabled={awarenessBusy || awarenessHistory.length === 0}>Clear history</button></div>
-                  <p className="settings-footnote">This history records actions and metadata only. It never stores the text of your Awareness items or raw conversations/searches.</p>
+                  <p className="settings-footnote">This history records actions and metadata only. It never stores the text of your Awareness items or raw conversations/searches. Deleted or replaced item fingerprints are managed separately above.</p>
                   {awarenessHistory.length === 0 ? <p className="settings-footnote">No Awareness activity recorded yet.</p> : awarenessHistory.map((entry) => <div className="awareness-history-entry" key={entry.id}><span><strong>{({ added: "Added item", updated: "Edited item", deleted: "Deleted item", cleared: "Cleared all items", exported: "Exported backup" } as Record<string, string>)[entry.eventType] ?? "Awareness activity"}</strong><small>{entry.category ? entry.category[0].toUpperCase() + entry.category.slice(1) : "General"}{entry.awarenessItemId ? ` · Item #${entry.awarenessItemId}` : ""}</small></span><time>{new Date(entry.occurredAt * 1000).toLocaleString()}</time></div>)}
                 </div>
               </div>

@@ -878,6 +878,21 @@ This milestone does not implement automatic memory extraction, memory import/res
 The profile is optional and device-local. midSunday uses the preferred name naturally and sparingly only when the user enables that preference. The memory cap stores up to 100 separate entries (up to 2,000 characters each); the prompt builder currently selects up to 20 recently updated entries within 4 KiB. Memory import/restore and automatic memory extraction remain unimplemented.
 
 
+### 2026-11-24 — Awareness source provenance and relearning exclusions
+
+- [x] Upgrade the local SQLite database from schema v4 to v5 without changing existing conversations, saved memories, Awareness items, or history.
+- [x] Expose source-record provenance on Awareness items; manually entered facts are explicitly labelled as user-entered, while future conversation/search records can carry their source record ID.
+- [x] When an Awareness item is deleted, save a SHA-256 content fingerprint and metadata-only source/category/timestamp exclusion so matching information can be blocked from future automatic ingestion.
+- [x] When an item is rewritten or all items are cleared, suppress the replaced/cleared content fingerprints as well.
+- [x] Provide local review and clear controls for relearning exclusions; clearing exclusions never restores deleted items.
+- [x] Add a reusable backend check for future learning pipelines to test whether a candidate fact is excluded before ingestion.
+- [x] Keep original deleted text out of the exclusion table; it stores only a fingerprint and limited metadata.
+- [x] Keep deliberate user-entered items allowed even when a matching automatic-learning exclusion exists.
+- [x] Add regression tests for delete/edit/clear suppression, normalised matching, deliberate re-entry, and absence of raw content in the exclusion schema.
+- [ ] Add an explicit source-evidence review/deletion model for conversation/search-derived learning before automatic ingestion is implemented.
+
+The exclusion mechanism is a safeguard foundation, not an active learning pipeline. Automatic learning remains disabled and unimplemented. The fingerprint is not the original text, but it is still local metadata and should be treated as private. The future ingestion path must call the suppression check before writing any automatically learned item.
+
 ### 2026-11-24 — Awareness activity history and provenance
 
 - [x] Upgrade the local database from schema v3 to v4 without altering existing Awareness items, saved memories, or conversations.

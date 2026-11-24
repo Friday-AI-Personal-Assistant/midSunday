@@ -3,6 +3,8 @@
 All notable project changes are recorded here. The project is in foundation/prototype development; no application release has been made.
 
 ## 2026-11-24
+- Added local Awareness relearning exclusions: deleted, replaced, and cleared item text is represented only by a SHA-256 fingerprint plus source/category/timestamp metadata; future ingestion can check exclusions before learning.
+- Added source-record provenance to Awareness items, an exclusions review/clear control, and regression tests for normalized matching, deliberate re-entry, and no raw deleted text in the exclusion table.
 - Added metadata-only Awareness activity history for manual add/edit/delete/clear/export events, with review and independent clear-history control; no Awareness item text or raw activity content is stored in the history.
 - Added local Awareness item management: deliberate user-entry, categories, provenance metadata, edit/delete/clear controls, JSON export, and a separate UI list.
 - Added conservative backend screening that rejects common password/credential labels, known token prefixes, email-like identifiers, and long numeric strings before saving Awareness items. This is a first-pass filter, not comprehensive sensitive-data detection; automatic learning remains disabled.

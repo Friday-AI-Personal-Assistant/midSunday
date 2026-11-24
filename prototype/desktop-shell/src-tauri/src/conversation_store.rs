@@ -1,4 +1,5 @@
 use rusqlite::{params, Connection, OptionalExtension};
+use sha2::{Digest, Sha256};
 use serde::{Deserialize, Serialize};
 use std::{path::Path, sync::Mutex, time::{SystemTime, UNIX_EPOCH}};
 
@@ -32,8 +33,17 @@ pub struct AwarenessItem {
     pub source_type: String,
     pub knowledge_type: String,
     pub confidence: f64,
+    pub source_record_id: Option<i64>,
     pub created_at: i64,
     pub updated_at: i64,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct AwarenessSuppression {
+    pub category: Option<String>,
+    pub source_type: String,
+    pub created_at: i64,
 }
 
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
@@ -152,7 +162,7 @@ impl ConversationStore {
             .map_err(|error| format!("Could not enable local database constraints: {error}"))?;
         let schema_version: i64 = connection.pragma_query_value(None, "user_version", |row| row.get(0))
             .map_err(|error| format!("Could not read local database version: {error}"))?;
-        if schema_version > 4 {
+        if schema_version > 5 {
             return Err(format!("This midSunday database uses a newer schema version ({schema_version}) than this app supports."));
         }
         if schema_version == 0 {
@@ -257,6 +267,24 @@ impl ConversationStore {
             ).map_err(|error| format!("Could not apply Awareness history migration: {error}"))?;
             transaction.commit().map_err(|error| format!("Could not finish Awareness history migration: {error}"))?;
         }
+        let current_version: i64 = connection.pragma_query_value(None, "user_version", |row| row.get(0))
+            .map_err(|error| format!("Could not recheck local database version: {error}"))?;
+        if current_version == 4 {
+            let transaction = connection.unchecked_transaction()
+                .map_err(|error| format!("Could not prepare Awareness suppression migration: {error}"))?;
+            transaction.execute_batch(
+                "CREATE TABLE IF NOT EXISTS awareness_suppressions (
+                   content_hash TEXT PRIMARY KEY CHECK(length(content_hash) = 64),
+                   category TEXT,
+                   source_type TEXT NOT NULL,
+                   created_at INTEGER NOT NULL
+                 );
+                 CREATE INDEX IF NOT EXISTS idx_awareness_suppressions_time
+                   ON awareness_suppressions(created_at DESC);
+                 PRAGMA user_version = 5;"
+            ).map_err(|error| format!("Could not apply Awareness suppression migration: {error}"))?;
+            transaction.commit().map_err(|error| format!("Could not finish Awareness suppression migration: {error}"))?;
+        }
         Ok(Self { connection: Mutex::new(connection) })
     }
 
@@ -318,16 +346,43 @@ impl ConversationStore {
             .map_err(|error| format!("Could not clear Awareness history: {error}"))
     }
 
+    pub fn list_awareness_suppressions(&self) -> Result<Vec<AwarenessSuppression>, String> {
+        let connection = self.lock()?;
+        let mut statement = connection.prepare(
+            "SELECT category, source_type, created_at FROM awareness_suppressions ORDER BY created_at DESC"
+        ).map_err(|error| format!("Could not read Awareness exclusions: {error}"))?;
+        let rows = statement.query_map([], |row| Ok(AwarenessSuppression {
+            category: row.get(0)?, source_type: row.get(1)?, created_at: row.get(2)?,
+        })).map_err(|error| error.to_string())?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(|error| error.to_string())
+    }
+
+    pub fn clear_awareness_suppressions(&self) -> Result<usize, String> {
+        let connection = self.lock()?;
+        connection.execute("DELETE FROM awareness_suppressions", [])
+            .map_err(|error| format!("Could not clear Awareness exclusions: {error}"))
+    }
+
+    pub fn is_awareness_suppressed(&self, content: &str) -> Result<bool, String> {
+        let fingerprint = awareness_content_fingerprint(content);
+        let connection = self.lock()?;
+        let exists: bool = connection.query_row(
+            "SELECT EXISTS(SELECT 1 FROM awareness_suppressions WHERE content_hash = ?1)",
+            params![fingerprint], |row| row.get(0),
+        ).map_err(|error| format!("Could not check Awareness exclusion: {error}"))?;
+        Ok(exists)
+    }
+
     pub fn list_awareness_items(&self) -> Result<Vec<AwarenessItem>, String> {
         let connection = self.lock()?;
         let mut statement = connection.prepare(
-            "SELECT id, content, category, source_type, knowledge_type, confidence, created_at, updated_at
+            "SELECT id, content, category, source_type, knowledge_type, confidence, source_record_id, created_at, updated_at
              FROM awareness_items ORDER BY updated_at DESC, id DESC"
         ).map_err(|error| format!("Could not read Awareness items: {error}"))?;
         let rows = statement.query_map([], |row| Ok(AwarenessItem {
             id: row.get(0)?, content: row.get(1)?, category: row.get(2)?,
             source_type: row.get(3)?, knowledge_type: row.get(4)?, confidence: row.get(5)?,
-            created_at: row.get(6)?, updated_at: row.get(7)?,
+            source_record_id: row.get(6)?, created_at: row.get(7)?, updated_at: row.get(8)?,
         })).map_err(|error| error.to_string())?;
         rows.collect::<Result<Vec<_>, _>>().map_err(|error| error.to_string())
     }
@@ -346,7 +401,7 @@ impl ConversationStore {
         Self::record_awareness_history(&connection, "added", Some(id), Some(&category))?;
         Ok(AwarenessItem {
             id, content, category, source_type: "user_entered".to_owned(),
-            knowledge_type: "observed".to_owned(), confidence: 1.0,
+            knowledge_type: "observed".to_owned(), confidence: 1.0, source_record_id: None,
             created_at: now, updated_at: now,
         })
     }
@@ -356,34 +411,94 @@ impl ConversationStore {
         let content = clean_awareness_content(content)?;
         let category = clean_awareness_category(category)?;
         let connection = self.lock()?;
-        let changed = connection.execute(
+        let transaction = connection.unchecked_transaction()
+            .map_err(|error| format!("Could not prepare Awareness update: {error}"))?;
+        let previous: Option<(String, String, String)> = transaction.query_row(
+            "SELECT content, category, source_type FROM awareness_items WHERE id = ?1",
+            params![id], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        ).optional().map_err(|error| error.to_string())?;
+        let Some((previous_content, previous_category, previous_source)) = previous else {
+            return Err("Awareness item was not found.".to_owned());
+        };
+        if awareness_content_fingerprint(&previous_content) != awareness_content_fingerprint(&content) {
+            insert_awareness_suppression(&transaction, &previous_content, &previous_category, &previous_source)?;
+        }
+        transaction.execute(
             "UPDATE awareness_items SET content = ?1, category = ?2, updated_at = ?3 WHERE id = ?4",
             params![content, category, unix_time(), id],
         ).map_err(|error| format!("Could not update Awareness item: {error}"))?;
-        if changed == 0 { return Err("Awareness item was not found.".to_owned()); }
-        Self::record_awareness_history(&connection, "updated", Some(id), Some(&category))?;
+        Self::record_awareness_history(&transaction, "updated", Some(id), Some(&category))?;
+        transaction.commit().map_err(|error| format!("Could not finish Awareness update: {error}"))?;
         Ok(())
     }
 
     pub fn delete_awareness_item(&self, id: i64) -> Result<(), String> {
         if id <= 0 { return Err("Invalid Awareness item identifier.".to_owned()); }
         let connection = self.lock()?;
-        let category: Option<String> = connection.query_row(
-            "SELECT category FROM awareness_items WHERE id = ?1", params![id], |row| row.get(0)
+        let transaction = connection.unchecked_transaction()
+            .map_err(|error| format!("Could not prepare Awareness deletion: {error}"))?;
+        let previous: Option<(String, String, String)> = transaction.query_row(
+            "SELECT content, category, source_type FROM awareness_items WHERE id = ?1",
+            params![id], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
         ).optional().map_err(|error| error.to_string())?;
-        let changed = connection.execute("DELETE FROM awareness_items WHERE id = ?1", params![id])
+        let Some((content, category, source_type)) = previous else {
+            return Err("Awareness item was not found.".to_owned());
+        };
+        insert_awareness_suppression(&transaction, &content, &category, &source_type)?;
+        transaction.execute("DELETE FROM awareness_items WHERE id = ?1", params![id])
             .map_err(|error| format!("Could not delete Awareness item: {error}"))?;
-        if changed == 0 { return Err("Awareness item was not found.".to_owned()); }
-        Self::record_awareness_history(&connection, "deleted", Some(id), category.as_deref())?;
+        Self::record_awareness_history(&transaction, "deleted", Some(id), Some(&category))?;
+        transaction.commit().map_err(|error| format!("Could not finish Awareness deletion: {error}"))?;
         Ok(())
     }
 
     pub fn clear_awareness_items(&self) -> Result<usize, String> {
         let connection = self.lock()?;
-        let count = connection.execute("DELETE FROM awareness_items", [])
+        let transaction = connection.unchecked_transaction()
+            .map_err(|error| format!("Could not prepare Awareness clear: {error}"))?;
+        let existing: Vec<(String, String, String)> = {
+            let mut statement = transaction.prepare(
+                "SELECT content, category, source_type FROM awareness_items"
+            ).map_err(|error| error.to_string())?;
+            let rows = statement.query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
+                .map_err(|error| error.to_string())?;
+            rows.collect::<Result<Vec<_>, _>>().map_err(|error| error.to_string())?
+        };
+        for (content, category, source_type) in &existing {
+            insert_awareness_suppression(&transaction, content, category, source_type)?;
+        }
+        let count = transaction.execute("DELETE FROM awareness_items", [])
             .map_err(|error| format!("Could not clear Awareness items: {error}"))?;
-        if count > 0 { Self::record_awareness_history(&connection, "cleared", None, None)?; }
+        if count > 0 { Self::record_awareness_history(&transaction, "cleared", None, None)?; }
+        transaction.commit().map_err(|error| format!("Could not finish Awareness clear: {error}"))?;
         Ok(count)
+    }
+
+    pub fn list_awareness_suppressions(&self) -> Result<Vec<AwarenessSuppression>, String> {
+        let connection = self.lock()?;
+        let mut statement = connection.prepare(
+            "SELECT category, source_type, created_at FROM awareness_suppressions ORDER BY created_at DESC"
+        ).map_err(|error| format!("Could not read Awareness exclusions: {error}"))?;
+        let rows = statement.query_map([], |row| Ok(AwarenessSuppression {
+            category: row.get(0)?, source_type: row.get(1)?, created_at: row.get(2)?,
+        })).map_err(|error| error.to_string())?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(|error| error.to_string())
+    }
+
+    pub fn clear_awareness_suppressions(&self) -> Result<usize, String> {
+        let connection = self.lock()?;
+        connection.execute("DELETE FROM awareness_suppressions", [])
+            .map_err(|error| format!("Could not clear Awareness exclusions: {error}"))
+    }
+
+    pub fn is_awareness_suppressed(&self, content: &str) -> Result<bool, String> {
+        let fingerprint = awareness_content_fingerprint(content);
+        let connection = self.lock()?;
+        let exists: bool = connection.query_row(
+            "SELECT EXISTS(SELECT 1 FROM awareness_suppressions WHERE content_hash = ?1)",
+            params![fingerprint], |row| row.get(0),
+        ).map_err(|error| format!("Could not check Awareness exclusion: {error}"))?;
+        Ok(exists)
     }
 
     pub fn export_awareness_items(&self) -> Result<String, String> {
@@ -763,6 +878,29 @@ impl ConversationStore {
     }
 }
 
+fn awareness_content_fingerprint(content: &str) -> String {
+    let normalized = content.split_whitespace().collect::<Vec<_>>().join(" ").to_lowercase();
+    let mut hasher = Sha256::new();
+    hasher.update(b"midSunday-awareness-suppression-v1:");
+    hasher.update(normalized.as_bytes());
+    format!("{:x}", hasher.finalize())
+}
+
+fn insert_awareness_suppression(
+    connection: &Connection, content: &str, category: &str, source_type: &str,
+) -> Result<(), String> {
+    connection.execute(
+        "INSERT INTO awareness_suppressions(content_hash, category, source_type, created_at)
+         VALUES(?1, ?2, ?3, ?4)
+         ON CONFLICT(content_hash) DO UPDATE SET
+           category = excluded.category,
+           source_type = excluded.source_type,
+           created_at = excluded.created_at",
+        params![awareness_content_fingerprint(content), category, source_type, unix_time()],
+    ).map_err(|error| format!("Could not protect deleted Awareness information: {error}"))?;
+    Ok(())
+}
+
 fn clean_awareness_category(category: &str) -> Result<String, String> {
     let category = category.trim().to_ascii_lowercase();
     match category.as_str() {
@@ -978,7 +1116,7 @@ mod tests {
         assert!(store.memory_enabled().unwrap());
         assert_eq!(store.get_awareness_settings().unwrap(), AwarenessSettings::default());
         let version: i64 = store.lock().unwrap().pragma_query_value(None, "user_version", |row| row.get(0)).unwrap();
-        assert_eq!(version, 4);
+        assert_eq!(version, 5);
     }
 
     #[test]
@@ -1012,6 +1150,50 @@ mod tests {
         assert_eq!(store.clear_awareness_history().unwrap(), 1);
         assert!(store.list_awareness_history().unwrap().is_empty());
         assert_eq!(store.list_awareness_items().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn deleted_awareness_content_is_fingerprint_suppressed_without_retaining_raw_text() {
+        let store = store();
+        let content = "I enjoy strategy games and science fiction.";
+        let item = store.create_awareness_item(content, "interests").unwrap();
+        assert!(!store.is_awareness_suppressed(content).unwrap());
+        store.delete_awareness_item(item.id).unwrap();
+        assert!(store.is_awareness_suppressed("  I ENJOY strategy games and science fiction.  ").unwrap());
+        assert!(store.list_awareness_items().unwrap().is_empty());
+        assert_eq!(store.list_awareness_suppressions().unwrap().len(), 1);
+
+        let connection = store.lock().unwrap();
+        let columns: Vec<String> = {
+            let mut statement = connection.prepare("PRAGMA table_info(awareness_suppressions)").unwrap();
+            statement.query_map([], |row| row.get(1)).unwrap().collect::<Result<Vec<_>, _>>().unwrap()
+        };
+        assert!(!columns.contains(&"content".to_owned()));
+        assert!(!columns.contains(&"raw_text".to_owned()));
+        let stored_hash: String = connection.query_row(
+            "SELECT content_hash FROM awareness_suppressions", [], |row| row.get(0)
+        ).unwrap();
+        assert_eq!(stored_hash.len(), 64);
+        assert!(!stored_hash.contains("strategy"));
+        drop(connection);
+
+        // Deliberate user entry is always allowed; suppression is for future automatic ingestion.
+        store.create_awareness_item(content, "interests").unwrap();
+        assert_eq!(store.list_awareness_items().unwrap().len(), 1);
+        assert_eq!(store.clear_awareness_suppressions().unwrap(), 1);
+        assert!(!store.is_awareness_suppressed(content).unwrap());
+    }
+
+    #[test]
+    fn editing_and_clearing_awareness_items_suppress_replaced_information() {
+        let store = store();
+        let item = store.create_awareness_item("I like racing games.", "interests").unwrap();
+        store.update_awareness_item(item.id, "I prefer puzzle games.", "preferences").unwrap();
+        assert!(store.is_awareness_suppressed("I like racing games.").unwrap());
+        assert!(!store.is_awareness_suppressed("I prefer puzzle games.").unwrap());
+        assert_eq!(store.clear_awareness_items().unwrap(), 1);
+        assert!(store.is_awareness_suppressed("I prefer puzzle games.").unwrap());
+        assert_eq!(store.list_awareness_suppressions().unwrap().len(), 2);
     }
 
     #[test]
@@ -1108,7 +1290,7 @@ mod tests {
         assert_eq!(store.messages(1).unwrap()[0].content, "Keep this");
         let version: i64 = store.lock().unwrap()
             .pragma_query_value(None, "user_version", |row| row.get(0)).unwrap();
-        assert_eq!(version, 4);
+        assert_eq!(version, 5);
         assert!(!store.memory_enabled().unwrap());
         assert_eq!(store.get_awareness_settings().unwrap(), AwarenessSettings::default());
         assert!(store.list_memories().unwrap().is_empty());
