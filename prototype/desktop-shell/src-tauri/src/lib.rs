@@ -95,10 +95,9 @@ async fn start_local_runtime(
     context_tokens: u32,
     cpu_threads: Option<u16>,
 ) -> Result<RuntimeStatusSnapshot, String> {
+    settings.save(EngineSettings { executable_path: executable_path.clone(), model_path: model_path.clone(), context_tokens, cpu_threads })?;
     let manager = manager.inner().clone();
-    let settings = settings.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
-        settings.save(EngineSettings { executable_path: executable_path.clone(), model_path: model_path.clone(), context_tokens, cpu_threads })?;
         manager.start(
             RuntimeConfig { host, port, context_tokens, cpu_threads },
             &executable_path,
