@@ -1,3 +1,5 @@
+mod runtime;
+
 #[tauri::command]
 fn get_app_status() -> &'static str {
     "The midSunday Rust core is running. The desktop shell is connected."
