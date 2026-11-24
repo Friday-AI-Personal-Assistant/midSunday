@@ -1,5 +1,6 @@
 mod llama_client;
-mod llama_process;\nmod llama_runtime;
+mod llama_process;
+mod llama_runtime;
 mod runtime;
 
 #[tauri::command]
