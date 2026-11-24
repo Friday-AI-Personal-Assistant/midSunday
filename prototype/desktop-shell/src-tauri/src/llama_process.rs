@@ -63,11 +63,18 @@ impl LlamaServerProcess {
     /// Stop the managed process and wait for the operating system to reap it.
     pub fn stop(&mut self) -> Result<(), std::io::Error> {
         if let Some(mut child) = self.child.take() {
-            match child.try_wait()? {
-                Some(_) => {}
-                None => {
+            match child.try_wait() {
+                Ok(Some(_)) => {}
+                Ok(None) => {
                     child.kill()?;
                     let _ = child.wait()?;
+                }
+                Err(error) => {
+                    // If status inspection fails, still attempt to terminate
+                    // the child before returning the original inspection error.
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return Err(error);
                 }
             }
         }
