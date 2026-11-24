@@ -148,3 +148,106 @@ The subsystem is not complete until tests demonstrate that it:
 ## 11. Current status
 
 No detection code, Windows API dependency, runtime recommendation policy, or adaptive controller has been implemented or approved. OpenJarvis is a reference, not a dependency. This subsystem remains a Phase 1 research/design task until the Windows detection approach and acceptance tests are validated.
+
+## 12. Windows detection research — API and Rust-library shortlist (2026-11-24)
+
+**Research status:** Desk research complete for the initial Windows API map. No API has been integrated, no dependency has been added, and no Windows machine has been benchmarked.
+
+### 12.1 Recommended layered approach
+
+Use a layered detector rather than a single all-purpose library:
+
+1. **Cross-platform baseline candidate:** `sysinfo` for OS information, CPU entries, system/process memory, process information, and disk/volume enumeration. It supports Windows and documents that its `System` instance should be retained and refreshed rather than recreated for every read. On Windows, its `free_memory` result is the same as `available_memory`, so the app must label this as available memory, not literal unused/free memory.
+2. **Windows-native detail candidate:** Microsoft's `windows` Rust crate (or `windows-sys` where raw bindings are more appropriate) for exact Windows APIs and COM/DXGI. Microsoft documents this as the official Rust projection of Win32, COM, and WinRT APIs.
+3. **Optional vendor diagnostics:** NVIDIA NVML through an optional adapter only if a supported NVIDIA driver exposes the library. Never make it a prerequisite for the app or for basic GPU identification.
+4. **Runtime capability probe:** Ask the actual selected inference runtime to report/validate the acceleration backends it was built with, then verify by a controlled model-load/inference test. Hardware inventory alone cannot prove a runtime can use a GPU.
+
+This separation limits mandatory dependencies and allows the app to degrade gracefully when a sensor, API, driver, or optional library is unavailable.
+
+### 12.2 API-to-information map
+
+| Information | Primary Windows mechanism to evaluate | Important caveat |
+|---|---|---|
+| Installed and available physical RAM | `GlobalMemoryStatusEx` / `MEMORYSTATUSEX` | Values are live and volatile; re-query before major model operations. |
+| Logical/physical CPU topology | `GetLogicalProcessorInformationEx` | Parse core, package, cache and NUMA relationships; do not assume logical processor count equals physical cores. |
+| CPU architecture / basic system information | `GetNativeSystemInfo` / `GetSystemInfo` | Architecture and topology do not by themselves identify CPU model or performance. |
+| CPU brand/model and per-core data | Evaluate `sysinfo` first; consider Windows registry/WMI only if a missing field is essential | Keep vendor-specific performance-core details optional; avoid fragile parsing of marketing strings. |
+| GPU adapter inventory | DXGI `IDXGIFactory1::EnumAdapters1` + `IDXGIAdapter1::GetDesc1` | Enumerate every adapter, including integrated and discrete GPUs; identify software/remote adapters and do not treat them as local accelerators. |
+| Dedicated/shared GPU memory | `DXGI_ADAPTER_DESC1` fields | Describes adapter memory capacity, not currently available memory for midSunday. Shared memory is system memory, not extra dedicated VRAM. |
+| Per-process GPU memory budget/usage | `IDXGIAdapter3::QueryVideoMemoryInfo` | Reports the OS budget and current usage for this process and memory segment; budget changes dynamically. It is not a global free-VRAM counter. |
+| Volume total/free/available space | `GetDiskFreeSpaceExW` for the actual model-library path | Distinguish free space available to the user from total free space; check the destination path immediately before downloads/extraction. |
+| Drive class | `GetDriveTypeW` | Distinguishes fixed/removable/network/RAM/CD-ROM; it does not tell SSD vs HDD. |
+| Storage seek-penalty capability | `IOCTL_STORAGE_QUERY_PROPERTY` with `StorageDeviceSeekPenaltyProperty` | Optional, more complex device query; report unknown if unsupported. Do not infer exact read/write throughput from this flag. |
+| Power/battery state | Windows power-status APIs | Useful for laptop scheduling, but should be a later refinement, not a blocker for hardware detection. |
+
+### 12.3 GPU detection: avoid a misleading shortcut
+
+DXGI is the best first generic Windows path found in this review:
+- `EnumAdapters1` enumerates the system's display adapters.
+- `GetDesc1` returns adapter name, vendor/device IDs, dedicated video memory, dedicated system memory, shared system memory, and adapter identity.
+- `IDXGIAdapter3::QueryVideoMemoryInfo` reports the current process's OS-assigned memory budget and usage for local/non-local segments.
+
+The model selector must keep these concepts separate:
+- **Dedicated VRAM capacity:** hardware inventory.
+- **Current process GPU budget/usage:** dynamic process-specific resource headroom.
+- **Shared GPU memory:** system RAM that the GPU may use; never count it as dedicated VRAM.
+- **Runtime acceleration support:** confirmed by the chosen backend, driver, and actual runtime probe.
+
+Do not use WMI `Win32_VideoController.AdapterRAM` as the authoritative VRAM source. Its field is a 32-bit integer, and Microsoft's documentation warns that WMI values can be inaccurate on hardware not compatible with WDDM. WMI may still be a fallback for display metadata if needed, but it must be marked lower-confidence.
+
+### 12.4 Rust library candidates
+
+| Candidate | Potential role | Preliminary view |
+|---|---|---|
+| `sysinfo` | Cross-platform CPU, memory, process and disk baseline | Strong candidate to evaluate; MIT-licensed upstream repository; current docs list Windows support. Latest documented version 0.40.4 has Rust MSRV 1.95, so check the project's pinned toolchain and choose a compatible version before adoption. |
+| `windows` | Direct, typed access to Win32 and DXGI/COM APIs | Leading Windows-specific binding candidate; Microsoft-maintained and dual-licensed MIT/Apache-2.0. Use only required API feature flags and pin a tested version. |
+| `windows-sys` | Lower-level Windows FFI | Alternative where the typed `windows` projection is unnecessary; assess API safety and dependency impact. |
+| `nvml-wrapper` | Optional NVIDIA telemetry (memory, utilization, power, etc.) | Optional only; runtime-loads NVML and can fail gracefully when it is absent. It does not solve AMD/Intel coverage. Upstream crate is MIT/Apache-2.0. |
+| `gpu-info` / `gpu-info-rs` | Potential shortcut for GPU memory information | Research lead only. Review source, maintenance, API semantics, license, and multi-adapter behaviour before considering it; do not add it merely to avoid a small DXGI integration. |
+
+**Dependency policy:** no crate is approved for production yet. Check the exact version, transitive dependencies, MSRV, licence, maintenance, Windows target coverage, and feature flags against the actual midSunday Rust toolchain before adding it.
+
+### 12.5 Detection confidence and fallback policy
+
+Every field should carry a value plus a confidence/status such as:
+- `verified`: obtained from a reliable OS/runtime API.
+- `reported`: driver or system metadata, not independently validated.
+- `estimated`: derived from a documented heuristic.
+- `unavailable`: API/driver did not provide it.
+- `unsupported`: the platform or device does not expose it.
+
+Never turn a failed query into zero and then interpret zero as no hardware. Never use an unknown value as proof that an adapter is unsupported. The UI should explain incomplete detection without blocking local CPU inference.
+
+### 12.6 Initial implementation recommendation — not yet approved
+
+When Phase 1 reaches implementation readiness, prototype this minimal stack first:
+- `sysinfo` for general OS/CPU/memory/process/disk inventory where its output meets our needs.
+- `windows` crate for `GlobalMemoryStatusEx`, CPU topology, DXGI adapter enumeration and video-memory budgeting, and exact free-space checks.
+- No mandatory NVML, WMI, PowerShell, `nvidia-smi`, or `rocm-smi` dependency.
+- Optional vendor telemetry only after generic Windows coverage is tested and a concrete gap is demonstrated.
+
+The prototype should return a typed, serialisable hardware snapshot and a separate live-resource snapshot. It must not select or download models yet.
+
+### 12.7 Sources
+
+Microsoft Windows APIs:
+- GlobalMemoryStatusEx: https://learn.microsoft.com/en-us/windows/win32/api/sysinfoapi/nf-sysinfoapi-globalmemorystatusex
+- GetLogicalProcessorInformationEx: https://learn.microsoft.com/en-us/windows/win32/api/sysinfoapi/nf-sysinfoapi-getlogicalprocessorinformationex
+- Rust for Windows / windows crate: https://learn.microsoft.com/en-us/windows/dev-environment/rust/rust-for-windows
+- DXGI adapter enumeration: https://learn.microsoft.com/en-us/windows/win32/api/dxgi/nn-dxgi-idxgiadapter1
+- DXGI_ADAPTER_DESC1: https://learn.microsoft.com/en-us/windows/win32/api/dxgi/ns-dxgi-dxgi_adapter_desc1
+- IDXGIAdapter1::GetDesc1: https://learn.microsoft.com/en-us/windows/win32/api/dxgi/nf-dxgi-idxgiadapter1-getdesc1
+- DXGI video memory budget: https://learn.microsoft.com/en-us/windows/win32/api/dxgi1_4/ns-dxgi1_4-dxgi_query_video_memory_info
+- GetDiskFreeSpaceExW: https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-getdiskfreespaceexw
+- GetDriveTypeW: https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-getdrivetypew
+- Storage seek penalty: https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/ntddstor/ns-ntddstor-_device_seek_penalty_descriptor
+- WMI video controller caveat: https://learn.microsoft.com/en-us/windows/win32/cimwin32prov/win32-videocontroller
+
+Rust libraries:
+- sysinfo docs: https://docs.rs/sysinfo/latest/sysinfo/
+- sysinfo repository/licence: https://github.com/GuillaumeGomez/sysinfo
+- windows-rs: https://github.com/microsoft/windows-rs
+- windows crate API docs: https://microsoft.github.io/windows-docs-rs/
+- nvml-wrapper: https://docs.rs/nvml-wrapper/latest/nvml_wrapper/
+
+**Conclusion:** A credible Windows-first detector appears feasible with standard OS APIs and a small number of Rust bindings. The strongest initial direction is `sysinfo` for the cross-platform baseline plus Microsoft's `windows` crate for precise Windows-specific functions. This remains a research recommendation, not a final dependency approval.
