@@ -37,7 +37,7 @@ jobs:
           Invoke-WebRequest "https://win.rustup.rs/x86_64" -OutFile $installer
           & $installer -y --profile minimal --default-host x86_64-pc-windows-msvc
           if ($LASTEXITCODE -ne 0) { throw "Rust installation failed." }
-          "$env:USERPROFILE\.cargo\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          ($env:USERPROFILE + '\.cargo\bin') | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
       - name: Show toolchain versions
         shell: pwsh
