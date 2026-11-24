@@ -281,6 +281,12 @@ h1 { margin: 0; color: #eef5ef; font-size: clamp(25px, 3vw, 34px); font-weight: 
 .memory-item > div { flex: 0 0 auto; }
 .memory-edit { width: 100%; display: flex; flex-direction: column; gap: 8px; }
 .memory-notice { margin: 12px 0; color: #9edbaa; font-size: 9px; line-height: 1.5; overflow-wrap: anywhere; }
+.awareness-history { margin-top: 24px; padding-top: 14px; border-top: 1px solid var(--line); }
+.awareness-history-entry { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); }
+.awareness-history-entry > span { display: grid; gap: 4px; min-width: 0; }
+.awareness-history-entry strong { color: #cbd9ce; font-size: 10px; font-weight: 600; }
+.awareness-history-entry small, .awareness-history-entry time { color: #718177; font-size: 9px; line-height: 1.5; }
+.awareness-history-entry time { text-align: right; flex: 0 0 auto; }
 @media (max-width: 560px) { .memory-item { flex-direction: column; } }
 
 

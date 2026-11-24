@@ -11,7 +11,7 @@ mod runtime_manager;
 use tauri::{ipc::Channel, State};
 use runtime::{ConversationMessage, GenerationRequest, RuntimeConfig};
 use runtime_manager::{RuntimeManager, RuntimeStatusSnapshot};
-use conversation_store::{AwarenessItem, AwarenessSettings, ConversationStore, ConversationSummary, ImportResult, SavedMemory, StoredMessage, UserProfile};
+use conversation_store::{AwarenessHistoryEntry, AwarenessItem, AwarenessSettings, ConversationStore, ConversationSummary, ImportResult, SavedMemory, StoredMessage, UserProfile};
 use engine_settings::{EngineSettings, EngineSettingsStore};
 use companion_settings::{CompanionSettings, CompanionSettingsStore};
 use model_catalog::{LocalModel, ModelCatalog, ModelVerification};
@@ -105,6 +105,16 @@ fn set_memory_enabled(store: State<'_, ConversationStore>, enabled: bool) -> Res
 #[tauri::command]
 fn export_saved_memories(store: State<'_, ConversationStore>) -> Result<String, String> {
     store.export_memories()
+}
+
+#[tauri::command]
+fn list_awareness_history(store: State<'_, ConversationStore>) -> Result<Vec<AwarenessHistoryEntry>, String> {
+    store.list_awareness_history()
+}
+
+#[tauri::command]
+fn clear_awareness_history(store: State<'_, ConversationStore>) -> Result<usize, String> {
+    store.clear_awareness_history()
 }
 
 #[tauri::command]
@@ -350,6 +360,8 @@ pub fn run() {
             get_awareness_settings,
             save_awareness_settings,
             list_awareness_items,
+            list_awareness_history,
+            clear_awareness_history,
             create_awareness_item,
             update_awareness_item,
             delete_awareness_item,

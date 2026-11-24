@@ -16,6 +16,7 @@ type UserProfile = { preferredName: string; useName: boolean };
 const DEFAULT_USER_PROFILE: UserProfile = { preferredName: "", useName: false };
 type AwarenessSettings = { enabled: boolean; learnConversations: boolean; learnSearches: boolean };
 type AwarenessItem = { id: number; content: string; category: string; sourceType: string; knowledgeType: string; confidence: number; createdAt: number; updatedAt: number };
+type AwarenessHistoryEntry = { id: number; eventType: string; awarenessItemId: number | null; category: string | null; occurredAt: number };
 const DEFAULT_AWARENESS_SETTINGS: AwarenessSettings = { enabled: false, learnConversations: false, learnSearches: false };
 const AWARENESS_CATEGORIES = ["interests", "preferences", "communication", "projects", "goals", "other"];
 type CompanionProfile = { id: string; name: string; instructions: string };
@@ -111,6 +112,7 @@ export default function App() {
   const [awarenessBusy, setAwarenessBusy] = useState(false);
   const [awarenessNotice, setAwarenessNotice] = useState("");
   const [awarenessItems, setAwarenessItems] = useState<AwarenessItem[]>([]);
+  const [awarenessHistory, setAwarenessHistory] = useState<AwarenessHistoryEntry[]>([]);
   const [awarenessDraft, setAwarenessDraft] = useState("");
   const [awarenessCategory, setAwarenessCategory] = useState("interests");
   const [awarenessEditingId, setAwarenessEditingId] = useState<number | null>(null);
@@ -182,7 +184,8 @@ export default function App() {
       invoke<UserProfile>("get_user_profile"),
       invoke<AwarenessSettings>("get_awareness_settings"),
       invoke<AwarenessItem[]>("list_awareness_items"),
-    ]).then(([items, enabled, profile, awareness, awarenessRecords]) => {
+      invoke<AwarenessHistoryEntry[]>("list_awareness_history"),
+    ]).then(([items, enabled, profile, awareness, awarenessRecords, history]) => {
       if (!active) return;
       setMemories(items);
       setMemoryEnabled(enabled);
@@ -190,6 +193,7 @@ export default function App() {
       setUserProfileDraft(profile);
       setAwarenessSettings(awareness);
       setAwarenessItems(awarenessRecords);
+      setAwarenessHistory(history);
     }).catch(() => { if (active) setMemoryNotice("Could not load saved memory, Awareness, or profile settings."); });
     invoke<CompanionSettings>("get_companion_settings")
       .then((settings) => {
@@ -383,8 +387,27 @@ export default function App() {
   }
 
   async function refreshAwarenessItems() {
-    const items = await invoke<AwarenessItem[]>("list_awareness_items");
+    const [items, history] = await Promise.all([
+      invoke<AwarenessItem[]>("list_awareness_items"),
+      invoke<AwarenessHistoryEntry[]>("list_awareness_history"),
+    ]);
     setAwarenessItems(items);
+    setAwarenessHistory(history);
+  }
+
+  async function clearAwarenessHistory() {
+    if (awarenessBusy || awarenessHistory.length === 0) return;
+    if (!window.confirm("Clear the Awareness activity history? This will not delete your Awareness items.")) return;
+    setAwarenessBusy(true);
+    try {
+      await invoke<number>("clear_awareness_history");
+      setAwarenessHistory([]);
+      setAwarenessNotice("Awareness activity history cleared. Your saved Awareness items remain.");
+    } catch (error) {
+      setAwarenessNotice(String(error));
+    } finally {
+      setAwarenessBusy(false);
+    }
   }
 
   async function addAwarenessItem() {
@@ -960,6 +983,11 @@ export default function App() {
                 <div className="awareness-create-row"><label htmlFor="awareness-category">Category</label><select id="awareness-category" value={awarenessCategory} onChange={(event) => setAwarenessCategory(event.target.value)}>{AWARENESS_CATEGORIES.map((category) => <option key={category} value={category}>{category[0].toUpperCase() + category.slice(1)}</option>)}</select><button className="primary-action" type="button" onClick={() => void addAwarenessItem()} disabled={awarenessBusy || !awarenessDraft.trim()}>{awarenessBusy ? "Saving…" : "Add item"}</button></div>
                 <div className="memory-list-heading"><strong>Awareness items ({awarenessItems.length})</strong><div><button className="secondary-action" type="button" onClick={() => void exportAwarenessItems()} disabled={awarenessItems.length === 0}>Export JSON</button><button className="danger-action" type="button" onClick={() => void clearAwarenessItems()} disabled={awarenessBusy || awarenessItems.length === 0}>Clear all</button></div></div>
                 {awarenessItems.length === 0 ? <p className="settings-footnote">Nothing saved here yet. Add only non-sensitive details you want midSunday to remember.</p> : awarenessItems.map((item) => <div className="memory-item" key={item.id}>{awarenessEditingId === item.id ? <div className="memory-edit"><textarea value={awarenessEditDraft} onChange={(event) => setAwarenessEditDraft(event.target.value)} maxLength={2000} rows={3} /><select value={awarenessEditCategory} onChange={(event) => setAwarenessEditCategory(event.target.value)}>{AWARENESS_CATEGORIES.map((category) => <option key={category} value={category}>{category[0].toUpperCase() + category.slice(1)}</option>)}</select><div><button className="primary-action" type="button" onClick={() => void saveAwarenessEdit()} disabled={awarenessBusy || !awarenessEditDraft.trim()}>Save changes</button><button className="secondary-action" type="button" onClick={() => setAwarenessEditingId(null)}>Cancel</button></div></div> : <><div className="awareness-item-copy"><p>{item.content}</p><small>{item.category} · Added by you · {item.knowledgeType}</small></div><div><button className="secondary-action" type="button" onClick={() => { setAwarenessEditingId(item.id); setAwarenessEditDraft(item.content); setAwarenessEditCategory(item.category); }}>Edit</button><button className="danger-action" type="button" onClick={() => void deleteAwarenessItem(item)} disabled={awarenessBusy}>Delete</button></div></>}</div>)}
+                <div className="awareness-history">
+                  <div className="memory-list-heading"><strong>Activity history ({awarenessHistory.length})</strong><button className="danger-action" type="button" onClick={() => void clearAwarenessHistory()} disabled={awarenessBusy || awarenessHistory.length === 0}>Clear history</button></div>
+                  <p className="settings-footnote">This history records actions and metadata only. It never stores the text of your Awareness items or raw conversations/searches.</p>
+                  {awarenessHistory.length === 0 ? <p className="settings-footnote">No Awareness activity recorded yet.</p> : awarenessHistory.map((entry) => <div className="awareness-history-entry" key={entry.id}><span><strong>{({ added: "Added item", updated: "Edited item", deleted: "Deleted item", cleared: "Cleared all items", exported: "Exported backup" } as Record<string, string>)[entry.eventType] ?? "Awareness activity"}</strong><small>{entry.category ? entry.category[0].toUpperCase() + entry.category.slice(1) : "General"}{entry.awarenessItemId ? ` · Item #${entry.awarenessItemId}` : ""}</small></span><time>{new Date(entry.occurredAt * 1000).toLocaleString()}</time></div>)}
+                </div>
               </div>
               {awarenessNotice && <p className="memory-notice" role="status">{awarenessNotice}</p>}
             </section>

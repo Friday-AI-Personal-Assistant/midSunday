@@ -878,6 +878,15 @@ This milestone does not implement automatic memory extraction, memory import/res
 The profile is optional and device-local. midSunday uses the preferred name naturally and sparingly only when the user enables that preference. The memory cap stores up to 100 separate entries (up to 2,000 characters each); the prompt builder currently selects up to 20 recently updated entries within 4 KiB. Memory import/restore and automatic memory extraction remain unimplemented.
 
 
+### 2026-11-24 — Awareness activity history and provenance
+
+- [x] Upgrade the local database from schema v3 to v4 without altering existing Awareness items, saved memories, or conversations.
+- [x] Record manual Awareness add/edit/delete/clear/export events in a separate metadata-only history.
+- [x] Show recent history in Settings → Awareness, including event, category, item reference, and local timestamp.
+- [x] Let users clear history independently without deleting their Awareness items.
+- [x] Keep item text and raw source evidence out of the history table; retain at most 500 recent metadata events in the UI query.
+- [ ] Add provenance/source-evidence controls and deletion/relearning suppression before automatic ingestion is implemented.
+
 ### 2026-11-24 — Awareness item management and first privacy screening
 
 - [x] Add local Awareness item list, deliberate user-entry, category assignment, edit, individual delete, clear-all, and versioned JSON export commands.
@@ -886,6 +895,8 @@ The profile is optional and device-local. midSunday uses the preferred name natu
 - [x] Add conservative Rust-side rejection checks for common credential labels, token formats, email addresses, and long numeric identifiers before an Awareness item is saved.
 - [x] Add Settings UI to review, categorise, rewrite, delete, clear, and export every Awareness item.
 - [ ] Expand and independently test sensitive-data detection, including international identifiers and context-aware private-data handling; deterministic checks are not a complete guarantee.
+- [x] Add a metadata-only Awareness activity history for manual add/edit/delete/clear/export actions, with local review and a separate clear-history control.
+- [x] Keep history free of Awareness item text, raw conversations, raw searches, credentials, and private source content; retain only event type, item ID, category, and timestamp.
 - [ ] Add source-evidence review and deletion/relearning suppression records before automatic ingestion is implemented.
 - [ ] Add automatic learning from conversations/searches only after all privacy filters, category exclusions, source controls, and review/deletion safeguards are tested.
 

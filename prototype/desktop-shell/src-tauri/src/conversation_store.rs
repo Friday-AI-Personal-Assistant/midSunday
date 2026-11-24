@@ -36,6 +36,16 @@ pub struct AwarenessItem {
     pub updated_at: i64,
 }
 
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct AwarenessHistoryEntry {
+    pub id: i64,
+    pub event_type: String,
+    pub awareness_item_id: Option<i64>,
+    pub category: Option<String>,
+    pub occurred_at: i64,
+}
+
 impl Default for UserProfile {
     fn default() -> Self {
         Self { preferred_name: String::new(), use_name: false }
@@ -142,7 +152,7 @@ impl ConversationStore {
             .map_err(|error| format!("Could not enable local database constraints: {error}"))?;
         let schema_version: i64 = connection.pragma_query_value(None, "user_version", |row| row.get(0))
             .map_err(|error| format!("Could not read local database version: {error}"))?;
-        if schema_version > 3 {
+        if schema_version > 4 {
             return Err(format!("This midSunday database uses a newer schema version ({schema_version}) than this app supports."));
         }
         if schema_version == 0 {
@@ -228,6 +238,25 @@ impl ConversationStore {
             ).map_err(|error| format!("Could not apply local Awareness migration: {error}"))?;
             transaction.commit().map_err(|error| format!("Could not finish local Awareness migration: {error}"))?;
         }
+        let current_version: i64 = connection.pragma_query_value(None, "user_version", |row| row.get(0))
+            .map_err(|error| format!("Could not recheck local database version: {error}"))?;
+        if current_version == 3 {
+            let transaction = connection.unchecked_transaction()
+                .map_err(|error| format!("Could not prepare Awareness history migration: {error}"))?;
+            transaction.execute_batch(
+                "CREATE TABLE IF NOT EXISTS awareness_history (
+                   id INTEGER PRIMARY KEY AUTOINCREMENT,
+                   event_type TEXT NOT NULL CHECK(event_type IN ('added', 'updated', 'deleted', 'cleared', 'exported')),
+                   awareness_item_id INTEGER,
+                   category TEXT,
+                   occurred_at INTEGER NOT NULL
+                 );
+                 CREATE INDEX IF NOT EXISTS idx_awareness_history_time
+                   ON awareness_history(occurred_at DESC, id DESC);
+                 PRAGMA user_version = 4;"
+            ).map_err(|error| format!("Could not apply Awareness history migration: {error}"))?;
+            transaction.commit().map_err(|error| format!("Could not finish Awareness history migration: {error}"))?;
+        }
         Ok(Self { connection: Mutex::new(connection) })
     }
 
@@ -259,6 +288,36 @@ impl ConversationStore {
         Ok(settings)
     }
 
+    fn record_awareness_history(
+        connection: &Connection, event_type: &str, item_id: Option<i64>, category: Option<&str>,
+    ) -> Result<(), String> {
+        connection.execute(
+            "INSERT INTO awareness_history(event_type, awareness_item_id, category, occurred_at)
+             VALUES(?1, ?2, ?3, ?4)",
+            params![event_type, item_id, category, unix_time()],
+        ).map_err(|error| format!("Could not record Awareness history: {error}"))?;
+        Ok(())
+    }
+
+    pub fn list_awareness_history(&self) -> Result<Vec<AwarenessHistoryEntry>, String> {
+        let connection = self.lock()?;
+        let mut statement = connection.prepare(
+            "SELECT id, event_type, awareness_item_id, category, occurred_at
+             FROM awareness_history ORDER BY occurred_at DESC, id DESC LIMIT 500"
+        ).map_err(|error| format!("Could not read Awareness history: {error}"))?;
+        let rows = statement.query_map([], |row| Ok(AwarenessHistoryEntry {
+            id: row.get(0)?, event_type: row.get(1)?, awareness_item_id: row.get(2)?,
+            category: row.get(3)?, occurred_at: row.get(4)?,
+        })).map_err(|error| error.to_string())?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(|error| error.to_string())
+    }
+
+    pub fn clear_awareness_history(&self) -> Result<usize, String> {
+        let connection = self.lock()?;
+        connection.execute("DELETE FROM awareness_history", [])
+            .map_err(|error| format!("Could not clear Awareness history: {error}"))
+    }
+
     pub fn list_awareness_items(&self) -> Result<Vec<AwarenessItem>, String> {
         let connection = self.lock()?;
         let mut statement = connection.prepare(
@@ -284,6 +343,7 @@ impl ConversationStore {
             params![content, category, now],
         ).map_err(|error| format!("Could not save Awareness item: {error}"))?;
         let id = connection.last_insert_rowid();
+        Self::record_awareness_history(&connection, "added", Some(id), Some(&category))?;
         Ok(AwarenessItem {
             id, content, category, source_type: "user_entered".to_owned(),
             knowledge_type: "observed".to_owned(), confidence: 1.0,
@@ -301,32 +361,42 @@ impl ConversationStore {
             params![content, category, unix_time(), id],
         ).map_err(|error| format!("Could not update Awareness item: {error}"))?;
         if changed == 0 { return Err("Awareness item was not found.".to_owned()); }
+        Self::record_awareness_history(&connection, "updated", Some(id), Some(&category))?;
         Ok(())
     }
 
     pub fn delete_awareness_item(&self, id: i64) -> Result<(), String> {
         if id <= 0 { return Err("Invalid Awareness item identifier.".to_owned()); }
         let connection = self.lock()?;
+        let category: Option<String> = connection.query_row(
+            "SELECT category FROM awareness_items WHERE id = ?1", params![id], |row| row.get(0)
+        ).optional().map_err(|error| error.to_string())?;
         let changed = connection.execute("DELETE FROM awareness_items WHERE id = ?1", params![id])
             .map_err(|error| format!("Could not delete Awareness item: {error}"))?;
         if changed == 0 { return Err("Awareness item was not found.".to_owned()); }
+        Self::record_awareness_history(&connection, "deleted", Some(id), category.as_deref())?;
         Ok(())
     }
 
     pub fn clear_awareness_items(&self) -> Result<usize, String> {
         let connection = self.lock()?;
-        connection.execute("DELETE FROM awareness_items", [])
-            .map_err(|error| format!("Could not clear Awareness items: {error}"))
+        let count = connection.execute("DELETE FROM awareness_items", [])
+            .map_err(|error| format!("Could not clear Awareness items: {error}"))?;
+        if count > 0 { Self::record_awareness_history(&connection, "cleared", None, None)?; }
+        Ok(count)
     }
 
     pub fn export_awareness_items(&self) -> Result<String, String> {
         let items = self.list_awareness_items()?;
-        serde_json::to_string_pretty(&serde_json::json!({
+        let json = serde_json::to_string_pretty(&serde_json::json!({
             "format": "midSunday-awareness-export",
             "formatVersion": 1,
             "exportedAt": unix_time(),
             "items": items,
-        })).map_err(|error| format!("Could not export Awareness items: {error}"))
+        })).map_err(|error| format!("Could not export Awareness items: {error}"))?;
+        let connection = self.lock()?;
+        Self::record_awareness_history(&connection, "exported", None, None)?;
+        Ok(json)
     }
 
     pub fn list_memories(&self) -> Result<Vec<SavedMemory>, String> {
@@ -908,7 +978,40 @@ mod tests {
         assert!(store.memory_enabled().unwrap());
         assert_eq!(store.get_awareness_settings().unwrap(), AwarenessSettings::default());
         let version: i64 = store.lock().unwrap().pragma_query_value(None, "user_version", |row| row.get(0)).unwrap();
-        assert_eq!(version, 3);
+        assert_eq!(version, 4);
+    }
+
+    #[test]
+    fn awareness_history_tracks_management_without_storing_item_text() {
+        let store = store();
+        let item = store.create_awareness_item("I like strategy games.", "interests").unwrap();
+        store.update_awareness_item(item.id, "I like strategy and puzzle games.", "preferences").unwrap();
+        store.export_awareness_items().unwrap();
+        store.delete_awareness_item(item.id).unwrap();
+
+        let history = store.list_awareness_history().unwrap();
+        assert_eq!(history.iter().map(|entry| entry.event_type.as_str()).collect::<Vec<_>>(),
+            vec!["deleted", "exported", "updated", "added"]);
+        assert_eq!(history[0].awareness_item_id, Some(item.id));
+        assert_eq!(history[0].category.as_deref(), Some("preferences"));
+        assert_eq!(history[3].category.as_deref(), Some("interests"));
+
+        let connection = store.lock().unwrap();
+        let columns: Vec<String> = {
+            let mut statement = connection.prepare("PRAGMA table_info(awareness_history)").unwrap();
+            statement.query_map([], |row| row.get(1)).unwrap().collect::<Result<Vec<_>, _>>().unwrap()
+        };
+        assert!(!columns.contains(&"content".to_owned()));
+        assert!(!columns.contains(&"raw_text".to_owned()));
+    }
+
+    #[test]
+    fn clearing_awareness_history_does_not_delete_awareness_items() {
+        let store = store();
+        store.create_awareness_item("I like science.", "interests").unwrap();
+        assert_eq!(store.clear_awareness_history().unwrap(), 1);
+        assert!(store.list_awareness_history().unwrap().is_empty());
+        assert_eq!(store.list_awareness_items().unwrap().len(), 1);
     }
 
     #[test]
@@ -1005,7 +1108,7 @@ mod tests {
         assert_eq!(store.messages(1).unwrap()[0].content, "Keep this");
         let version: i64 = store.lock().unwrap()
             .pragma_query_value(None, "user_version", |row| row.get(0)).unwrap();
-        assert_eq!(version, 3);
+        assert_eq!(version, 4);
         assert!(!store.memory_enabled().unwrap());
         assert_eq!(store.get_awareness_settings().unwrap(), AwarenessSettings::default());
         assert!(store.list_memories().unwrap().is_empty());
