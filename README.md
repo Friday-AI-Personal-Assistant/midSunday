@@ -4,7 +4,7 @@
 
 midSunday is an independent, local-first desktop AI companion designed to combine useful assistance with a personal, customisable companion experience.
 
-> Project status: **Planning / foundation**  
+> Project status: **First desktop-shell prototype scaffold created; Windows build and runtime validation pending**  
 > Initial target: **Windows**  
 > Core direction: **Offline-capable, privacy-first, no mandatory subscription**
 
@@ -36,6 +36,9 @@ The product must remain useful without a cloud account. Online features must be 
 - [Decision log](docs/DECISIONS.md)
 - [Risks and open questions](docs/RISKS-AND-OPEN-QUESTIONS.md)
 - [Changelog](CHANGELOG.md)
+
+### Early prototype
+- [First Tauri desktop-shell prototype](prototype/desktop-shell/README.md)
 
 ### Product and engineering
 - [Product specification](docs/PRODUCT-SPECIFICATION.md)
