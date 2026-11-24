@@ -653,3 +653,17 @@ This is the first process-management implementation, not a working model integra
 - [ ] Connect the runtime coordinator to the desktop application only after lifecycle and cancellation behaviour are verified.
 
 The HTTP client is local-only and uses the llama.cpp health and chat-completion endpoints. This remains a runtime integration layer, not an end-user working model: no server binary or model is installed, selected, downloaded, or bundled, and the desktop UI is not yet connected to inference.
+
+
+### 2026-11-24 — Streaming generation and cancellation milestone
+
+- [x] Add server-sent-event streaming for local chat completions.
+- [x] Add a cloneable cancellation signal that can be triggered from another thread.
+- [x] Stop delivering deltas after cancellation and drop the local HTTP response stream.
+- [x] Return the runtime lifecycle to Ready after a cancelled request; mark it Failed on other communication errors.
+- [x] Add mock-server tests for streaming deltas, cancellation between events, and cancellation before any request is sent.
+- [ ] Verify this milestone with Windows, Linux, and macOS CI.
+- [ ] Confirm llama.cpp server disconnect handling stops CPU/GPU generation promptly under real workloads.
+- [ ] Add end-to-end tests with a controlled local server and child-process failure/restart scenarios.
+
+Cancellation is cooperative at the HTTP-stream boundary: midSunday closes its local response stream and stops forwarding tokens. The server's speed in noticing the disconnect and stopping its internal computation must still be verified. No external service is involved, and no model or server binary is downloaded. The desktop UI remains unconnected.

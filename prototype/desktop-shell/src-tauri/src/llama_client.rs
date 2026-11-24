@@ -1,6 +1,7 @@
 //! Typed, loopback-only HTTP client for the managed llama.cpp server.
-use std::io;
+use std::io::{self, Read};
 use std::net::{IpAddr, SocketAddr};
+use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
 use std::thread;
 use std::time::{Duration, Instant};
 use serde::{Deserialize, Serialize};
@@ -13,7 +14,7 @@ pub enum HealthStatus { Ready, Loading }
 #[derive(Debug, PartialEq, Eq)]
 pub enum LlamaClientError {
     InvalidConfiguration, InvalidTimeout, InvalidGenerationRequest,
-    HttpStatus(u16), Transport(String), InvalidResponse,
+    HttpStatus(u16), Transport(String), InvalidResponse, StreamRead(String), Cancelled,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -22,6 +23,22 @@ pub enum ReadinessError {
 }
 
 pub struct LlamaHttpClient { agent: ureq::Agent, base_url: String }
+
+/// Cloneable cancellation signal for one streaming generation request.
+/// Cancellation closes the local response stream; the server can then detect
+/// the disconnected client and stop work. Detection is server-dependent.
+#[derive(Clone, Default)]
+pub struct GenerationCancellation(Arc<AtomicBool>);
+
+impl GenerationCancellation {
+    pub fn cancel(&self) {
+        self.0.store(true, Ordering::Release);
+    }
+
+    pub fn is_cancelled(&self) -> bool {
+        self.0.load(Ordering::Acquire)
+    }
+}
 
 impl LlamaHttpClient {
     pub fn new(config: &RuntimeConfig, timeout: Duration) -> Result<Self, LlamaClientError> {
@@ -63,6 +80,85 @@ impl LlamaHttpClient {
             .filter(|content| !content.trim().is_empty())
             .ok_or(LlamaClientError::InvalidResponse)
     }
+
+    /// Stream text deltas from the local server. Cancellation drops the response
+    /// body immediately when the next network chunk or SSE event is processed.
+    pub fn generate_streaming<F>(
+        &self,
+        request: &GenerationRequest,
+        cancellation: &GenerationCancellation,
+        mut on_delta: F,
+    ) -> Result<(), LlamaClientError>
+    where
+        F: FnMut(&str),
+    {
+        request.validate().map_err(|_| LlamaClientError::InvalidGenerationRequest)?;
+        if cancellation.is_cancelled() {
+            return Err(LlamaClientError::Cancelled);
+        }
+
+        let body = ChatCompletionRequest {
+            messages: vec![ChatMessageRequest { role: "user", content: request.prompt.as_str() }],
+            max_tokens: request.max_tokens,
+            temperature: request.temperature,
+            top_p: request.top_p,
+            stream: true,
+        };
+        let mut response = self.agent
+            .post(format!("{}/v1/chat/completions", self.base_url))
+            .header("Accept", "text/event-stream")
+            .send_json(&body)
+            .map_err(map_http_error)?;
+
+        let mut reader = response.body_mut().as_reader();
+        let mut bytes = [0_u8; 2048];
+        let mut pending = String::new();
+
+        loop {
+            if cancellation.is_cancelled() {
+                return Err(LlamaClientError::Cancelled);
+            }
+
+            let count = reader.read(&mut bytes)
+                .map_err(|error| LlamaClientError::StreamRead(error.to_string()))?;
+            if count == 0 {
+                break;
+            }
+
+            pending.push_str(&String::from_utf8_lossy(&bytes[..count]));
+            while let Some(line_end) = pending.find('\n') {
+                let line = pending[..line_end].trim_end_matches('\r').to_owned();
+                pending.drain(..=line_end);
+
+                if let Some(data) = line.strip_prefix("data:") {
+                    let data = data.trim();
+                    if data == "[DONE]" {
+                        return Ok(());
+                    }
+
+                    let chunk: ChatCompletionStreamChunk = serde_json::from_str(data)
+                        .map_err(|_| LlamaClientError::InvalidResponse)?;
+                    if let Some(content) = chunk.choices.into_iter().next()
+                        .and_then(|choice| choice.delta.content)
+                    {
+                        if !content.is_empty() {
+                            on_delta(&content);
+                        }
+                    }
+                }
+
+                if cancellation.is_cancelled() {
+                    return Err(LlamaClientError::Cancelled);
+                }
+            }
+        }
+
+        if cancellation.is_cancelled() {
+            Err(LlamaClientError::Cancelled)
+        } else {
+            Ok(())
+        }
+    }
 }
 
 #[derive(Deserialize)]
@@ -80,6 +176,12 @@ struct ChatCompletionResponse { choices: Vec<ChatCompletionChoice> }
 struct ChatCompletionChoice { message: ChatCompletionMessage }
 #[derive(Deserialize)]
 struct ChatCompletionMessage { content: Option<String> }
+#[derive(Deserialize)]
+struct ChatCompletionStreamChunk { choices: Vec<ChatCompletionStreamChoice> }
+#[derive(Deserialize)]
+struct ChatCompletionStreamChoice { delta: ChatCompletionStreamDelta }
+#[derive(Deserialize)]
+struct ChatCompletionStreamDelta { content: Option<String> }
 
 fn map_http_error(error: ureq::Error) -> LlamaClientError {
     match error {
@@ -229,3 +331,63 @@ mod tests {
         server.join().unwrap();
     }
 }
+    #[test]
+    fn streaming_emits_text_deltas_from_server_sent_events() {
+        let body = concat!(
+            "data: {\\"choices\\":[{\\"delta\\":{\\"content\\":\\"Hello\\"}}]}\n\n",
+            "data: {\\"choices\\":[{\\"delta\\":{\\"content\\":\\" world\\"}}]}\n\n",
+            "data: [DONE]\n\n"
+        );
+        let (port, server) = mock_server(vec![(200, body)]);
+        let client = LlamaHttpClient::new(&config(port), Duration::from_secs(2)).unwrap();
+        let request = GenerationRequest {
+            prompt: "Hello, midSunday.".to_owned(), max_tokens: 64,
+            temperature: 0.7, top_p: 0.9,
+        };
+        let cancellation = GenerationCancellation::default();
+        let mut output = String::new();
+        client.generate_streaming(&request, &cancellation, |delta| output.push_str(delta)).unwrap();
+        assert_eq!(output, "Hello world");
+        server.join().unwrap();
+    }
+
+    #[test]
+    fn streaming_cancellation_stops_after_current_event() {
+        let body = concat!(
+            "data: {\\"choices\\":[{\\"delta\\":{\\"content\\":\\"first\\"}}]}\n\n",
+            "data: {\\"choices\\":[{\\"delta\\":{\\"content\\":\\"second\\"}}]}\n\n",
+            "data: [DONE]\n\n"
+        );
+        let (port, server) = mock_server(vec![(200, body)]);
+        let client = LlamaHttpClient::new(&config(port), Duration::from_secs(2)).unwrap();
+        let request = GenerationRequest {
+            prompt: "Cancel me.".to_owned(), max_tokens: 64,
+            temperature: 0.7, top_p: 0.9,
+        };
+        let cancellation = GenerationCancellation::default();
+        let signal = cancellation.clone();
+        let mut output = String::new();
+        let result = client.generate_streaming(&request, &cancellation, |delta| {
+            output.push_str(delta);
+            signal.cancel();
+        });
+        assert_eq!(result, Err(LlamaClientError::Cancelled));
+        assert_eq!(output, "first");
+        server.join().unwrap();
+    }
+
+    #[test]
+    fn already_cancelled_stream_does_not_send_a_request() {
+        let client = LlamaHttpClient::new(&RuntimeConfig::default(), Duration::from_millis(100)).unwrap();
+        let request = GenerationRequest {
+            prompt: "Do not send.".to_owned(), max_tokens: 64,
+            temperature: 0.7, top_p: 0.9,
+        };
+        let cancellation = GenerationCancellation::default();
+        cancellation.cancel();
+        assert_eq!(
+            client.generate_streaming(&request, &cancellation, |_| {}),
+            Err(LlamaClientError::Cancelled)
+        );
+    }
+

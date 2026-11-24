@@ -2,7 +2,7 @@
 use std::path::Path;
 use std::time::Duration;
 
-use crate::llama_client::{wait_for_ready, LlamaClientError, LlamaHttpClient, ReadinessError};
+use crate::llama_client::{wait_for_ready, GenerationCancellation, LlamaClientError, LlamaHttpClient, ReadinessError};
 use crate::llama_process::{LlamaServerProcess, ProcessStartError};
 use crate::runtime::{GenerationRequest, RuntimeLifecycle, RuntimeStatus};
 
@@ -13,6 +13,7 @@ pub enum RuntimeSessionError {
     Client(LlamaClientError),
     Readiness(ReadinessError),
     Generation(LlamaClientError),
+    Cancelled,
     ProcessStop(String),
     InvalidState,
 }
@@ -87,6 +88,41 @@ impl LlamaRuntimeSession {
                 self.lifecycle.transition(RuntimeStatus::Ready)
                     .map_err(|_| RuntimeSessionError::InvalidState)?;
                 Ok(response)
+            }
+            Err(error) => {
+                let _ = self.lifecycle.transition(RuntimeStatus::Failed);
+                Err(RuntimeSessionError::Generation(error))
+            }
+        }
+    }
+
+    /// Generate streaming text deltas. The cancellation handle may be cloned
+    /// before this call and triggered from another thread while generation runs.
+    pub fn generate_streaming<F>(
+        &mut self,
+        request: &GenerationRequest,
+        cancellation: &GenerationCancellation,
+        on_delta: F,
+    ) -> Result<(), RuntimeSessionError>
+    where
+        F: FnMut(&str),
+    {
+        request.validate().map_err(|_| {
+            RuntimeSessionError::Generation(LlamaClientError::InvalidGenerationRequest)
+        })?;
+        self.lifecycle.transition(RuntimeStatus::Generating)
+            .map_err(|_| RuntimeSessionError::InvalidState)?;
+
+        match self.client.generate_streaming(request, cancellation, on_delta) {
+            Ok(()) => {
+                self.lifecycle.transition(RuntimeStatus::Ready)
+                    .map_err(|_| RuntimeSessionError::InvalidState)?;
+                Ok(())
+            }
+            Err(LlamaClientError::Cancelled) => {
+                self.lifecycle.transition(RuntimeStatus::Ready)
+                    .map_err(|_| RuntimeSessionError::InvalidState)?;
+                Err(RuntimeSessionError::Cancelled)
             }
             Err(error) => {
                 let _ = self.lifecycle.transition(RuntimeStatus::Failed);
