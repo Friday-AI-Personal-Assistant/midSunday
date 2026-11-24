@@ -5,7 +5,7 @@
 midSunday is an independent, local-first desktop AI companion designed to combine useful assistance with a personal, customisable companion experience.
 
 > Project status: **Interactive desktop workspace prototype implemented; Windows build and runtime validation pending**  
-> Initial target: **Windows**  
+> Build targets: **Windows, Linux and macOS** (Windows first priority)  
 > Core direction: **Offline-capable, privacy-first, no mandatory subscription**
 
 ## What we are building
@@ -40,6 +40,7 @@ The product must remain useful without a cloud account. Online features must be 
 ### Early prototype
 - [First Tauri desktop-shell prototype](prototype/desktop-shell/README.md)
 - [Manual Windows build workflow](prototype/desktop-shell/WINDOWS-BUILD.md)
+- [Cross-platform build workflows](docs/CROSS-PLATFORM-BUILDS.md)
 
 ### Product and engineering
 - [Product specification](docs/PRODUCT-SPECIFICATION.md)
@@ -65,7 +66,7 @@ The roadmap is the master sequence of work. These documents provide detailed req
 ## Current status
 The repository contains the first interactive Tauri desktop workspace prototype alongside the project documentation. The workspace includes a conversation view, local-session message composer, companion selection, settings screens, and a Rust-core status indicator. It is still a UI prototype: no AI model, persistent chat storage, voice engine, hardware detection, installer, or production feature is implemented.
 
-Phase 1 feasibility research continues in parallel. Initial findings and unresolved questions are recorded in [Phase 1 feasibility research](docs/PHASE-1-RESEARCH.md). Practical benchmarks, Windows build/runtime validation, and licence clearance are still outstanding.
+Phase 1 feasibility research continues in parallel. Initial findings and unresolved questions are recorded in [Phase 1 feasibility research](docs/PHASE-1-RESEARCH.md). Practical benchmarks, Windows/Linux/macOS build validation, real-device runtime testing, and licence clearance are still outstanding.
 
 ## Development approach
 Development proceeds in small, testable milestones. A task is complete only when its acceptance criteria, tests, documentation, privacy review, and applicable licence review are satisfied.
