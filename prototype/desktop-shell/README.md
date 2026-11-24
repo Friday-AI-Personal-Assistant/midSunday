@@ -47,3 +47,5 @@ The NSIS installer output is generated under src-tauri/target/release/bundle/nsi
 - The Rust status command is the only backend command.
 - No performance, accessibility, installer, or offline-install claim has been validated.
 - Do not add unrestricted filesystem, shell, network, model, microphone, or desktop-control permissions without a reviewed design and explicit need.
+
+See [WINDOWS-BUILD.md](WINDOWS-BUILD.md) for the manual GitHub-hosted Windows build workflow and artifact retrieval steps.
