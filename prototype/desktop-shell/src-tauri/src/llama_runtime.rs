@@ -51,7 +51,7 @@ pub enum RuntimeSessionError {
 
 
 /// Minimal process boundary so recovery can be tested without launching a real model.
-trait ManagedServerProcess {
+trait ManagedServerProcess: Send {
     fn is_running(&mut self) -> std::io::Result<bool>;
     fn stop(&mut self) -> std::io::Result<()>;
 }

@@ -700,3 +700,16 @@ The test seam substitutes only the managed-process boundary. The HTTP readiness 
 - [ ] Confirm real llama.cpp cancellation and restart behaviour under representative workloads.
 
 Recovery is explicit rather than automatic: the future coordinator must decide when a retry is appropriate and present the failure to the user if the bounded budget is exhausted. This change does not connect the runtime to the UI, install a model, or download a server binary.
+
+
+### 2026-11-24 — Tauri local-runtime coordinator boundary
+
+- [x] Add an application-owned runtime manager with one managed session at a time.
+- [x] Expose serializable runtime status snapshots without exposing process internals.
+- [x] Add Tauri commands for status, explicit local start, bounded generation, stop, and explicit recovery.
+- [x] Keep model and executable paths user-supplied; do not download or bundle either asset.
+- [x] Serialize lifecycle operations through one managed mutex so concurrent commands cannot mutate the same session simultaneously.
+- [ ] Verify the coordinator and Tauri command boundary on Windows, Linux, and macOS CI.
+- [ ] Connect the chat UI to these commands only after the command boundary and streaming/cancellation UX are implemented.
+
+This is an application IPC foundation, not a user-ready model setup flow. The current frontend does not invoke these runtime commands, there is no model picker or bundled engine, and the synchronous generation command is an initial bounded integration step. Streaming UI and cross-command cancellation remain future work.
