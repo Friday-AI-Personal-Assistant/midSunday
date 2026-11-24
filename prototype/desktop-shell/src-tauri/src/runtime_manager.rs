@@ -1,83 +1,293 @@
-use std::{path::Path, time::Duration};
+//! Thread-safe coordinator for the local inference session.
+//!
+//! Runtime work is serialized independently from status reads. A long startup
+//! or generation therefore cannot prevent the UI from reading status or
+//! signalling cancellation. This module never downloads assets or uses a
+//! network endpoint other than the validated loopback runtime.
+
+use std::{path::Path, sync::{Arc, Mutex}, time::Duration};
+
 use serde::Serialize;
-use crate::llama_runtime::{LlamaRuntimeSession, RecoveryPolicy};
+
+use crate::llama_client::GenerationCancellation;
+use crate::llama_runtime::{LlamaRuntimeSession, RecoveryPolicy, RuntimeSessionError};
 use crate::runtime::{GenerationRequest, RuntimeConfig, RuntimeStatus};
 
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
-pub struct RuntimeStatusSnapshot { pub status: String, pub detail: Option<String> }
-
-pub struct RuntimeManager {
-    session: Option<LlamaRuntimeSession>,
-    status: RuntimeStatus,
-    detail: Option<String>,
+pub struct RuntimeStatusSnapshot {
+    pub status: String,
+    pub detail: Option<String>,
 }
+
+struct RuntimeManagerInner {
+    operation: Mutex<()>,
+    session: Mutex<Option<LlamaRuntimeSession>>,
+    status: Mutex<RuntimeStatusSnapshot>,
+    active_cancellation: Mutex<Option<GenerationCancellation>>,
+}
+
+#[derive(Clone)]
+pub struct RuntimeManager {
+    inner: Arc<RuntimeManagerInner>,
+}
+
 impl Default for RuntimeManager {
     fn default() -> Self {
-        Self { session: None, status: RuntimeStatus::NotInstalled, detail: None }
+        Self {
+            inner: Arc::new(RuntimeManagerInner {
+                operation: Mutex::new(()),
+                session: Mutex::new(None),
+                status: Mutex::new(RuntimeStatusSnapshot {
+                    status: "notInstalled".to_owned(),
+                    detail: None,
+                }),
+                active_cancellation: Mutex::new(None),
+            }),
+        }
     }
 }
+
 impl RuntimeManager {
-    pub fn snapshot(&self) -> RuntimeStatusSnapshot {
-        RuntimeStatusSnapshot { status: status_name(self.status).into(), detail: self.detail.clone() }
+    pub fn snapshot(&self) -> Result<RuntimeStatusSnapshot, String> {
+        self.inner.status.lock()
+            .map(|status| status.clone())
+            .map_err(|_| "Runtime status is unavailable.".to_owned())
     }
-    pub fn start(&mut self, config: RuntimeConfig, executable: &str, model: &str,
-        startup: Duration, poll: Duration, request: Duration) -> Result<(), String> {
-        if self.session.is_some() { return Err("A runtime session already exists; stop it or use recovery first.".into()); }
-        self.status = RuntimeStatus::Starting;
-        self.detail = None;
-        match LlamaRuntimeSession::start(&config, Path::new(executable), Path::new(model), startup, poll, request) {
-            Ok(session) => { self.session = Some(session); self.status = RuntimeStatus::Ready; Ok(()) }
-            Err(error) => { self.status = RuntimeStatus::Failed; let d = format!("{error:?}"); self.detail = Some(d.clone()); Err(d) }
+
+    fn set_status(&self, status: RuntimeStatus, detail: Option<String>) -> Result<(), String> {
+        let mut snapshot = self.inner.status.lock()
+            .map_err(|_| "Runtime status is unavailable.".to_owned())?;
+        snapshot.status = status_name(status).to_owned();
+        snapshot.detail = detail;
+        Ok(())
+    }
+
+    pub fn start(
+        &self,
+        config: RuntimeConfig,
+        executable: &str,
+        model: &str,
+        startup_timeout: Duration,
+        poll_interval: Duration,
+        request_timeout: Duration,
+    ) -> Result<(), String> {
+        let _operation = self.inner.operation.lock()
+            .map_err(|_| "Runtime operation lock is unavailable.".to_owned())?;
+        let mut slot = self.inner.session.lock()
+            .map_err(|_| "Runtime session is unavailable.".to_owned())?;
+        if slot.is_some() {
+            return Err("A runtime session already exists; stop it or use recovery first.".to_owned());
+        }
+        drop(slot);
+
+        self.set_status(RuntimeStatus::Starting, None)?;
+        match LlamaRuntimeSession::start(
+            &config, Path::new(executable), Path::new(model),
+            startup_timeout, poll_interval, request_timeout,
+        ) {
+            Ok(session) => {
+                *self.inner.session.lock()
+                    .map_err(|_| "Runtime session is unavailable.".to_owned())? = Some(session);
+                self.set_status(RuntimeStatus::Ready, None)
+            }
+            Err(error) => {
+                let detail = format!("{error:?}");
+                self.set_status(RuntimeStatus::Failed, Some(detail.clone()))?;
+                Err(detail)
+            }
         }
     }
-    pub fn generate(&mut self, request: GenerationRequest) -> Result<String, String> {
-        let result = self.session.as_mut().ok_or_else(|| "No local runtime session is active.".to_owned())?.generate(&request);
+
+    /// Generate a complete response using the cancellable streaming transport.
+    /// Deltas are accumulated here until the frontend gains its event stream.
+    pub fn generate(&self, request: GenerationRequest) -> Result<String, String> {
+        let _operation = self.inner.operation.lock()
+            .map_err(|_| "Runtime operation lock is unavailable.".to_owned())?;
+        let mut session = self.inner.session.lock()
+            .map_err(|_| "Runtime session is unavailable.".to_owned())?;
+        let session = session.as_mut()
+            .ok_or_else(|| "No local runtime session is active.".to_owned())?;
+
+        let cancellation = GenerationCancellation::default();
+        *self.inner.active_cancellation.lock()
+            .map_err(|_| "Generation cancellation is unavailable.".to_owned())? =
+            Some(cancellation.clone());
+        self.set_status(RuntimeStatus::Generating, None)?;
+
+        let mut response = String::new();
+        let result = session.generate_streaming(&request, &cancellation, |delta| {
+            response.push_str(delta);
+        });
+
+        if let Ok(mut active) = self.inner.active_cancellation.lock() {
+            *active = None;
+        }
+
         match result {
-            Ok(text) => { self.status = self.session.as_ref().unwrap().status(); self.detail = None; Ok(text) }
-            Err(error) => { self.status = self.session.as_ref().unwrap().status(); let d = format!("{error:?}"); self.detail = Some(d.clone()); Err(d) }
+            Ok(()) => {
+                self.set_status(session.status(), None)?;
+                Ok(response)
+            }
+            Err(RuntimeSessionError::Cancelled) => {
+                self.set_status(session.status(), Some("Generation cancelled.".to_owned()))?;
+                Err("Generation cancelled.".to_owned())
+            }
+            Err(error) => {
+                let detail = format!("{error:?}");
+                self.set_status(session.status(), Some(detail.clone()))?;
+                Err(detail)
+            }
         }
     }
-    pub fn stop(&mut self) -> Result<(), String> {
-        if self.session.is_none() {
-            if self.status != RuntimeStatus::NotInstalled { self.status = RuntimeStatus::Stopped; self.detail = None; }
+
+    /// Signal an in-flight generation without waiting for its operation lock.
+    pub fn cancel_generation(&self) -> Result<bool, String> {
+        let active = self.inner.active_cancellation.lock()
+            .map_err(|_| "Generation cancellation is unavailable.".to_owned())?;
+        if let Some(cancellation) = active.as_ref() {
+            cancellation.cancel();
+            Ok(true)
+        } else {
+            Ok(false)
+        }
+    }
+
+    pub fn stop(&self) -> Result<(), String> {
+        // Cancellation deliberately happens before waiting for the serialized
+        // operation lock, allowing an active streaming request to unwind.
+        let _ = self.cancel_generation()?;
+        let _operation = self.inner.operation.lock()
+            .map_err(|_| "Runtime operation lock is unavailable.".to_owned())?;
+        let mut slot = self.inner.session.lock()
+            .map_err(|_| "Runtime session is unavailable.".to_owned())?;
+
+        let Some(session) = slot.as_mut() else {
+            let current = self.snapshot()?;
+            if current.status != "notInstalled" {
+                self.set_status(RuntimeStatus::Stopped, None)?;
+            }
             return Ok(());
-        }
-        let result = self.session.as_mut().unwrap().stop();
-        match result {
-            Ok(()) => { self.session = None; self.status = RuntimeStatus::Stopped; self.detail = None; Ok(()) }
-            Err(error) => { self.status = self.session.as_ref().unwrap().status(); let d = format!("{error:?}"); self.detail = Some(d.clone()); Err(d) }
+        };
+
+        match session.stop() {
+            Ok(()) => {
+                *slot = None;
+                self.set_status(RuntimeStatus::Stopped, None)
+            }
+            Err(error) => {
+                let detail = format!("{error:?}");
+                self.set_status(session.status(), Some(detail.clone()))?;
+                Err(detail)
+            }
         }
     }
-    pub fn recover(&mut self, executable: &str, model: &str, startup: Duration, poll: Duration) -> Result<(), String> {
-        let result = self.session.as_mut().ok_or_else(|| "There is no existing session to recover.".to_owned())?
-            .recover(Path::new(executable), Path::new(model), startup, poll, RecoveryPolicy::default());
-        match result {
-            Ok(()) => { self.status = self.session.as_ref().unwrap().status(); self.detail = None; Ok(()) }
-            Err(error) => { self.status = self.session.as_ref().unwrap().status(); let d = format!("{error:?}"); self.detail = Some(d.clone()); Err(d) }
+
+    pub fn recover(
+        &self,
+        executable: &str,
+        model: &str,
+        startup_timeout: Duration,
+        poll_interval: Duration,
+    ) -> Result<(), String> {
+        let _operation = self.inner.operation.lock()
+            .map_err(|_| "Runtime operation lock is unavailable.".to_owned())?;
+        let mut slot = self.inner.session.lock()
+            .map_err(|_| "Runtime session is unavailable.".to_owned())?;
+        let session = slot.as_mut()
+            .ok_or_else(|| "There is no existing session to recover.".to_owned())?;
+
+        self.set_status(RuntimeStatus::Starting, None)?;
+        match session.recover(
+            Path::new(executable), Path::new(model), startup_timeout, poll_interval,
+            RecoveryPolicy::default(),
+        ) {
+            Ok(()) => self.set_status(session.status(), None),
+            Err(error) => {
+                let detail = format!("{error:?}");
+                self.set_status(session.status(), Some(detail.clone()))?;
+                Err(detail)
+            }
         }
     }
 }
-fn status_name(s: RuntimeStatus) -> &'static str {
-    match s { RuntimeStatus::NotInstalled=>"notInstalled", RuntimeStatus::Stopped=>"stopped",
-        RuntimeStatus::Starting=>"starting", RuntimeStatus::Ready=>"ready",
-        RuntimeStatus::Generating=>"generating", RuntimeStatus::Failed=>"failed" }
+
+fn status_name(status: RuntimeStatus) -> &'static str {
+    match status {
+        RuntimeStatus::NotInstalled => "notInstalled",
+        RuntimeStatus::Stopped => "stopped",
+        RuntimeStatus::Starting => "starting",
+        RuntimeStatus::Ready => "ready",
+        RuntimeStatus::Generating => "generating",
+        RuntimeStatus::Failed => "failed",
+    }
 }
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[test] fn starts_not_installed() {
-        let m=RuntimeManager::default(); assert_eq!(m.snapshot().status,"notInstalled");
+    use std::sync::mpsc;
+    use std::thread;
+
+    #[test]
+    fn new_manager_reports_not_installed() {
+        let snapshot = RuntimeManager::default().snapshot().unwrap();
+        assert_eq!(snapshot.status, "notInstalled");
+        assert_eq!(snapshot.detail, None);
     }
-    #[test] fn rejects_generation_without_session() {
-        let mut m=RuntimeManager::default();
-        let r=GenerationRequest{prompt:"hi".into(),max_tokens:16,temperature:0.7,top_p:0.9};
-        assert!(m.generate(r).unwrap_err().contains("No local runtime"));
+
+    #[test]
+    fn generation_without_a_session_is_rejected() {
+        let manager = RuntimeManager::default();
+        let request = GenerationRequest {
+            prompt: "Hello".to_owned(), max_tokens: 32, temperature: 0.7, top_p: 0.9,
+        };
+        assert!(manager.generate(request).unwrap_err().contains("No local runtime"));
     }
-    #[test] fn invalid_configuration_fails_without_launching_a_process() {
-        let mut m=RuntimeManager::default();
-        let c=RuntimeConfig{host:"0.0.0.0".into(),..RuntimeConfig::default()};
-        assert!(m.start(c,"missing","missing",Duration::from_secs(1),Duration::from_millis(1),Duration::from_secs(1)).is_err());
-        assert_eq!(m.snapshot().status,"failed");
+
+    #[test]
+    fn invalid_launch_configuration_is_reported_as_failed() {
+        let manager = RuntimeManager::default();
+        let config = RuntimeConfig {
+            host: "0.0.0.0".to_owned(),
+            ..RuntimeConfig::default()
+        };
+        assert!(manager.start(
+            config, "missing-server", "missing-model",
+            Duration::from_secs(1), Duration::from_millis(1), Duration::from_secs(1),
+        ).is_err());
+        assert_eq!(manager.snapshot().unwrap().status, "failed");
+        assert!(manager.snapshot().unwrap().detail.is_some());
+    }
+
+    #[test]
+    fn status_remains_readable_while_an_operation_is_busy() {
+        let manager = RuntimeManager::default();
+        let worker_manager = manager.clone();
+        let (entered_tx, entered_rx) = mpsc::channel();
+        let (release_tx, release_rx) = mpsc::channel();
+
+        let worker = thread::spawn(move || {
+            let _operation = worker_manager.inner.operation.lock().unwrap();
+            worker_manager.set_status(RuntimeStatus::Generating, None).unwrap();
+            entered_tx.send(()).unwrap();
+            release_rx.recv().unwrap();
+        });
+
+        entered_rx.recv().unwrap();
+        assert_eq!(manager.snapshot().unwrap().status, "generating");
+        release_tx.send(()).unwrap();
+        worker.join().unwrap();
+    }
+
+    #[test]
+    fn cancellation_signal_is_non_blocking_and_reports_if_generation_exists() {
+        let manager = RuntimeManager::default();
+        assert_eq!(manager.cancel_generation(), Ok(false));
+
+        let token = GenerationCancellation::default();
+        *manager.inner.active_cancellation.lock().unwrap() = Some(token.clone());
+        assert_eq!(manager.cancel_generation(), Ok(true));
+        assert!(token.is_cancelled());
     }
 }

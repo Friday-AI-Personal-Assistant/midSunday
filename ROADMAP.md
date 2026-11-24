@@ -683,7 +683,7 @@ Cancellation is verified at the client transport boundary: the test server obser
 - [x] Test recovery exhaustion, exact attempt count, and final Failed state.
 - [x] Test that recovery is rejected while the session is Ready.
 - [x] Verify the tests on Windows, Linux, and macOS CI (Run #35 passed all three jobs).
-- [ ] Test replacement processes that launch but never become healthy, including cleanup and final Failed state.
+- [x] Test replacement processes that launch but never become healthy, including cleanup and final Failed state.
 
 The test seam substitutes only the managed-process boundary. The HTTP readiness path remains real loopback TCP, while fake process handles make restart outcomes deterministic. These tests do not claim real llama.cpp compute cancellation or model inference behaviour.
 
@@ -695,8 +695,8 @@ The test seam substitutes only the managed-process boundary. The HTTP readiness 
 - [x] Reuse the validated loopback client and require the replacement server to pass bounded readiness checks.
 - [x] Clean up failed replacement processes and stop after the configured attempt budget.
 - [x] Add policy validation tests for defaults, zero attempts, and attempts above the hard limit.
-- [ ] Add controlled integration tests for successful restart, repeated startup failure, and recovery exhaustion.
-- [ ] Verify the recovery implementation on Windows, Linux, and macOS CI.
+- [x] Add controlled integration tests for successful restart, repeated startup failure, and recovery exhaustion.
+- [x] Verify the recovery implementation on Windows, Linux, and macOS CI (Run #36 passed all three jobs).
 - [ ] Confirm real llama.cpp cancellation and restart behaviour under representative workloads.
 
 Recovery is explicit rather than automatic: the future coordinator must decide when a retry is appropriate and present the failure to the user if the bounded budget is exhausted. This change does not connect the runtime to the UI, install a model, or download a server binary.
@@ -709,7 +709,21 @@ Recovery is explicit rather than automatic: the future coordinator must decide w
 - [x] Add Tauri commands for status, explicit local start, bounded generation, stop, and explicit recovery.
 - [x] Keep model and executable paths user-supplied; do not download or bundle either asset.
 - [x] Serialize lifecycle operations through one managed mutex so concurrent commands cannot mutate the same session simultaneously.
-- [ ] Verify the coordinator and Tauri command boundary on Windows, Linux, and macOS CI.
+- [x] Verify the coordinator and Tauri command boundary on Windows, Linux, and macOS CI (Run #37 passed all three jobs).
 - [ ] Connect the chat UI to these commands only after the command boundary and streaming/cancellation UX are implemented.
 
 This is an application IPC foundation, not a user-ready model setup flow. The current frontend does not invoke these runtime commands, there is no model picker or bundled engine, and the synchronous generation command is an initial bounded integration step. Streaming UI and cross-command cancellation remain future work.
+
+
+### 2026-11-24 — Responsive runtime commands and cancellation boundary
+
+- [x] Separate runtime operation serialization from status snapshots so status reads do not wait behind model startup or generation.
+- [x] Move blocking runtime work onto Tauri's blocking worker pool instead of occupying the async command executor.
+- [x] Add a cancellation command that can signal an active streaming generation without waiting for the runtime operation lock.
+- [x] Route manager generation through the already-tested streaming transport and collect deltas until the UI event-stream integration is implemented.
+- [x] Make the runtime manager safely cloneable for worker tasks while keeping one shared process/session owner.
+- [x] Add tests for status visibility during a busy operation and immediate cancellation signalling.
+- [ ] Verify responsive commands and cancellation on Windows, Linux, and macOS CI.
+- [ ] Add frontend event delivery for streaming text and a visible Stop generating control.
+
+Cancellation closes the local HTTP response stream. Whether the actual llama.cpp process stops its internal CPU/GPU work immediately remains server-dependent and requires real-engine testing. The frontend is still not connected to these commands; no model is bundled or downloaded.

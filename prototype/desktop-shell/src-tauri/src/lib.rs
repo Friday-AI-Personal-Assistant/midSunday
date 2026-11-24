@@ -4,7 +4,6 @@ mod llama_runtime;
 mod runtime;
 mod runtime_manager;
 
-use std::sync::Mutex;
 use tauri::State;
 use runtime::{GenerationRequest, RuntimeConfig};
 use runtime_manager::{RuntimeManager, RuntimeStatusSnapshot};
@@ -13,47 +12,104 @@ use runtime_manager::{RuntimeManager, RuntimeStatusSnapshot};
 fn get_app_status() -> &'static str {
     "The midSunday Rust core is running. The desktop shell is connected."
 }
+
 #[tauri::command]
-fn get_runtime_status(manager: State<'_, Mutex<RuntimeManager>>) -> Result<RuntimeStatusSnapshot, String> {
-    Ok(manager.lock().map_err(|_| "Runtime manager unavailable".to_owned())?.snapshot())
+fn get_runtime_status(manager: State<'_, RuntimeManager>) -> Result<RuntimeStatusSnapshot, String> {
+    manager.snapshot()
 }
+
 #[tauri::command]
-fn start_local_runtime(
-    manager: State<'_, Mutex<RuntimeManager>>, executable_path: String, model_path: String,
-    host: String, port: u16, context_tokens: u32, cpu_threads: Option<u16>,
+async fn start_local_runtime(
+    manager: State<'_, RuntimeManager>,
+    executable_path: String,
+    model_path: String,
+    host: String,
+    port: u16,
+    context_tokens: u32,
+    cpu_threads: Option<u16>,
 ) -> Result<RuntimeStatusSnapshot, String> {
-    let mut m=manager.lock().map_err(|_| "Runtime manager unavailable".to_owned())?;
-    m.start(RuntimeConfig{host,port,context_tokens,cpu_threads},&executable_path,&model_path,
-        std::time::Duration::from_secs(60),std::time::Duration::from_millis(250),std::time::Duration::from_secs(15))?;
-    Ok(m.snapshot())
+    let manager = manager.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        manager.start(
+            RuntimeConfig { host, port, context_tokens, cpu_threads },
+            &executable_path,
+            &model_path,
+            std::time::Duration::from_secs(60),
+            std::time::Duration::from_millis(250),
+            std::time::Duration::from_secs(15),
+        )?;
+        manager.snapshot()
+    })
+    .await
+    .map_err(|error| format!("Runtime worker failed: {error}"))?
 }
+
 #[tauri::command]
-fn generate_local_response(
-    manager: State<'_, Mutex<RuntimeManager>>, prompt: String, max_tokens: u32, temperature: f32, top_p: f32,
-) -> Result<String,String> {
-    manager.lock().map_err(|_| "Runtime manager unavailable".to_owned())?
-        .generate(GenerationRequest{prompt,max_tokens,temperature,top_p})
+async fn generate_local_response(
+    manager: State<'_, RuntimeManager>,
+    prompt: String,
+    max_tokens: u32,
+    temperature: f32,
+    top_p: f32,
+) -> Result<String, String> {
+    let manager = manager.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        manager.generate(GenerationRequest { prompt, max_tokens, temperature, top_p })
+    })
+    .await
+    .map_err(|error| format!("Generation worker failed: {error}"))?
 }
+
 #[tauri::command]
-fn stop_local_runtime(manager: State<'_, Mutex<RuntimeManager>>) -> Result<RuntimeStatusSnapshot,String> {
-    let mut m=manager.lock().map_err(|_| "Runtime manager unavailable".to_owned())?;
-    m.stop()?; Ok(m.snapshot())
+fn cancel_local_generation(manager: State<'_, RuntimeManager>) -> Result<bool, String> {
+    manager.cancel_generation()
 }
+
 #[tauri::command]
-fn recover_local_runtime(
-    manager: State<'_, Mutex<RuntimeManager>>, executable_path: String, model_path: String,
-) -> Result<RuntimeStatusSnapshot,String> {
-    let mut m=manager.lock().map_err(|_| "Runtime manager unavailable".to_owned())?;
-    m.recover(&executable_path,&model_path,std::time::Duration::from_secs(60),std::time::Duration::from_millis(250))?;
-    Ok(m.snapshot())
+async fn stop_local_runtime(
+    manager: State<'_, RuntimeManager>,
+) -> Result<RuntimeStatusSnapshot, String> {
+    let manager = manager.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        manager.stop()?;
+        manager.snapshot()
+    })
+    .await
+    .map_err(|error| format!("Stop worker failed: {error}"))?
 }
+
+#[tauri::command]
+async fn recover_local_runtime(
+    manager: State<'_, RuntimeManager>,
+    executable_path: String,
+    model_path: String,
+) -> Result<RuntimeStatusSnapshot, String> {
+    let manager = manager.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        manager.recover(
+            &executable_path,
+            &model_path,
+            std::time::Duration::from_secs(60),
+            std::time::Duration::from_millis(250),
+        )?;
+        manager.snapshot()
+    })
+    .await
+    .map_err(|error| format!("Recovery worker failed: {error}"))?
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .manage(Mutex::new(RuntimeManager::default()))
+        .manage(RuntimeManager::default())
         .invoke_handler(tauri::generate_handler![
-            get_app_status,get_runtime_status,start_local_runtime,generate_local_response,
-            stop_local_runtime,recover_local_runtime
+            get_app_status,
+            get_runtime_status,
+            start_local_runtime,
+            generate_local_response,
+            cancel_local_generation,
+            stop_local_runtime,
+            recover_local_runtime
         ])
         .run(tauri::generate_context!())
         .expect("error while running midSunday");
