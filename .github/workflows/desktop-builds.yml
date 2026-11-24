@@ -12,10 +12,6 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: midsunday-desktop-builds
-  cancel-in-progress: false
-
 jobs:
   build:
     name: Build midSunday — ${{ matrix.platform }}
