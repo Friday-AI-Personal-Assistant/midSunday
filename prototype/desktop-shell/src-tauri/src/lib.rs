@@ -11,7 +11,7 @@ mod runtime_manager;
 use tauri::{ipc::Channel, State};
 use runtime::{ConversationMessage, GenerationRequest, RuntimeConfig};
 use runtime_manager::{RuntimeManager, RuntimeStatusSnapshot};
-use conversation_store::{ConversationStore, ConversationSummary, ImportResult, SavedMemory, StoredMessage, UserProfile};
+use conversation_store::{AwarenessSettings, ConversationStore, ConversationSummary, ImportResult, SavedMemory, StoredMessage, UserProfile};
 use engine_settings::{EngineSettings, EngineSettingsStore};
 use companion_settings::{CompanionSettings, CompanionSettingsStore};
 use model_catalog::{LocalModel, ModelCatalog, ModelVerification};
@@ -105,6 +105,19 @@ fn set_memory_enabled(store: State<'_, ConversationStore>, enabled: bool) -> Res
 #[tauri::command]
 fn export_saved_memories(store: State<'_, ConversationStore>) -> Result<String, String> {
     store.export_memories()
+}
+
+#[tauri::command]
+fn get_awareness_settings(store: State<'_, ConversationStore>) -> Result<AwarenessSettings, String> {
+    store.get_awareness_settings()
+}
+
+#[tauri::command]
+fn save_awareness_settings(
+    store: State<'_, ConversationStore>,
+    settings: AwarenessSettings,
+) -> Result<AwarenessSettings, String> {
+    store.save_awareness_settings(settings)
 }
 
 #[tauri::command]
@@ -304,6 +317,8 @@ pub fn run() {
             get_memory_enabled,
             set_memory_enabled,
             export_saved_memories,
+            get_awareness_settings,
+            save_awareness_settings,
             get_user_profile,
             save_user_profile,
             get_engine_settings,

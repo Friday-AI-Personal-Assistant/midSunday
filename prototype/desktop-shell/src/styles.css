@@ -279,3 +279,5 @@ h1 { margin: 0; color: #eef5ef; font-size: clamp(25px, 3vw, 34px); font-weight: 
 /* Local user profile preferences */
 .settings-section .path-field { max-width: 560px; }
 .settings-section .path-field input { box-sizing: border-box; }
+
+.toggle:disabled { opacity: 0.45; cursor: not-allowed; }

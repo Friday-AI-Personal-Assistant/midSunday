@@ -234,6 +234,9 @@ Release numbers are planning labels, not promises or dates. A stage is not compl
 - [ ] Keep memory local by default.
 - [ ] Require explicit consent before any cloud provider receives memory or chat context.
 - [ ] Test data integrity after crashes, upgrades, and interrupted writes.
+- [x] Add the first Awareness foundation migration (SQLite schema v3), preserving conversations and explicit saved memories from schema v2.
+- [x] Persist Awareness master, conversation-learning, and in-app-search-learning preferences independently; all default OFF and remain user-controlled.
+- [x] Add an Awareness settings panel that clearly states automatic learning is not active yet, so saved preferences cannot be mistaken for active collection.
 - [ ] Evolve explicit saved memory into a dedicated **Awareness** system; preserve existing user-created memories during migration.
 - [ ] Remove the temporary fixed 100-item memory cap as part of the scalable Awareness design; use available local storage responsibly, show storage usage/warnings, and never silently discard knowledge.
 - [ ] Add automatic, opt-in learning from conversations inside midSunday and a separate opt-in for searches performed inside midSunday.
@@ -263,7 +266,7 @@ Release numbers are planning labels, not promises or dates. A stage is not compl
 6. "No fixed item-count limit" does not mean infinite storage; actual capacity is bounded by the user's device. midSunday must explain storage use and must not silently delete records.
 7. The system must distinguish observed facts from inferences, show provenance, and avoid treating learned text as trusted instructions.
 
-**Exit gate:** Users understand what is stored, can control every learning source and setting, and can inspect/export/delete learned knowledge and relevant source evidence without hidden copies or unexpected cloud transfer. The existing explicit-memory implementation is the starting point only; the scalable Awareness system, automatic learning, retrieval, import/restore, retention controls, and real desktop crash/restart verification remain open.
+**Exit gate:** Users understand what is stored, can control every learning source and setting, and can inspect/export/delete learned knowledge and relevant source evidence without hidden copies or unexpected cloud transfer. The existing explicit-memory implementation is the starting point only. The initial Awareness schema and opt-in preference controls are now implemented, but no automatic learning is active. Scalable item management, secret filtering, source-event ingestion, user-visible learning history, intelligent retrieval, import/restore, retention controls, and real desktop crash/restart verification remain open.
 
 ## Phase 6 — Voice and multilingual experience
 
@@ -873,3 +876,15 @@ This milestone does not implement automatic memory extraction, memory import/res
 - [x] Verify profile persistence and validation with Rust regression tests.
 
 The profile is optional and device-local. midSunday uses the preferred name naturally and sparingly only when the user enables that preference. The memory cap stores up to 100 separate entries (up to 2,000 characters each); the prompt builder currently selects up to 20 recently updated entries within 4 KiB. Memory import/restore and automatic memory extraction remain unimplemented.
+
+
+### 2026-11-24 — Awareness foundation and explicit learning preferences
+
+- [x] Upgrade the local SQLite database from schema v2 to v3 without deleting conversations or saved memories.
+- [x] Add separate local tables for future Awareness items and metadata-only learning activity history; the activity table intentionally has no raw-content column.
+- [x] Add persisted Awareness settings for the master switch, conversation learning, and in-app search learning. All are OFF by default; source preferences remain independently saved while the master switch is paused.
+- [x] Add a Settings → Awareness panel with individual switches and an explicit notice that automatic learning is not active in this build.
+- [x] Keep the current implementation collection-free: the switches save preferences only and do not read or ingest conversations or searches.
+- [ ] Implement automatic learning only after secret/private-data filtering, source provenance, deletion/relearning safeguards, and user-visible review are in place.
+
+This is a storage/settings foundation only. No password, credential, private message, or search content is collected by the new tables or controls. The future learning pipeline must enforce the binding Awareness privacy contract before any ingestion is enabled.

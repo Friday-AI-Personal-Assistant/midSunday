@@ -9,6 +9,20 @@ pub struct UserProfile {
     pub use_name: bool,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct AwarenessSettings {
+    pub enabled: bool,
+    pub learn_conversations: bool,
+    pub learn_searches: bool,
+}
+
+impl Default for AwarenessSettings {
+    fn default() -> Self {
+        Self { enabled: false, learn_conversations: false, learn_searches: false }
+    }
+}
+
 impl Default for UserProfile {
     fn default() -> Self {
         Self { preferred_name: String::new(), use_name: false }
@@ -115,7 +129,7 @@ impl ConversationStore {
             .map_err(|error| format!("Could not enable local database constraints: {error}"))?;
         let schema_version: i64 = connection.pragma_query_value(None, "user_version", |row| row.get(0))
             .map_err(|error| format!("Could not read local database version: {error}"))?;
-        if schema_version > 2 {
+        if schema_version > 3 {
             return Err(format!("This midSunday database uses a newer schema version ({schema_version}) than this app supports."));
         }
         if schema_version == 0 {
@@ -166,11 +180,70 @@ impl ConversationStore {
             ).map_err(|error| format!("Could not apply local memory migration: {error}"))?;
             transaction.commit().map_err(|error| format!("Could not finish local memory migration: {error}"))?;
         }
+        let current_version: i64 = connection.pragma_query_value(None, "user_version", |row| row.get(0))
+            .map_err(|error| format!("Could not recheck local database version: {error}"))?;
+        if current_version == 2 {
+            let transaction = connection.unchecked_transaction()
+                .map_err(|error| format!("Could not prepare local Awareness migration: {error}"))?;
+            transaction.execute_batch(
+                "CREATE TABLE IF NOT EXISTS awareness_items (
+                   id INTEGER PRIMARY KEY AUTOINCREMENT,
+                   content TEXT NOT NULL,
+                   category TEXT NOT NULL,
+                   source_type TEXT NOT NULL CHECK(source_type IN ('conversation', 'in_app_search', 'user_entered')),
+                   knowledge_type TEXT NOT NULL CHECK(knowledge_type IN ('observed', 'inferred')),
+                   confidence REAL NOT NULL CHECK(confidence >= 0.0 AND confidence <= 1.0),
+                   source_record_id INTEGER,
+                   created_at INTEGER NOT NULL,
+                   updated_at INTEGER NOT NULL
+                 );
+                 CREATE INDEX IF NOT EXISTS idx_awareness_items_updated
+                   ON awareness_items(updated_at DESC, id DESC);
+                 CREATE TABLE IF NOT EXISTS awareness_activity (
+                   id INTEGER PRIMARY KEY AUTOINCREMENT,
+                   source_type TEXT NOT NULL CHECK(source_type IN ('conversation', 'in_app_search')),
+                   source_record_id INTEGER,
+                   activity_type TEXT NOT NULL CHECK(activity_type IN ('observed', 'learned', 'excluded', 'blocked')),
+                   awareness_item_id INTEGER REFERENCES awareness_items(id) ON DELETE SET NULL,
+                   occurred_at INTEGER NOT NULL
+                 );
+                 CREATE INDEX IF NOT EXISTS idx_awareness_activity_time
+                   ON awareness_activity(occurred_at DESC, id DESC);
+                 INSERT OR IGNORE INTO app_preferences(key, value)
+                   VALUES('awareness_settings', '{\"enabled\":false,\"learnConversations\":false,\"learnSearches\":false}');
+                 PRAGMA user_version = 3;"
+            ).map_err(|error| format!("Could not apply local Awareness migration: {error}"))?;
+            transaction.commit().map_err(|error| format!("Could not finish local Awareness migration: {error}"))?;
+        }
         Ok(Self { connection: Mutex::new(connection) })
     }
 
     fn lock(&self) -> Result<std::sync::MutexGuard<'_, Connection>, String> {
         self.connection.lock().map_err(|_| "Local conversation database is unavailable.".to_owned())
+    }
+
+    pub fn get_awareness_settings(&self) -> Result<AwarenessSettings, String> {
+        let connection = self.lock()?;
+        let value: Option<String> = connection.query_row(
+            "SELECT value FROM app_preferences WHERE key = 'awareness_settings'", [], |row| row.get(0)
+        ).optional().map_err(|error| format!("Could not read Awareness settings: {error}"))?;
+        match value {
+            Some(json) => serde_json::from_str(&json)
+                .map_err(|error| format!("Could not decode Awareness settings: {error}")),
+            None => Ok(AwarenessSettings::default()),
+        }
+    }
+
+    pub fn save_awareness_settings(&self, settings: AwarenessSettings) -> Result<AwarenessSettings, String> {
+        let json = serde_json::to_string(&settings)
+            .map_err(|error| format!("Could not encode Awareness settings: {error}"))?;
+        let connection = self.lock()?;
+        connection.execute(
+            "INSERT INTO app_preferences(key, value) VALUES('awareness_settings', ?1)
+             ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            params![json],
+        ).map_err(|error| format!("Could not save Awareness settings: {error}"))?;
+        Ok(settings)
     }
 
     pub fn list_memories(&self) -> Result<Vec<SavedMemory>, String> {
@@ -602,6 +675,63 @@ mod tests {
     }
 
     #[test]
+    fn awareness_settings_are_off_by_default_and_each_source_preference_persists() {
+        let store = store();
+        assert_eq!(store.get_awareness_settings().unwrap(), AwarenessSettings::default());
+        let saved = store.save_awareness_settings(AwarenessSettings {
+            enabled: true, learn_conversations: true, learn_searches: false,
+        }).unwrap();
+        assert_eq!(store.get_awareness_settings().unwrap(), saved);
+        let paused = store.save_awareness_settings(AwarenessSettings {
+            enabled: false, learn_conversations: true, learn_searches: false,
+        }).unwrap();
+        assert!(!paused.enabled);
+        assert!(paused.learn_conversations);
+        assert!(!paused.learn_searches);
+        assert_eq!(store.get_awareness_settings().unwrap(), paused);
+    }
+
+    #[test]
+    fn awareness_schema_stores_activity_metadata_without_raw_activity_content() {
+        let store = store();
+        let connection = store.lock().unwrap();
+        let item_columns: Vec<String> = {
+            let mut statement = connection.prepare("PRAGMA table_info(awareness_items)").unwrap();
+            statement.query_map([], |row| row.get(1)).unwrap().collect::<Result<Vec<_>, _>>().unwrap()
+        };
+        let activity_columns: Vec<String> = {
+            let mut statement = connection.prepare("PRAGMA table_info(awareness_activity)").unwrap();
+            statement.query_map([], |row| row.get(1)).unwrap().collect::<Result<Vec<_>, _>>().unwrap()
+        };
+        assert!(item_columns.contains(&"content".to_owned()));
+        assert!(!activity_columns.contains(&"content".to_owned()));
+        assert!(!activity_columns.contains(&"raw_text".to_owned()));
+    }
+
+    #[test]
+    fn migrates_schema_v2_without_losing_existing_memories() {
+        let connection = Connection::open_in_memory().unwrap();
+        connection.execute_batch(
+            "CREATE TABLE conversations (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);
+             CREATE TABLE conversation_messages (id INTEGER PRIMARY KEY AUTOINCREMENT, conversation_id INTEGER NOT NULL REFERENCES conversations(id) ON DELETE CASCADE, role TEXT NOT NULL CHECK(role IN ('user', 'assistant')), content TEXT NOT NULL, created_at INTEGER NOT NULL);
+             CREATE INDEX idx_conversation_messages_order ON conversation_messages(conversation_id, id);
+             CREATE INDEX idx_conversations_updated ON conversations(updated_at DESC);
+             CREATE TABLE saved_memories (id INTEGER PRIMARY KEY AUTOINCREMENT, content TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);
+             CREATE INDEX idx_saved_memories_updated ON saved_memories(updated_at DESC, id DESC);
+             CREATE TABLE app_preferences (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+             INSERT INTO saved_memories(content, created_at, updated_at) VALUES('Keep my existing fact', 1, 1);
+             INSERT INTO app_preferences(key, value) VALUES('memory_enabled', 'true');
+             PRAGMA user_version = 2;"
+        ).unwrap();
+        let store = ConversationStore::from_connection(connection).unwrap();
+        assert_eq!(store.list_memories().unwrap()[0].content, "Keep my existing fact");
+        assert!(store.memory_enabled().unwrap());
+        assert_eq!(store.get_awareness_settings().unwrap(), AwarenessSettings::default());
+        let version: i64 = store.lock().unwrap().pragma_query_value(None, "user_version", |row| row.get(0)).unwrap();
+        assert_eq!(version, 3);
+    }
+
+    #[test]
     fn memory_is_disabled_by_default_and_preference_persists() {
         let store = store();
         assert!(!store.memory_enabled().unwrap());
@@ -695,8 +825,10 @@ mod tests {
         assert_eq!(store.messages(1).unwrap()[0].content, "Keep this");
         let version: i64 = store.lock().unwrap()
             .pragma_query_value(None, "user_version", |row| row.get(0)).unwrap();
-        assert_eq!(version, 2);
+        assert_eq!(version, 3);
         assert!(!store.memory_enabled().unwrap());
+        assert_eq!(store.get_awareness_settings().unwrap(), AwarenessSettings::default());
+        assert!(store.list_memories().unwrap().is_empty());
         assert!(store.list_memories().unwrap().is_empty());
     }
 

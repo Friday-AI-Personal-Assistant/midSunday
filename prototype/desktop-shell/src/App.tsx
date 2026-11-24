@@ -14,6 +14,8 @@ type StoredMessage = { id: number; conversationId: number; role: "user" | "assis
 type SavedMemory = { id: number; content: string; createdAt: number; updatedAt: number };
 type UserProfile = { preferredName: string; useName: boolean };
 const DEFAULT_USER_PROFILE: UserProfile = { preferredName: "", useName: false };
+type AwarenessSettings = { enabled: boolean; learnConversations: boolean; learnSearches: boolean };
+const DEFAULT_AWARENESS_SETTINGS: AwarenessSettings = { enabled: false, learnConversations: false, learnSearches: false };
 type CompanionProfile = { id: string; name: string; instructions: string };
 type CompanionSettings = { schemaVersion: number; selectedPersonality: string; customInstructions: string; profiles: CompanionProfile[] };
 const DEFAULT_COMPANION_SETTINGS: CompanionSettings = { schemaVersion: 1, selectedPersonality: "best-friend", customInstructions: "", profiles: [] };
@@ -103,6 +105,9 @@ export default function App() {
   const [activeConversationId, setActiveConversationId] = useState<number | null>(null);
   const [conversationName, setConversationName] = useState("A fresh start");
   const [memoryEnabled, setMemoryEnabled] = useState(false);
+  const [awarenessSettings, setAwarenessSettings] = useState<AwarenessSettings>(DEFAULT_AWARENESS_SETTINGS);
+  const [awarenessBusy, setAwarenessBusy] = useState(false);
+  const [awarenessNotice, setAwarenessNotice] = useState("");
   const [memories, setMemories] = useState<SavedMemory[]>([]);
   const [memoryDraft, setMemoryDraft] = useState("");
   const [editingMemoryId, setEditingMemoryId] = useState<number | null>(null);
@@ -167,13 +172,15 @@ export default function App() {
       invoke<SavedMemory[]>("list_saved_memories"),
       invoke<boolean>("get_memory_enabled"),
       invoke<UserProfile>("get_user_profile"),
-    ]).then(([items, enabled, profile]) => {
+      invoke<AwarenessSettings>("get_awareness_settings"),
+    ]).then(([items, enabled, profile, awareness]) => {
       if (!active) return;
       setMemories(items);
       setMemoryEnabled(enabled);
       setUserProfile(profile);
       setUserProfileDraft(profile);
-    }).catch(() => { if (active) setMemoryNotice("Could not load saved memory or profile settings."); });
+      setAwarenessSettings(awareness);
+    }).catch(() => { if (active) setMemoryNotice("Could not load saved memory, Awareness, or profile settings."); });
     invoke<CompanionSettings>("get_companion_settings")
       .then((settings) => {
         if (!active) return;
@@ -345,6 +352,24 @@ export default function App() {
     } finally {
       setUserProfileBusy(false);
     }
+  }
+
+  async function saveAwarenessSettings(next: AwarenessSettings) {
+    if (awarenessBusy) return;
+    setAwarenessBusy(true);
+    try {
+      const saved = await invoke<AwarenessSettings>("save_awareness_settings", { settings: next });
+      setAwarenessSettings(saved);
+      setAwarenessNotice("Awareness preferences saved on this device. Automatic learning is not active in this build.");
+    } catch (error) {
+      setAwarenessNotice("Could not save Awareness preferences: " + String(error));
+    } finally {
+      setAwarenessBusy(false);
+    }
+  }
+
+  async function toggleAwarenessSetting(key: keyof AwarenessSettings) {
+    await saveAwarenessSettings({ ...awarenessSettings, [key]: !awarenessSettings[key] });
   }
 
   async function toggleMemoryEnabled() {
@@ -830,6 +855,13 @@ export default function App() {
               <div className="setting-row"><div><strong>Export conversation history</strong><p>Save all conversations and messages as a versioned JSON file. This export does not include future personal memories or model files.</p></div><button className="secondary-action" type="button" onClick={() => void exportConversations()}>Export JSON</button></div>
               <div className="setting-row"><div><strong>Import conversation backup</strong><p>Merge a versioned JSON backup into this device. Existing chats are never overwritten; exact duplicates are skipped.</p></div><><input ref={importFileRef} className="visually-hidden-file" type="file" accept=".json,application/json" onChange={(event) => void importConversations(event)} /><button className="secondary-action" type="button" onClick={() => importFileRef.current?.click()} disabled={importBusy || isGenerating}>{importBusy ? "Importing…" : "Import JSON"}</button></></div>
               <div className="setting-row"><div><strong>Clear all conversation history</strong><p>Delete every saved conversation and its messages. This does not affect separate memory data.</p></div><button className="danger-action" type="button" onClick={() => void clearAllConversations()} disabled={isGenerating}>Clear history</button></div>
+            </section>
+            <section className="settings-section"><div className="settings-section-title"><div><h2>Awareness</h2><p>Choose whether future versions may learn from activity inside midSunday. Every source has its own control.</p></div><span className="settings-symbol">◎</span></div>
+              <div className="setting-row"><div><strong>Enable Awareness</strong><p>Master switch. Turn this off at any time to pause all automatic learning without deleting saved information.</p></div><button className={awarenessSettings.enabled ? "toggle on" : "toggle"} type="button" role="switch" aria-checked={awarenessSettings.enabled} disabled={awarenessBusy} onClick={() => void toggleAwarenessSetting("enabled")}><i /></button></div>
+              <div className="setting-row"><div><strong>Learn from conversations</strong><p>Allow future Awareness learning from conversations inside midSunday. Private data and credentials must be filtered out.</p></div><button className={awarenessSettings.learnConversations ? "toggle on" : "toggle"} type="button" role="switch" aria-checked={awarenessSettings.learnConversations} disabled={!awarenessSettings.enabled || awarenessBusy} onClick={() => void toggleAwarenessSetting("learnConversations")}><i /></button></div>
+              <div className="setting-row"><div><strong>Learn from in-app searches</strong><p>Allow future Awareness learning from searches performed inside midSunday. This does not monitor browser or other-app activity.</p></div><button className={awarenessSettings.learnSearches ? "toggle on" : "toggle"} type="button" role="switch" aria-checked={awarenessSettings.learnSearches} disabled={!awarenessSettings.enabled || awarenessBusy} onClick={() => void toggleAwarenessSetting("learnSearches")}><i /></button></div>
+              <p className="settings-footnote">Important: these preferences are saved now, but automatic learning is not implemented yet. No conversation or search activity is collected by these switches in this build. All switches start OFF. Passwords, authentication secrets, payment credentials, private messages, and other private data are never permitted as Awareness data.</p>
+              {awarenessNotice && <p className="memory-notice" role="status">{awarenessNotice}</p>}
             </section>
             <section className="settings-section"><div className="settings-section-title"><div><h2>Memory & privacy</h2><p>Manage saved facts and decide whether they may be used in local conversations.</p></div><span className="settings-symbol">⌑</span></div>
               <div className="setting-row"><div><strong>Use saved memories</strong><p>When enabled, up to 20 of your most recently updated entries (up to 4 KiB total) may be included in the local model prompt. Disabled by default; stored memories are never sent while this is off.</p></div><button className={memoryEnabled ? "toggle on" : "toggle"} role="switch" aria-checked={memoryEnabled} onClick={() => void toggleMemoryEnabled()}><i /></button></div>
