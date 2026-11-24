@@ -234,8 +234,36 @@ Release numbers are planning labels, not promises or dates. A stage is not compl
 - [ ] Keep memory local by default.
 - [ ] Require explicit consent before any cloud provider receives memory or chat context.
 - [ ] Test data integrity after crashes, upgrades, and interrupted writes.
+- [ ] Evolve explicit saved memory into a dedicated **Awareness** system; preserve existing user-created memories during migration.
+- [ ] Remove the temporary fixed 100-item memory cap as part of the scalable Awareness design; use available local storage responsibly, show storage usage/warnings, and never silently discard knowledge.
+- [ ] Add automatic, opt-in learning from conversations inside midSunday and a separate opt-in for searches performed inside midSunday.
+- [ ] Make every learning source, feature, category, and optional capability independently controllable with clear on/off settings; provide pause/resume controls without forcing deletion.
+- [ ] Keep Awareness disabled until the user explicitly enables it; do not silently enable new learning sources after an update.
+- [ ] Store learned knowledge and its provenance locally, including when it was learned, its source, whether it is observed or inferred, and an appropriate confidence indicator.
+- [ ] Make every learned Awareness item visible and inspectable in Settings → Awareness, with edit/rewrite, individual delete, category controls, export, and clear-all actions.
+- [ ] Add an inspectable Activity & Learning History so users can understand which permitted interactions contributed to an awareness item.
+- [ ] Ensure deleting or rejecting an item also prevents the same evidence from immediately recreating it; support a user-controlled "do not learn this again" / exclusion mechanism.
+- [ ] Retrieve only relevant local awareness context for a response; do not inject the entire awareness database into every model prompt.
+- [ ] Treat all stored awareness content as untrusted user data, never as system instructions or permission grants.
+- [ ] Initially limit automatic learning to interactions that happen inside midSunday. Any future browser, operating-system, or third-party-app source must be a separately named, explicitly permissioned, independently switchable integration.
+- [ ] Never collect or store passwords, authentication codes, tokens, API keys, private keys, payment-card/banking credentials, or other secrets. Do not capture keystrokes, password fields, or clipboard contents as a background learning source.
+- [ ] Do not monitor or ingest private messages, email contents, files, microphone audio, or activity in other applications unless a future narrowly scoped feature is explicitly requested, separately permissioned, and independently switchable. Raw voice recordings must not be retained by default.
+- [ ] Avoid automatically inferring or retaining sensitive personal attributes. Provide category exclusions and user review; when in doubt, do not learn it.
+- [ ] Keep all Awareness data on-device by default. No background upload, telemetry of personal content, cloud memory, or external model transfer; any future cloud use requires separate informed consent and a clear data-transfer explanation.
+- [ ] Provide user-controlled export, backup/restore, deletion, and retention settings. Deletion must cover source evidence and derived awareness where applicable, including safeguards against accidental re-learning.
+- [ ] Investigate encryption at rest using operating-system-protected keys; do not claim local data is encrypted until implemented and tested.
+- [ ] Add pagination/indexing and scalable local retrieval (SQLite FTS5 is an initial candidate; embeddings remain optional and must be locally processed by default).
 
-**Exit gate:** Users understand what is stored, can control it, and can export/delete it without hidden copies or unexpected cloud transfer. The first explicit-memory milestone is implemented; memory import/restore, retention policy, and real desktop crash/restart verification remain open.
+**Awareness privacy and control contract (binding product requirements):**
+1. No passwords, credentials, authentication secrets, payment details, or private data are to be collected or stored as Awareness.
+2. Every optional setting and learning source must have a clear, user-accessible on/off control. A master pause switch must also be available.
+3. Learning requires explicit opt-in. Conversations and in-app searches have separate switches; other sources are off unless separately authorised.
+4. Users can inspect, correct, rewrite, export, and delete what midSunday has learned. They can clear all Awareness data and independently manage source-history retention.
+5. Awareness remains local by default, with no hidden cloud transfer or covert monitoring.
+6. "No fixed item-count limit" does not mean infinite storage; actual capacity is bounded by the user's device. midSunday must explain storage use and must not silently delete records.
+7. The system must distinguish observed facts from inferences, show provenance, and avoid treating learned text as trusted instructions.
+
+**Exit gate:** Users understand what is stored, can control every learning source and setting, and can inspect/export/delete learned knowledge and relevant source evidence without hidden copies or unexpected cloud transfer. The existing explicit-memory implementation is the starting point only; the scalable Awareness system, automatic learning, retrieval, import/restore, retention controls, and real desktop crash/restart verification remain open.
 
 ## Phase 6 — Voice and multilingual experience
 
