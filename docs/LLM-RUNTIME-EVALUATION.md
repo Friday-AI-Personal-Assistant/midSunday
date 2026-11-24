@@ -1,7 +1,7 @@
 # Local LLM Runtime Evaluation — llama.cpp vs Ollama
 
 **Research date:** 2026-11-24  
-**Status:** Desk evaluation complete; no runtime selected for production and no runtime integrated.  
+**Status:** Desk evaluation complete; llama.cpp is the first integration prototype candidate. A dependency-free Rust adapter contract, bounded generation request, and lifecycle state machine are implemented and tested; no runtime process, HTTP client, model, or inference is integrated.  
 **Scope:** Local inference for the midSunday desktop application on Windows, Linux, and macOS.  
 **Decision rule:** Local-first, offline-capable, zero mandatory service cost, commercially reviewable distribution, replaceable adapter, and honest hardware support.
 
