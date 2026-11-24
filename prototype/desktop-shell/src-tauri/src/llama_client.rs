@@ -1,0 +1,231 @@
+//! Typed, loopback-only HTTP client for the managed llama.cpp server.
+use std::io;
+use std::net::{IpAddr, SocketAddr};
+use std::thread;
+use std::time::{Duration, Instant};
+use serde::{Deserialize, Serialize};
+use crate::llama_process::LlamaServerProcess;
+use crate::runtime::{GenerationRequest, RuntimeConfig};
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum HealthStatus { Ready, Loading }
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum LlamaClientError {
+    InvalidConfiguration, InvalidTimeout, InvalidGenerationRequest,
+    HttpStatus(u16), Transport(String), InvalidResponse,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum ReadinessError {
+    InvalidTiming, ProcessExited, ProcessStatus(String), Timeout, Client(LlamaClientError),
+}
+
+pub struct LlamaHttpClient { agent: ureq::Agent, base_url: String }
+
+impl LlamaHttpClient {
+    pub fn new(config: &RuntimeConfig, timeout: Duration) -> Result<Self, LlamaClientError> {
+        config.validate().map_err(|_| LlamaClientError::InvalidConfiguration)?;
+        if timeout.is_zero() { return Err(LlamaClientError::InvalidTimeout); }
+        let ip: IpAddr = config.host.parse().map_err(|_| LlamaClientError::InvalidConfiguration)?;
+        let address = SocketAddr::new(ip, config.port);
+        let agent = ureq::Agent::config_builder()
+            .proxy(None).max_redirects(0).timeout_global(Some(timeout))
+            .build().new_agent();
+        Ok(Self { agent, base_url: format!("http://{address}") })
+    }
+
+    pub fn health(&self) -> Result<HealthStatus, LlamaClientError> {
+        let mut response = match self.agent.get(format!("{}/health", self.base_url)).call() {
+            Ok(response) => response,
+            Err(ureq::Error::StatusCode(503)) => return Ok(HealthStatus::Loading),
+            Err(ureq::Error::StatusCode(code)) => return Err(LlamaClientError::HttpStatus(code)),
+            Err(error) => return Err(LlamaClientError::Transport(error.to_string())),
+        };
+        let health = response.body_mut().read_json::<HealthResponse>()
+            .map_err(|_| LlamaClientError::InvalidResponse)?;
+        if health.status == "ok" { Ok(HealthStatus::Ready) } else { Ok(HealthStatus::Loading) }
+    }
+
+    pub fn generate(&self, request: &GenerationRequest) -> Result<String, LlamaClientError> {
+        request.validate().map_err(|_| LlamaClientError::InvalidGenerationRequest)?;
+        let body = ChatCompletionRequest {
+            messages: vec![ChatMessageRequest { role: "user", content: request.prompt.as_str() }],
+            max_tokens: request.max_tokens, temperature: request.temperature,
+            top_p: request.top_p, stream: false,
+        };
+        let mut response = self.agent.post(format!("{}/v1/chat/completions", self.base_url))
+            .send_json(&body).map_err(map_http_error)?;
+        let completion = response.body_mut().read_json::<ChatCompletionResponse>()
+            .map_err(|_| LlamaClientError::InvalidResponse)?;
+        completion.choices.into_iter().next()
+            .and_then(|choice| choice.message.content)
+            .filter(|content| !content.trim().is_empty())
+            .ok_or(LlamaClientError::InvalidResponse)
+    }
+}
+
+#[derive(Deserialize)]
+struct HealthResponse { status: String }
+#[derive(Serialize)]
+struct ChatCompletionRequest<'a> {
+    messages: Vec<ChatMessageRequest<'a>>, max_tokens: u32,
+    temperature: f32, top_p: f32, stream: bool,
+}
+#[derive(Serialize)]
+struct ChatMessageRequest<'a> { role: &'static str, content: &'a str }
+#[derive(Deserialize)]
+struct ChatCompletionResponse { choices: Vec<ChatCompletionChoice> }
+#[derive(Deserialize)]
+struct ChatCompletionChoice { message: ChatCompletionMessage }
+#[derive(Deserialize)]
+struct ChatCompletionMessage { content: Option<String> }
+
+fn map_http_error(error: ureq::Error) -> LlamaClientError {
+    match error {
+        ureq::Error::StatusCode(code) => LlamaClientError::HttpStatus(code),
+        other => LlamaClientError::Transport(other.to_string()),
+    }
+}
+
+pub fn wait_for_ready<F>(
+    client: &LlamaHttpClient, startup_timeout: Duration, poll_interval: Duration,
+    mut is_running: F,
+) -> Result<(), ReadinessError>
+where F: FnMut() -> io::Result<bool> {
+    if startup_timeout.is_zero() || poll_interval.is_zero() { return Err(ReadinessError::InvalidTiming); }
+    let deadline = Instant::now().checked_add(startup_timeout).ok_or(ReadinessError::InvalidTiming)?;
+    loop {
+        match is_running() {
+            Ok(true) => {}
+            Ok(false) => return Err(ReadinessError::ProcessExited),
+            Err(error) => return Err(ReadinessError::ProcessStatus(error.to_string())),
+        }
+        match client.health() {
+            Ok(HealthStatus::Ready) => return Ok(()),
+            Ok(HealthStatus::Loading) | Err(LlamaClientError::Transport(_)) => {}
+            Err(error) => return Err(ReadinessError::Client(error)),
+        }
+        let now = Instant::now();
+        if now >= deadline { return Err(ReadinessError::Timeout); }
+        thread::sleep(poll_interval.min(deadline.saturating_duration_since(now)));
+    }
+}
+
+impl LlamaServerProcess {
+    pub fn wait_until_ready(
+        &mut self, config: &RuntimeConfig, startup_timeout: Duration, poll_interval: Duration,
+    ) -> Result<(), ReadinessError> {
+        let request_timeout = startup_timeout.min(Duration::from_secs(2));
+        let client = LlamaHttpClient::new(config, request_timeout).map_err(ReadinessError::Client)?;
+        wait_for_ready(&client, startup_timeout, poll_interval, || self.is_running())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::{Read, Write};
+    use std::net::{TcpListener, TcpStream};
+
+    fn mock_server(responses: Vec<(u16, &'static str)>) -> (u16, thread::JoinHandle<()>) {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let handle = thread::spawn(move || {
+            for (status, body) in responses {
+                let (mut stream, _) = listener.accept().unwrap();
+                let _ = read_request(&mut stream);
+                let reason = if status == 200 { "OK" } else { "Service Unavailable" };
+                let response = format!(
+                    "HTTP/1.1 {status} {reason}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                    body.len()
+                );
+                stream.write_all(response.as_bytes()).unwrap();
+                stream.flush().unwrap();
+            }
+        });
+        (port, handle)
+    }
+
+    fn read_request(stream: &mut TcpStream) -> String {
+        stream.set_read_timeout(Some(Duration::from_secs(2))).unwrap();
+        let mut bytes = Vec::new();
+        let mut buffer = [0_u8; 2048];
+        loop {
+            let count = match stream.read(&mut buffer) {
+                Ok(0) | Err(_) => break, Ok(count) => count,
+            };
+            bytes.extend_from_slice(&buffer[..count]);
+            if let Some(header_end) = bytes.windows(4).position(|window| window == b"\r\n\r\n") {
+                let headers = String::from_utf8_lossy(&bytes[..header_end]);
+                let content_length = headers.lines().find_map(|line| {
+                    let (name, value) = line.split_once(':')?;
+                    name.eq_ignore_ascii_case("content-length")
+                        .then(|| value.trim().parse::<usize>().ok()).flatten()
+                }).unwrap_or(0);
+                if bytes.len() >= header_end + 4 + content_length { break; }
+            }
+        }
+        String::from_utf8_lossy(&bytes).into_owned()
+    }
+
+    fn config(port: u16) -> RuntimeConfig {
+        RuntimeConfig { host: "127.0.0.1".to_owned(), port, ..RuntimeConfig::default() }
+    }
+
+    #[test]
+    fn health_endpoint_reports_ready() {
+        let (port, server) = mock_server(vec![(200, r#"{"status":"ok"}"#)]);
+        let client = LlamaHttpClient::new(&config(port), Duration::from_secs(2)).unwrap();
+        assert_eq!(client.health(), Ok(HealthStatus::Ready));
+        server.join().unwrap();
+    }
+
+    #[test]
+    fn readiness_retries_while_model_is_loading() {
+        let (port, server) = mock_server(vec![
+            (503, r#"{"error":{"message":"Loading model"}}"#),
+            (200, r#"{"status":"ok"}"#),
+        ]);
+        let client = LlamaHttpClient::new(&config(port), Duration::from_secs(2)).unwrap();
+        let result = wait_for_ready(&client, Duration::from_secs(2), Duration::from_millis(10), || Ok(true));
+        assert_eq!(result, Ok(()));
+        server.join().unwrap();
+    }
+
+    #[test]
+    fn readiness_stops_when_child_exits() {
+        let client = LlamaHttpClient::new(&RuntimeConfig::default(), Duration::from_millis(100)).unwrap();
+        let result = wait_for_ready(&client, Duration::from_secs(1), Duration::from_millis(10), || Ok(false));
+        assert_eq!(result, Err(ReadinessError::ProcessExited));
+    }
+
+    #[test]
+    fn readiness_timeout_is_bounded() {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let port = listener.local_addr().unwrap().port();
+        drop(listener);
+        let client = LlamaHttpClient::new(&config(port), Duration::from_millis(30)).unwrap();
+        let result = wait_for_ready(&client, Duration::from_millis(20), Duration::from_millis(5), || Ok(true));
+        assert_eq!(result, Err(ReadinessError::Timeout));
+    }
+
+    #[test]
+    fn client_rejects_external_addresses_and_zero_timeout() {
+        let external = RuntimeConfig { host: "0.0.0.0".to_owned(), ..RuntimeConfig::default() };
+        assert_eq!(LlamaHttpClient::new(&external, Duration::from_secs(1)).err(), Some(LlamaClientError::InvalidConfiguration));
+        assert_eq!(LlamaHttpClient::new(&RuntimeConfig::default(), Duration::ZERO).err(), Some(LlamaClientError::InvalidTimeout));
+    }
+
+    #[test]
+    fn chat_completion_uses_local_openai_compatible_endpoint() {
+        let (port, server) = mock_server(vec![(200, r#"{"choices":[{"message":{"content":"Hello from a local model."}}]}"#)]);
+        let client = LlamaHttpClient::new(&config(port), Duration::from_secs(2)).unwrap();
+        let request = GenerationRequest {
+            prompt: "Hello, midSunday.".to_owned(), max_tokens: 64,
+            temperature: 0.7, top_p: 0.9,
+        };
+        assert_eq!(client.generate(&request).unwrap(), "Hello from a local model.");
+        server.join().unwrap();
+    }
+}

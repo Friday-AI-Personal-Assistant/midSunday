@@ -1,3 +1,4 @@
+mod llama_client;
 mod llama_process;
 mod runtime;
 

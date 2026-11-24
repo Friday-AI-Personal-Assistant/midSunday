@@ -638,3 +638,18 @@ Research is recorded in `docs/PHASE-1-RESEARCH.md` section 16. This is a desk-re
 - [ ] Add cancellation, timeout, and crash-recovery integration tests using a controlled test server.
 
 This is the first process-management implementation, not a working model integration. The desktop app does not yet start this supervisor, check HTTP readiness, or generate model responses. No llama.cpp binary or model has been downloaded or bundled.
+
+
+### 2026-11-24 — Local runtime readiness and HTTP client milestone
+
+- [x] Add a typed HTTP client for llama.cpp health and OpenAI-compatible chat-completion endpoints.
+- [x] Restrict the client to the validated loopback IP and port; disable environment proxies and redirects.
+- [x] Add bounded HTTP request timeouts and bounded startup polling.
+- [x] Treat the model-loading health response as not-yet-ready and detect an exited child process.
+- [x] Add mock-server tests for health, loading-to-ready transitions, early process exit, timeout, loopback validation, and chat-completion response parsing.
+- [ ] Verify this milestone with Windows, Linux, and macOS CI.
+- [ ] Add cancellation-safe generation and explicit request cancellation.
+- [ ] Add crash-recovery integration tests with a controlled child process.
+- [ ] Connect the runtime coordinator to the desktop application only after lifecycle and cancellation behaviour are verified.
+
+The HTTP client is local-only and uses the llama.cpp health and chat-completion endpoints. This remains a runtime integration layer, not an end-user working model: no server binary or model is installed, selected, downloaded, or bundled, and the desktop UI is not yet connected to inference.
