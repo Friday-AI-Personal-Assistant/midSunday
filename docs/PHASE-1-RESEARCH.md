@@ -422,3 +422,22 @@ Measure exact model revision, quantisation, context, runtime commit, CPU/GPU off
 
 **Conclusion:** Qwen3.5 should be the first model family in the benchmark matrix, with Gemma 4 E2B/E4B as meaningful alternatives. The 2B and 4B Qwen candidates look especially useful to compare for the low-to-mainstream range; 9B and 27B give us a path to test more capable systems. Nothing is selected until real tests—especially Pakistani Urdu and companion quality—support it.
 
+
+
+## 17. Repeatable benchmark protocol and scoring design (2026-11-24)
+
+A formal test protocol is now documented in [BENCHMARK-PROTOCOL.md](BENCHMARK-PROTOCOL.md). It separates LLM quality, LLM performance, STT, TTS, hardware detection, and integrated workload tests so that one aggregate score cannot hide a weak language, performance, or safety result.
+
+### LLM quality scoring
+
+The first rubric uses a 0–5 scale and weighted categories: natural English companion conversation (20%), Pakistani Urdu script (15%), Roman Urdu (10%), Urdu-English code-switching (10%), personality consistency (10%), instruction following/bounded tasks (10%), reasoning/planning (10%), factuality/calibration (5%), safe tool-intent proposals (5%), and boundaries/refusal behaviour (5%). Category scores must be reported alongside the weighted total. Safety and privacy failures are independent release-blocking gates, not points that can be averaged away.
+
+### Performance and speech measurements
+
+The protocol records cold model load, first-token latency, tokens/second, total latency, process/system peak RAM, GPU process budget/usage, disk footprint, stability, and thermal/power observations. STT uses common audio and reference transcripts with WER/CER, named-entity accuracy, code-switch handling, and latency. TTS uses human ratings for intelligibility, naturalness, Pakistani pronunciation, mixed-language handling, plus resource and latency measurements. Hardware tests record exact CPU, RAM, GPU, driver, storage, runtime, model revision, quantisation, context, and settings.
+
+### Reproducibility and current status
+
+The protocol requires versioned cases, exact provenance, repeated runs, median/range reporting, blinded human ratings where practical, permissioned audio, and local-only result handling by default. It defines the results template and safety gates. It is a designed protocol—not an executed benchmark. The test dataset still needs to be authored and reviewed, and actual runs require Windows machines and exact candidate assets. No model, runtime, voice, or hardware profile has been approved from this work.
+
+**Next practical task:** Create benchmark dataset v1 with original English, Urdu-script, Roman Urdu, code-switching, persona, reasoning, factuality, and safety cases, then review it before running any model.
