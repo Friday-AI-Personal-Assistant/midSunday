@@ -4,7 +4,7 @@
 
 midSunday is an independent, local-first desktop AI companion designed to combine useful assistance with a personal, customisable companion experience.
 
-> Project status: **First desktop-shell prototype scaffold created; Windows build and runtime validation pending**  
+> Project status: **Interactive desktop workspace prototype implemented; Windows build and runtime validation pending**  
 > Initial target: **Windows**  
 > Core direction: **Offline-capable, privacy-first, no mandatory subscription**
 
@@ -63,9 +63,9 @@ The product must remain useful without a cloud account. Online features must be 
 The roadmap is the master sequence of work. These documents provide detailed requirements, decisions, risks, and technical context. Update them as the project changes so development can recover without relying on chat history.
 
 ## Current status
-The repository currently contains planning documentation. **No application code, AI runtime, model, voice engine, installer, or production feature is implemented yet.**
+The repository contains the first interactive Tauri desktop workspace prototype alongside the project documentation. The workspace includes a conversation view, local-session message composer, companion selection, settings screens, and a Rust-core status indicator. It is still a UI prototype: no AI model, persistent chat storage, voice engine, hardware detection, installer, or production feature is implemented.
 
-Phase 1 desk research is underway. Initial findings and unresolved questions are recorded in [Phase 1 feasibility research](docs/PHASE-1-RESEARCH.md). Practical benchmarks and licence clearance are still outstanding; no application implementation has begun.
+Phase 1 feasibility research continues in parallel. Initial findings and unresolved questions are recorded in [Phase 1 feasibility research](docs/PHASE-1-RESEARCH.md). Practical benchmarks, Windows build/runtime validation, and licence clearance are still outstanding.
 
 ## Development approach
 Development proceeds in small, testable milestones. A task is complete only when its acceptance criteria, tests, documentation, privacy review, and applicable licence review are satisfied.
@@ -73,4 +73,4 @@ Development proceeds in small, testable milestones. A task is complete only when
 No paid usage or external service is to be enabled without explicit approval.
 
 ## Repository
-Private repository: [Friday-AI-Personal-Assistant/midSunday](https://github.com/Friday-AI-Personal-Assistant/midSunday)
+Public development repository: [Friday-AI-Personal-Assistant/midSunday](https://github.com/Friday-AI-Personal-Assistant/midSunday)
