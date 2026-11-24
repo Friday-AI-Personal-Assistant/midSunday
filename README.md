@@ -39,6 +39,7 @@ The product must remain useful without a cloud account. Online features must be 
 
 ### Early prototype
 - [First Tauri desktop-shell prototype](prototype/desktop-shell/README.md)
+- [Manual Windows build workflow](prototype/desktop-shell/WINDOWS-BUILD.md)
 
 ### Product and engineering
 - [Product specification](docs/PRODUCT-SPECIFICATION.md)
