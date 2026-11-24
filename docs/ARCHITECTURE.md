@@ -131,3 +131,17 @@ For Windows-first detection, evaluate documented Windows system, memory, process
 OpenJarvis is a reference for separating detection from engine/model recommendation. It is not a midSunday dependency, and its setup-time recommendation flow is not sufficient evidence for our desired live adaptive behaviour. Full requirements and acceptance criteria are in [HARDWARE-INTELLIGENCE.md](HARDWARE-INTELLIGENCE.md).
 
 No implementation or API dependency is approved by this proposal.
+
+## 11. Windows hardware-detection implementation direction (research recommendation)
+
+The initial Windows API review points toward a layered design:
+- `sysinfo` as a possible cross-platform baseline for CPU, memory, process, and disk information.
+- Microsoft's `windows` Rust crate for precise Windows-native calls: `GlobalMemoryStatusEx`, `GetLogicalProcessorInformationEx`, DXGI adapter enumeration and process GPU-memory budgets, and `GetDiskFreeSpaceExW`.
+- Optional vendor diagnostics (such as NVML) only when installed and useful; never a mandatory requirement for basic detection.
+- The selected inference runtime must independently validate its own acceleration backend.
+
+Important data semantics: installed RAM differs from currently available RAM; dedicated VRAM differs from shared system memory; DXGI's GPU memory budget is process-specific and dynamic, not a global free-VRAM reading. WMI `Win32_VideoController.AdapterRAM` should not be the authoritative VRAM source because of its 32-bit field and documented accuracy caveats.
+
+Detailed API mapping, crate candidates, fallback/confidence statuses, and source links: [HARDWARE-INTELLIGENCE.md](HARDWARE-INTELLIGENCE.md#12-windows-detection-research--api-and-rust-library-shortlist-2026-11-24).
+
+This is a research recommendation only. No dependency or implementation has been approved; check exact crate versions, MSRV, features, transitive dependencies, and licences against the eventual project toolchain before adding anything.
