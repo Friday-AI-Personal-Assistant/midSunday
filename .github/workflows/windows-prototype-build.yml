@@ -1,6 +1,12 @@
 name: Windows prototype build
 
 on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
@@ -54,8 +60,8 @@ jobs:
         working-directory: prototype/desktop-shell
         run: npx tauri build
 
-      - name: Upload build outputs and generated lockfile
-        if: always()
+      - name: Upload build outputs and generated lockfile (manual runs only)
+        if: always() && github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: midsunday-windows-prototype-build
