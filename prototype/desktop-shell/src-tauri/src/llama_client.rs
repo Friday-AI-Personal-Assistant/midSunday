@@ -427,7 +427,7 @@ mod tests {
 
     #[test]
     fn streaming_line_parser_preserves_urdu_unicode() {
-        let line = "data: {\\\"choices\\\":[{\\\"delta\\\":{\\\"content\\\":\\\"سلام\\\"}}]}".as_bytes();
+        let line = r#"data: {"choices":[{"delta":{"content":"سلام"}}]}"#.as_bytes();
         assert_eq!(
             parse_stream_line(line),
             Ok(StreamLine::Delta("سلام".to_owned()))
