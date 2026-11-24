@@ -441,8 +441,18 @@ mod tests {
             write!(stream, "{:X}\r\n{}\r\n", event.len(), event).unwrap();
             stream.flush().unwrap();
             let mut probe = [0_u8; 1];
-            let count = stream.read(&mut probe).expect("read disconnect");
-            assert_eq!(count, 0, "client should close the response connection");
+            match stream.read(&mut probe) {
+                Ok(0) => {} // A clean EOF is the usual TCP close signal.
+                Err(error) if matches!(
+                    error.kind(),
+                    std::io::ErrorKind::ConnectionReset
+                        | std::io::ErrorKind::ConnectionAborted
+                        | std::io::ErrorKind::BrokenPipe
+                        | std::io::ErrorKind::UnexpectedEof
+                ) => {} // Some platforms report cancellation as a reset instead of EOF.
+                Ok(count) => panic!("expected the client to close the response connection, but read {count} byte(s)"),
+                Err(error) => panic!("unexpected error while waiting for client cancellation: {error}"),
+            }
         });
 
         let client = LlamaHttpClient::new(&config(port), Duration::from_secs(2)).unwrap();
