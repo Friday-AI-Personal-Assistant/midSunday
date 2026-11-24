@@ -707,7 +707,7 @@ fn clean_awareness_content(content: &str) -> Result<String, String> {
     if content.len() > 4_096 || content.chars().count() > 2_000 {
         return Err("Awareness items must be 2,000 characters or 4 KiB or smaller.".to_owned());
     }
-    if content.chars().any(|ch| ch == '\\0') {
+    if content.chars().any(|ch| ch == '\0') {
         return Err("Awareness items cannot contain null characters.".to_owned());
     }
 
