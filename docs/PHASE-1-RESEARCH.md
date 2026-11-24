@@ -317,3 +317,108 @@ Do not rely on WMI `Win32_VideoController.AdapterRAM` as authoritative VRAM. The
 Prototype `sysinfo` plus narrowly-featured `windows` APIs first. Keep vendor-specific telemetry optional. Validate actual acceleration through the selected inference runtime and a controlled model-load test; a detected GPU does not prove the runtime can use it.
 
 **Status:** Desk research only. No crate has been added, no detector code has been written, and no Windows test machine has been inspected. Exact crate versions, licences, MSRV, feature flags, and transitive dependencies must be checked before adoption.
+
+
+## 16. Preliminary local model ladder — Qwen3.5 and Gemma 4 candidates (2026-11-24)
+
+**Status:** Research shortlist only. No model is selected, downloaded, run, or approved for release. Parameter count and quantised file size are not RAM requirements.
+
+### 16.1 Why the ladder is not a fixed RAM chart
+
+The hardware manager should recommend from measured combinations of:
+- Model architecture and exact checkpoint.
+- Quantisation and conversion provenance.
+- Runtime build and acceleration backend.
+- Context length and KV-cache configuration.
+- GPU offload and current process GPU budget.
+- Available system memory, not only installed RAM.
+- Concurrent UI, STT, TTS, and other workloads.
+- Required quality for English, Pakistani Urdu, Roman Urdu, and Urdu-English code-switching.
+
+A long advertised context window is not a sensible default. Start with short, measured context profiles and increase only when memory and quality tests justify it.
+
+### 16.2 Primary family to evaluate: Qwen3.5
+
+Qwen3.5 is a useful initial family because the official model cards list Apache-2.0 and broad multilingual support, and llama.cpp/ggml-org publish GGUF paths for multiple sizes. Its official model card reports 201 languages/dialects, but that does not establish strong Pakistani Urdu or Roman Urdu performance.
+
+| Candidate | Example Q4 GGUF file size found | Intended evaluation role | Preliminary caution |
+|---|---:|---|---|
+| Qwen3.5-0.8B | ~563 MB | Very constrained fallback; bounded tasks; compare as basic chat | Official card positions this parameter scale mainly for prototyping/task-specific use; benchmark results are substantially below 2B on several general benchmarks. |
+| Qwen3.5-2B | ~1.31 GB | Smallest serious conversational candidate to test | Promising size/quality balance; still needs Urdu and companion-dialogue evaluation. |
+| Qwen3.5-4B | ~3.03 GB | Main balanced candidate for capable mainstream PCs | Weight file alone is already substantial; context/runtime overhead matters. |
+| Qwen3.5-9B | ~5.78–6.17 GB depending on quant source | Higher-quality candidate for 16 GB and stronger systems | Quantisation provenance and exact build differ; 9B weights alone can exceed the practical memory budget of lower tiers. |
+| Qwen3.5-27B | ~18 GB at Q4_K_M | High-capability CPU/GPU-offload candidate for 32 GB+ / 64 GB+ testing | Very large memory footprint; 32 GB is not a guarantee, especially with long context or other workloads. |
+
+File sizes are observed published GGUF artifacts, not memory benchmarks. The 9B range reflects different quantization packages; use one exact, provenance-verified build in comparisons. A vision projector, if bundled, adds further storage and runtime cost; text-only companion tests should not download it unnecessarily.
+
+### 16.3 Alternate family: Gemma 4 edge models
+
+Gemma 4 deserves a comparison because Google describes E2B/E4B as edge-oriented, multilingual models and official model cards list Apache-2.0. Current ggml-org GGUF artifacts are available for llama.cpp.
+
+| Candidate | Observed Q4 GGUF weight file | Notes |
+|---|---:|---|
+| Gemma 4 E2B IT | ~2.84 GB | The name refers to effective parameters; the GGUF package reports roughly 5B total parameters. Do not estimate memory from the "E2B" label alone. |
+| Gemma 4 E4B IT | ~4.59 GB | Roughly 8B total parameters in the GGUF package; candidate for 16 GB class comparisons and stronger machines. |
+
+Gemma 4 supports multilingual tasks and audio input in E2B/E4B, but its language claims are not a substitute for Pakistani Urdu tests. Compare its actual quality, memory, and speed with Qwen at similar resource budgets. Gemma 4's GGUF architecture is supported by current llama.cpp material, but pin and test the exact runtime revision before adopting it.
+
+### 16.4 What the published benchmark evidence tells us — and does not tell us
+
+Qwen's official Qwen3.5-2B model card compares 2B with 0.8B and reports a clear gap on some general evaluations (for example, MMLU-Pro and instruction-following tests). This supports treating 0.8B as a constrained baseline rather than assuming it can provide the same companion quality as a larger model.
+
+These are vendor-published benchmark results. They are not independent midSunday tests, do not measure Pakistani Urdu, and do not predict performance on a particular Windows PC.
+
+### 16.5 Preliminary evaluation ladder (not RAM promises)
+
+- **Constrained / 4 GB target:** Qwen3.5-0.8B as the tiny baseline; Qwen3.5-2B Q4 as a stretch candidate. Do not promise either until the full Windows app + model + context is measured.
+- **6–8 GB planning classes:** Compare Qwen3.5-2B and 4B, with Gemma 4 E2B as an alternative. The 4B/E2B options may be constrained by Windows overhead and context.
+- **16 GB planning class:** Compare Qwen3.5-4B and 9B, Gemma 4 E2B/E4B, and smaller quantisations for speed.
+- **32 GB planning class:** Compare Qwen3.5-9B and 27B with modest context and different CPU/GPU offload settings.
+- **64 GB+ planning class:** Include Qwen3.5-27B and larger current candidates as appropriate; do not assume RAM alone is enough—GPU VRAM, CPU bandwidth, storage, and thermal limits remain relevant.
+
+These are test buckets to organise the benchmark matrix, not automatic mappings or compatibility claims. A high-end user must still be able to choose a smaller model for speed.
+
+### 16.6 Required midSunday benchmark suite
+
+Use one fixed set of prompts and scoring rubrics across models:
+1. Natural English companion conversation and emotional nuance.
+2. Pakistani Urdu in Urdu script.
+3. Roman Urdu typed naturally.
+4. Urdu-English code-switching within the same message.
+5. Correct understanding of Pakistani names, places, idioms, and everyday phrasing.
+6. Personality consistency over a multi-turn conversation.
+7. Instruction following, structured extraction, summarisation, and rewriting.
+8. Reasoning and multi-step planning, with hallucination/error checks.
+9. Safe tool-intent proposals (the app, not the model, validates all actions).
+10. Refusal and boundary behaviour for unsafe or manipulative requests.
+
+Measure exact model revision, quantisation, context, runtime commit, CPU/GPU offload, cold load time, first-token latency, tokens/second, peak system RAM, GPU memory budget/usage, disk size, stability, and quality scores. Test short, medium, and longer context separately. Include concurrent STT/TTS tests only after single-model baselines are established.
+
+### 16.7 Licensing and provenance gate
+
+- Official Qwen3.5 and Gemma 4 model cards currently list Apache-2.0; preserve the exact source model card and licence in the model catalogue.
+- A GGUF conversion or third-party quantization must record the original model revision, converter/runtime commit, quantizer, quantisation method, file hashes, and applicable notices.
+- Do not assume that an unlabelled community GGUF repository has complete provenance merely because the source model is Apache-2.0.
+- Keep model weights separate from optional vision/audio projectors and MTP/draft assets. Do not download or bundle components the current feature does not need.
+- Re-check current terms and all dependencies at the time of distribution.
+
+### 16.8 Sources
+
+- Qwen3.5-0.8B official model card: https://huggingface.co/Qwen/Qwen3.5-0.8B
+- Qwen3.5-2B official model card and benchmark comparison: https://huggingface.co/Qwen/Qwen3.5-2B
+- Qwen3.5-4B official model card: https://huggingface.co/Qwen/Qwen3.5-4B
+- Qwen3.5-9B official model card: https://huggingface.co/Qwen/Qwen3.5-9B
+- Qwen3.5-27B official model card: https://huggingface.co/Qwen/Qwen3.5-27B
+- ggml-org Qwen3.5-0.8B GGUF: https://huggingface.co/ggml-org/Qwen3.5-0.8B-GGUF
+- ggml-org Qwen3.5-4B GGUF and quant sizes: https://huggingface.co/ggml-org/Qwen3.5-4B-GGUF
+- Qwen3.5-2B GGUF size listing: https://huggingface.co/gguf/Qwen3.5-2B-GGUF
+- Qwen3.5-9B GGUF quantization/provenance example: https://huggingface.co/SoAIHQ/Qwen3.5-9B-GGUF
+- Qwen3.5-27B GGUF sizes: https://huggingface.co/gguf/Qwen3.5-27B-GGUF
+- Gemma 4 E2B official model card: https://huggingface.co/google/gemma-4-E2B-it
+- Gemma 4 E4B official model card: https://huggingface.co/google/gemma-4-E4B-it
+- Gemma 4 GGUF collection: https://huggingface.co/collections/ggml-org/gemma-4
+- Gemma 4 with llama.cpp: https://github.com/google-gemma/docs/blob/main/docs/deployment/llamacpp.md
+- llama.cpp current model support/docs: https://github.com/ggml-org/llama.cpp
+
+**Conclusion:** Qwen3.5 should be the first model family in the benchmark matrix, with Gemma 4 E2B/E4B as meaningful alternatives. The 2B and 4B Qwen candidates look especially useful to compare for the low-to-mainstream range; 9B and 27B give us a path to test more capable systems. Nothing is selected until real tests—especially Pakistani Urdu and companion quality—support it.
+
