@@ -528,7 +528,7 @@ This repository is the durable source of truth. ChatGPT conversations are workin
 
 ## 11. Current status and immediate next actions
 
-**Current stage:** Phase 3 — Engineering foundation and desktop shell (first interactive workspace UI implemented; automatic Windows, Linux, and macOS CI workflows are configured for pushes to main and pull requests; the latest three-platform build and Rust test run passed). Phase 1 feasibility research continues in parallel.
+**Current stage:** Phase 3 — Engineering foundation and desktop shell (first interactive workspace UI implemented; automatic Windows, Linux, and macOS CI workflows are configured for pushes to main and pull requests; the latest streaming/cancellation build is implemented, but the three-platform Rust test run is currently failing to compile; the shared dependency and Urdu test-syntax fixes are being applied). Phase 1 feasibility research continues in parallel.
 
 **Completed:**
 - [x] Product name selected: midSunday.
@@ -656,6 +656,9 @@ The HTTP client is local-only and uses the llama.cpp health and chat-completion 
 
 
 ### 2026-11-24 — Streaming generation and cancellation milestone
+
+**CI correction:** Runs #27, #28, and #29 all reached the Rust test step and failed on the same shared compile errors: `serde_json` was used without a direct dependency declaration, and the Urdu Unicode test used a non-ASCII raw byte string. The fix adds the direct dependency and tests UTF-8 bytes from a normal Rust string. The milestone remains unverified until all three platform jobs pass.
+
 
 - [x] Add server-sent-event streaming for local chat completions.
 - [x] Add a cloneable cancellation signal that can be triggered from another thread.
