@@ -168,7 +168,7 @@ mod tests {
         let d=dir(); let model_path=d.join("tiny.gguf"); fs::write(&model_path,b"GGUF-local test model bytes").unwrap();
         let path=d.join("models.json"); let c=ModelCatalog::open(&path).unwrap();
         let model=c.register(model_path.to_str().unwrap(),"Tiny model","Local test","Test-only").unwrap();
-        assert_eq!(model.sha256.len(),64); assert_eq!(model.id,model.sha256); assert_eq!(model.size_bytes,26);
+        assert_eq!(model.sha256.len(),64); assert_eq!(model.id,model.sha256); assert_eq!(model.size_bytes,27);
         drop(c); let reopened=ModelCatalog::open(&path).unwrap(); assert_eq!(reopened.list().unwrap(),vec![model]); let _=fs::remove_dir_all(d);
     }
     #[test] fn duplicate_content_is_one_catalogue_entry() {
