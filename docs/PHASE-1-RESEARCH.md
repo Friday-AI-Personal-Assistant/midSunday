@@ -441,3 +441,10 @@ The protocol records cold model load, first-token latency, tokens/second, total 
 The protocol requires versioned cases, exact provenance, repeated runs, median/range reporting, blinded human ratings where practical, permissioned audio, and local-only result handling by default. It defines the results template and safety gates. It is a designed protocol—not an executed benchmark. The test dataset still needs to be authored and reviewed, and actual runs require Windows machines and exact candidate assets. No model, runtime, voice, or hardware profile has been approved from this work.
 
 **Next practical task:** Create benchmark dataset v1 with original English, Urdu-script, Roman Urdu, code-switching, persona, reasoning, factuality, and safety cases, then review it before running any model.
+
+
+## 18. Benchmark dataset v1 — initial synthetic seed set (2026-11-24)
+
+A first draft of the benchmark cases is now in [BENCHMARK-DATASET-V1.md](BENCHMARK-DATASET-V1.md). It includes English companion conversation, Urdu script, Roman Urdu, code-switching, multi-turn personality consistency, instruction following, reasoning, factuality, safe tool-intent proposals, and companion boundaries. All prompts are synthetic and include expected-behaviour notes for evaluators.
+
+**Not yet ready for formal scoring:** Urdu/Roman Urdu cases need review by fluent Pakistani Urdu evaluators; STT needs permissioned audio with reference transcripts; TTS needs a fixed sentence corpus and listener rating sheets; adversarial and hidden holdout cases still need to be added. Dataset v1 must be reviewed and frozen before candidate rankings are treated as evidence. No benchmark has been run.
