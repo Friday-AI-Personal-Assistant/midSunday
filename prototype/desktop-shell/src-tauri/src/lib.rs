@@ -8,7 +8,7 @@ mod runtime_manager;
 use tauri::{ipc::Channel, State};
 use runtime::{ConversationMessage, GenerationRequest, RuntimeConfig};
 use runtime_manager::{RuntimeManager, RuntimeStatusSnapshot};
-use conversation_store::{ConversationStore, ConversationSummary, StoredMessage};
+use conversation_store::{ConversationStore, ConversationSummary, ImportResult, StoredMessage};
 use tauri::Manager;
 
 
@@ -49,6 +49,11 @@ fn delete_conversation(store: State<'_, ConversationStore>, conversation_id: i64
 #[tauri::command]
 fn export_conversations(store: State<'_, ConversationStore>) -> Result<String, String> {
     store.export_json()
+}
+
+#[tauri::command]
+fn import_conversations(store: State<'_, ConversationStore>, json: String) -> Result<ImportResult, String> {
+    store.import_json(&json)
 }
 
 #[tauri::command]
@@ -172,6 +177,7 @@ pub fn run() {
             rename_conversation,
             delete_conversation,
             export_conversations,
+            import_conversations,
             clear_conversations,
             get_runtime_status,
             start_local_runtime,

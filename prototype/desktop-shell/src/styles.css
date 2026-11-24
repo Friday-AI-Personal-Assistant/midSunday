@@ -228,3 +228,16 @@ h1 { margin: 0; color: #eef5ef; font-size: clamp(25px, 3vw, 34px); font-weight: 
 .danger-action:hover:not(:disabled) { background: rgba(130,48,42,.28); }
 .danger-action:disabled { opacity: .45; cursor: not-allowed; }
 .settings-section .setting-row .secondary-action { flex: 0 0 auto; }
+
+
+.visually-hidden-file {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

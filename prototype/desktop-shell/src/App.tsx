@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { Channel, invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 
@@ -60,6 +60,8 @@ export default function App() {
   const [executablePath, setExecutablePath] = useState("");
   const [modelPath, setModelPath] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
+  const [importBusy, setImportBusy] = useState(false);
+  const importFileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     let active = true;
@@ -158,6 +160,38 @@ export default function App() {
       setRuntimeError("");
     } catch (error) {
       setRuntimeError(`Could not export conversations: ${String(error)}`);
+    }
+  }
+
+
+  async function importConversations(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    if (isGenerating || importBusy) return;
+    if (file.size > 20 * 1024 * 1024) {
+      setRuntimeError("That backup is larger than the 20 MB import limit.");
+      return;
+    }
+    setImportBusy(true);
+    setRuntimeError("");
+    try {
+      const json = await file.text();
+      const result = await invoke<{ imported: number; skippedDuplicates: number }>("import_conversations", { json });
+      const items = await invoke<ConversationSummary[]>("list_conversations");
+      setConversations(items);
+      if (activeConversationId === null && items.length > 0) {
+        const latest = items[0];
+        const saved = await invoke<StoredMessage[]>("get_conversation_messages", { conversationId: latest.id });
+        setActiveConversationId(latest.id);
+        setConversationName(latest.title);
+        setMessages(saved.map((message) => ({ id: message.id, role: message.role, text: message.content })));
+      }
+      setRuntimeError(`Import complete: ${result.imported} imported, ${result.skippedDuplicates} exact duplicates skipped.`);
+    } catch (error) {
+      setRuntimeError(`Could not import conversation backup: ${String(error)}`);
+    } finally {
+      setImportBusy(false);
     }
   }
 
@@ -423,6 +457,7 @@ export default function App() {
             </section>
             <section className="settings-section"><div className="settings-section-title"><div><h2>Conversation data</h2><p>Your chat history stays in the local app database. Export a portable copy or clear it from this device.</p></div><span className="settings-symbol">▤</span></div>
               <div className="setting-row"><div><strong>Export conversation history</strong><p>Save all conversations and messages as a versioned JSON file. This export does not include future personal memories or model files.</p></div><button className="secondary-action" type="button" onClick={() => void exportConversations()}>Export JSON</button></div>
+              <div className="setting-row"><div><strong>Import conversation backup</strong><p>Merge a versioned JSON backup into this device. Existing chats are never overwritten; exact duplicates are skipped.</p></div><><input ref={importFileRef} className="visually-hidden-file" type="file" accept=".json,application/json" onChange={(event) => void importConversations(event)} /><button className="secondary-action" type="button" onClick={() => importFileRef.current?.click()} disabled={importBusy || isGenerating}>{importBusy ? "Importing…" : "Import JSON"}</button></></div>
               <div className="setting-row"><div><strong>Clear all conversation history</strong><p>Delete every saved conversation and its messages. This does not affect separate memory data.</p></div><button className="danger-action" type="button" onClick={() => void clearAllConversations()} disabled={isGenerating}>Clear history</button></div>
             </section>
             <section className="settings-section"><div className="settings-section-title"><div><h2>Privacy & memory</h2><p>Choose what midSunday may remember on this device.</p></div><span className="settings-symbol">⌑</span></div>

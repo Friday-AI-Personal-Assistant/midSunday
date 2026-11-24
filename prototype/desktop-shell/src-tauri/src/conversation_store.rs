@@ -1,5 +1,5 @@
 use rusqlite::{params, Connection, OptionalExtension};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::{path::Path, sync::Mutex, time::{SystemTime, UNIX_EPOCH}};
 
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
@@ -38,6 +38,32 @@ struct ConversationExportFile {
     format_version: u32,
     exported_at: i64,
     conversations: Vec<ConversationExport>,
+}
+
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ConversationImport {
+    id: i64,
+    title: String,
+    created_at: i64,
+    updated_at: i64,
+    messages: Vec<StoredMessage>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ConversationImportFile {
+    format: String,
+    format_version: u32,
+    conversations: Vec<ConversationImport>,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportResult {
+    pub imported: usize,
+    pub skipped_duplicates: usize,
 }
 
 pub struct ConversationStore {
@@ -174,6 +200,109 @@ impl ConversationStore {
         Ok(())
     }
 
+
+    pub fn import_json(&self, json: &str) -> Result<ImportResult, String> {
+        const MAX_IMPORT_BYTES: usize = 20 * 1024 * 1024;
+        const MAX_CONVERSATIONS: usize = 5_000;
+        const MAX_MESSAGES: usize = 100_000;
+        if json.len() > MAX_IMPORT_BYTES {
+            return Err("The backup is larger than the 20 MB import limit.".to_owned());
+        }
+        let parsed: ConversationImportFile = serde_json::from_str(json)
+            .map_err(|error| format!("This is not a valid midSunday backup: {error}"))?;
+        if parsed.format != "midSunday-conversation-export" || parsed.format_version != 1 {
+            return Err("This backup format or version is not supported. Nothing was imported.".to_owned());
+        }
+        if parsed.conversations.len() > MAX_CONVERSATIONS {
+            return Err("This backup contains too many conversations (maximum 5,000).".to_owned());
+        }
+        let total_messages: usize = parsed.conversations.iter().map(|item| item.messages.len()).sum();
+        if total_messages > MAX_MESSAGES {
+            return Err("This backup contains too many messages (maximum 100,000).".to_owned());
+        }
+
+        let mut seen_conversation_ids = std::collections::HashSet::new();
+        for conversation in &parsed.conversations {
+            if conversation.id <= 0 || !seen_conversation_ids.insert(conversation.id) {
+                return Err("The backup contains an invalid or repeated conversation identifier.".to_owned());
+            }
+            clean_title(&conversation.title)?;
+            if conversation.created_at < 0 || conversation.updated_at < conversation.created_at {
+                return Err("The backup contains invalid conversation timestamps.".to_owned());
+            }
+            let mut seen_message_ids = std::collections::HashSet::new();
+            for message in &conversation.messages {
+                if message.id <= 0 || !seen_message_ids.insert(message.id)
+                    || message.conversation_id != conversation.id
+                    || (message.role != "user" && message.role != "assistant")
+                    || message.content.trim().is_empty()
+                    || message.content.len() > 32_768
+                    || message.created_at < 0
+                {
+                    return Err("The backup contains an invalid message. Nothing was imported.".to_owned());
+                }
+            }
+        }
+
+        let mut connection = self.lock()?;
+        let transaction = connection.transaction()
+            .map_err(|error| format!("Could not begin conversation import: {error}"))?;
+        let mut result = ImportResult { imported: 0, skipped_duplicates: 0 };
+
+        for item in parsed.conversations {
+            let mut statement = transaction.prepare(
+                "SELECT id FROM conversations WHERE title = ?1 AND created_at = ?2"
+            ).map_err(|error| error.to_string())?;
+            let candidates = statement.query_map(params![item.title, item.created_at], |row| row.get::<_, i64>(0))
+                .map_err(|error| error.to_string())?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|error| error.to_string())?;
+            drop(statement);
+
+            let mut duplicate = false;
+            for existing_id in candidates {
+                let existing_messages = {
+                    let mut statement = transaction.prepare(
+                        "SELECT role, content, created_at FROM conversation_messages
+                         WHERE conversation_id = ?1 ORDER BY id ASC"
+                    ).map_err(|error| error.to_string())?;
+                    statement.query_map(params![existing_id], |row| Ok((
+                        row.get::<_, String>(0)?, row.get::<_, String>(1)?, row.get::<_, i64>(2)?
+                    ))).map_err(|error| error.to_string())?
+                    .collect::<Result<Vec<_>, _>>().map_err(|error| error.to_string())?
+                };
+                let imported_messages: Vec<(String, String, i64)> = item.messages.iter()
+                    .map(|message| (message.role.clone(), message.content.clone(), message.created_at))
+                    .collect();
+                if existing_messages == imported_messages {
+                    duplicate = true;
+                    break;
+                }
+            }
+            if duplicate {
+                result.skipped_duplicates += 1;
+                continue;
+            }
+
+            transaction.execute(
+                "INSERT INTO conversations(title, created_at, updated_at) VALUES(?1, ?2, ?3)",
+                params![item.title.trim(), item.created_at, item.updated_at],
+            ).map_err(|error| format!("Could not import conversation: {error}"))?;
+            let new_id = transaction.last_insert_rowid();
+            for message in item.messages {
+                transaction.execute(
+                    "INSERT INTO conversation_messages(conversation_id, role, content, created_at)
+                     VALUES(?1, ?2, ?3, ?4)",
+                    params![new_id, message.role, message.content, message.created_at],
+                ).map_err(|error| format!("Could not import conversation messages: {error}"))?;
+            }
+            result.imported += 1;
+        }
+
+        transaction.commit().map_err(|error| format!("Could not finish conversation import: {error}"))?;
+        Ok(result)
+    }
+
     pub fn clear_all(&self) -> Result<usize, String> {
         let connection = self.lock()?;
         let transaction = connection.unchecked_transaction().map_err(|error| error.to_string())?;
@@ -308,6 +437,74 @@ mod tests {
         assert_eq!(parsed["formatVersion"], 1);
         assert_eq!(parsed["conversations"][0]["title"], "Export me");
         assert_eq!(parsed["conversations"][0]["messages"][0]["content"], "Hello export");
+    }
+
+
+    #[test]
+    fn imports_backup_and_remaps_identifiers_without_overwriting_existing_chats() {
+        let store = store();
+        let existing = store.create("Keep existing").unwrap();
+        store.append(existing.id, "user", "Do not replace me").unwrap();
+        let backup = serde_json::json!({
+            "format": "midSunday-conversation-export",
+            "formatVersion": 1,
+            "exportedAt": 10,
+            "conversations": [{
+                "id": 77, "title": "Imported chat", "createdAt": 2, "updatedAt": 3,
+                "messages": [{"id": 88, "conversationId": 77, "role": "user", "content": "Imported safely", "createdAt": 3}]
+            }]
+        }).to_string();
+        let result = store.import_json(&backup).unwrap();
+        assert_eq!(result.imported, 1);
+        assert_eq!(result.skipped_duplicates, 0);
+        let items = store.list().unwrap();
+        assert_eq!(items.len(), 2);
+        let imported = items.iter().find(|item| item.title == "Imported chat").unwrap();
+        assert_ne!(imported.id, 77);
+        assert_eq!(store.messages(imported.id).unwrap()[0].content, "Imported safely");
+        assert_eq!(store.messages(existing.id).unwrap()[0].content, "Do not replace me");
+    }
+
+    #[test]
+    fn repeated_import_skips_exact_duplicates() {
+        let store = store();
+        let backup = serde_json::json!({
+            "format": "midSunday-conversation-export", "formatVersion": 1, "exportedAt": 10,
+            "conversations": [{
+                "id": 7, "title": "Same chat", "createdAt": 2, "updatedAt": 3,
+                "messages": [{"id": 8, "conversationId": 7, "role": "user", "content": "Same message", "createdAt": 3}]
+            }]
+        }).to_string();
+        assert_eq!(store.import_json(&backup).unwrap().imported, 1);
+        let second = store.import_json(&backup).unwrap();
+        assert_eq!(second.imported, 0);
+        assert_eq!(second.skipped_duplicates, 1);
+        assert_eq!(store.list().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn rejects_invalid_backup_without_partially_importing() {
+        let store = store();
+        store.create("Already here").unwrap();
+        let backup = serde_json::json!({
+            "format": "midSunday-conversation-export", "formatVersion": 1, "exportedAt": 10,
+            "conversations": [
+                {"id": 7, "title": "Would be valid", "createdAt": 2, "updatedAt": 3, "messages": []},
+                {"id": 8, "title": "Invalid", "createdAt": 2, "updatedAt": 3,
+                 "messages": [{"id": 9, "conversationId": 999, "role": "system", "content": "Bad", "createdAt": 3}]}
+            ]
+        }).to_string();
+        assert!(store.import_json(&backup).is_err());
+        assert_eq!(store.list().unwrap().len(), 1);
+        assert_eq!(store.list().unwrap()[0].title, "Already here");
+    }
+
+    #[test]
+    fn rejects_unsupported_backup_version() {
+        let store = store();
+        let backup = r#"{"format":"midSunday-conversation-export","formatVersion":99,"exportedAt":1,"conversations":[]}"#;
+        assert!(store.import_json(backup).is_err());
+        assert!(store.list().unwrap().is_empty());
     }
 
     #[test]
