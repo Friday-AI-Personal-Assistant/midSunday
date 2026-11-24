@@ -130,8 +130,10 @@ Release numbers are planning labels, not promises or dates. A stage is not compl
 - [ ] Review SQLite and local data protection options.
 - [ ] Define supported Windows versions and CPU architecture.
 - [ ] Identify any GPU requirements and ensure a CPU fallback where possible.
-- [ ] Research and design the Windows-first Hardware Intelligence & Adaptive Resource Manager (CPU, RAM, GPU/VRAM, storage, live resource state, model recommendations, and safe workload scheduling).
-- [ ] Compare OpenJarvis hardware auto-detection/recommendation with the proposed midSunday design; do not assume its setup-time heuristic is sufficient for runtime adaptation.
+- [x] Complete initial desk research mapping Windows hardware APIs and Rust-library candidates for the Hardware Intelligence & Adaptive Resource Manager.
+- [ ] Prototype and validate Windows detection for CPU topology, installed/available RAM, all GPU adapters, DXGI memory budgets, and model-library disk space.
+- [ ] Research and design the adaptive resource manager's model recommendations and safe workload scheduling.
+- [x] Compare OpenJarvis hardware auto-detection/recommendation with the proposed midSunday design; do not assume its setup-time heuristic is sufficient for runtime adaptation.
 - [ ] Review all candidate licences, model cards, voice licences, and redistribution terms.
 - [ ] Record benchmark machines, test scripts, model versions, and results.
 
@@ -585,3 +587,15 @@ OpenJarvis's hardware auto-detection and engine/model recommendation workflow ha
 - [ ] Validate detection and recommendation accuracy on representative Windows hardware.
 
 This is desk research and documentation only. No detection code or benchmark has been implemented. OpenJarvis is a reference, not a midSunday dependency. The detailed design is in `docs/HARDWARE-INTELLIGENCE.md`.
+
+
+### 2026-11-24 — Windows hardware detection research
+
+- [x] Map Windows APIs for physical/available RAM, CPU topology, DXGI GPU enumeration and memory budgets, and model-storage free space.
+- [x] Review `sysinfo`, Microsoft's `windows` crate, and optional NVIDIA NVML wrapper as Rust candidates.
+- [x] Document why WMI `AdapterRAM` is not authoritative and why GPU inventory, VRAM capacity, process memory budget, and runtime acceleration support must remain distinct.
+- [ ] Check exact dependency versions, MSRV, licences, features, and dependency tree against the eventual Rust toolchain.
+- [ ] Build a read-only Windows hardware-detection prototype after Phase 1 architecture and framework decisions.
+- [ ] Validate all reported values against Windows system tools on multiple hardware configurations.
+
+This checkpoint completes initial desk research only. No crate was added and no code or hardware benchmark was run. See `docs/HARDWARE-INTELLIGENCE.md` sections 12 and 13.
