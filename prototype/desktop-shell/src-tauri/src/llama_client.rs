@@ -112,7 +112,9 @@ impl LlamaHttpClient {
 
         let mut reader = response.body_mut().as_reader();
         let mut bytes = [0_u8; 2048];
-        let mut pending = String::new();
+        // Preserve incomplete UTF-8 sequences between socket reads. This matters
+        // for Urdu and other multibyte scripts when a character crosses a chunk boundary.
+        let mut pending = Vec::<u8>::new();
 
         loop {
             if cancellation.is_cancelled() {
@@ -125,31 +127,35 @@ impl LlamaHttpClient {
                 break;
             }
 
-            pending.push_str(&String::from_utf8_lossy(&bytes[..count]));
-            while let Some(line_end) = pending.find('\n') {
-                let line = pending[..line_end].trim_end_matches('\r').to_owned();
-                pending.drain(..=line_end);
+            pending.extend_from_slice(&bytes[..count]);
+            if pending.len() > MAX_STREAM_LINE_BYTES {
+                return Err(LlamaClientError::InvalidResponse);
+            }
 
-                if let Some(data) = line.strip_prefix("data:") {
-                    let data = data.trim();
-                    if data == "[DONE]" {
-                        return Ok(());
-                    }
+            while let Some(line_end) = pending.iter().position(|byte| *byte == b'\n') {
+                let mut line: Vec<u8> = pending.drain(..=line_end).collect();
+                line.pop();
+                if line.last() == Some(&b'\r') {
+                    line.pop();
+                }
 
-                    let chunk: ChatCompletionStreamChunk = serde_json::from_str(data)
-                        .map_err(|_| LlamaClientError::InvalidResponse)?;
-                    if let Some(content) = chunk.choices.into_iter().next()
-                        .and_then(|choice| choice.delta.content)
-                    {
-                        if !content.is_empty() {
-                            on_delta(&content);
-                        }
-                    }
+                match parse_stream_line(&line)? {
+                    StreamLine::Done => return Ok(()),
+                    StreamLine::Delta(content) => on_delta(&content),
+                    StreamLine::Ignored => {}
                 }
 
                 if cancellation.is_cancelled() {
                     return Err(LlamaClientError::Cancelled);
                 }
+            }
+        }
+
+        if !pending.is_empty() {
+            match parse_stream_line(&pending)? {
+                StreamLine::Done => return Ok(()),
+                StreamLine::Delta(content) => on_delta(&content),
+                StreamLine::Ignored => {}
             }
         }
 
@@ -182,6 +188,34 @@ struct ChatCompletionStreamChunk { choices: Vec<ChatCompletionStreamChoice> }
 struct ChatCompletionStreamChoice { delta: ChatCompletionStreamDelta }
 #[derive(Deserialize)]
 struct ChatCompletionStreamDelta { content: Option<String> }
+
+
+const MAX_STREAM_LINE_BYTES: usize = 1024 * 1024;
+
+#[derive(Debug, PartialEq, Eq)]
+enum StreamLine {
+    Ignored,
+    Done,
+    Delta(String),
+}
+
+fn parse_stream_line(line: &[u8]) -> Result<StreamLine, LlamaClientError> {
+    let line = std::str::from_utf8(line).map_err(|_| LlamaClientError::InvalidResponse)?;
+    let Some(data) = line.strip_prefix("data:") else {
+        return Ok(StreamLine::Ignored);
+    };
+    let data = data.trim();
+    if data == "[DONE]" {
+        return Ok(StreamLine::Done);
+    }
+
+    let chunk: ChatCompletionStreamChunk = serde_json::from_str(data)
+        .map_err(|_| LlamaClientError::InvalidResponse)?;
+    match chunk.choices.into_iter().next().and_then(|choice| choice.delta.content) {
+        Some(content) if !content.is_empty() => Ok(StreamLine::Delta(content)),
+        _ => Ok(StreamLine::Ignored),
+    }
+}
 
 fn map_http_error(error: ureq::Error) -> LlamaClientError {
     match error {
@@ -390,5 +424,23 @@ mod tests {
             Err(LlamaClientError::Cancelled)
         );
     }
+
+    #[test]
+    fn streaming_line_parser_preserves_urdu_unicode() {
+        let line = br#"data: {"choices":[{"delta":{"content":"سلام"}}]}"#;
+        assert_eq!(
+            parse_stream_line(line),
+            Ok(StreamLine::Delta("سلام".to_owned()))
+        );
+    }
+
+    #[test]
+    fn streaming_line_parser_rejects_invalid_utf8() {
+        assert_eq!(
+            parse_stream_line(b"data: \xff"),
+            Err(LlamaClientError::InvalidResponse)
+        );
+    }
+
 
 }
