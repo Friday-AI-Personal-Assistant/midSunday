@@ -65,22 +65,22 @@ impl ConversationStore {
             let transaction = connection.unchecked_transaction()
                 .map_err(|error| format!("Could not prepare local database migration: {error}"))?;
             transaction.execute_batch(
-                "CREATE TABLE conversations (
+                "CREATE TABLE IF NOT EXISTS conversations (
                    id INTEGER PRIMARY KEY AUTOINCREMENT,
                    title TEXT NOT NULL,
                    created_at INTEGER NOT NULL,
                    updated_at INTEGER NOT NULL
                  );
-                 CREATE TABLE conversation_messages (
+                 CREATE TABLE IF NOT EXISTS conversation_messages (
                    id INTEGER PRIMARY KEY AUTOINCREMENT,
                    conversation_id INTEGER NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
                    role TEXT NOT NULL CHECK(role IN ('user', 'assistant')),
                    content TEXT NOT NULL,
                    created_at INTEGER NOT NULL
                  );
-                 CREATE INDEX idx_conversation_messages_order
+                 CREATE INDEX IF NOT EXISTS idx_conversation_messages_order
                    ON conversation_messages(conversation_id, id);
-                 CREATE INDEX idx_conversations_updated
+                 CREATE INDEX IF NOT EXISTS idx_conversations_updated
                    ON conversations(updated_at DESC);
                  PRAGMA user_version = 1;"
             ).map_err(|error| format!("Could not apply local database migration 1: {error}"))?;
@@ -265,6 +265,37 @@ mod tests {
         let store = store();
         assert!(store.create("  ").is_err());
         assert!(store.create(&"x".repeat(121)).is_err());
+    }
+
+    #[test]
+    fn upgrades_existing_unversioned_conversation_database_without_losing_data() {
+        let connection = Connection::open_in_memory().unwrap();
+        connection.execute_batch(
+            "PRAGMA foreign_keys = ON;
+             CREATE TABLE conversations (
+               id INTEGER PRIMARY KEY AUTOINCREMENT,
+               title TEXT NOT NULL,
+               created_at INTEGER NOT NULL,
+               updated_at INTEGER NOT NULL
+             );
+             CREATE TABLE conversation_messages (
+               id INTEGER PRIMARY KEY AUTOINCREMENT,
+               conversation_id INTEGER NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+               role TEXT NOT NULL CHECK(role IN ('user', 'assistant')),
+               content TEXT NOT NULL,
+               created_at INTEGER NOT NULL
+             );
+             CREATE INDEX idx_conversation_messages_order ON conversation_messages(conversation_id, id);
+             CREATE INDEX idx_conversations_updated ON conversations(updated_at DESC);
+             INSERT INTO conversations(title, created_at, updated_at) VALUES('Existing chat', 1, 1);
+             INSERT INTO conversation_messages(conversation_id, role, content, created_at) VALUES(1, 'user', 'Keep this', 1);"
+        ).unwrap();
+        let store = ConversationStore::from_connection(connection).unwrap();
+        assert_eq!(store.list().unwrap()[0].title, "Existing chat");
+        assert_eq!(store.messages(1).unwrap()[0].content, "Keep this");
+        let version: i64 = store.lock().unwrap()
+            .pragma_query_value(None, "user_version", |row| row.get(0)).unwrap();
+        assert_eq!(version, 1);
     }
 
     #[test]
