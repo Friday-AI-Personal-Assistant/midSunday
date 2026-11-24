@@ -10,7 +10,9 @@ midSunday is being developed as one shared Tauri + React + Rust application with
 | Linux | `ubuntu-24.04` | AppImage and Debian `.deb` | [Linux prototype build](../.github/workflows/linux-prototype-build.yml) |
 | macOS | `macos-latest` | `.dmg` disk image | [macOS prototype build](../.github/workflows/macos-prototype-build.yml) |
 
-Each workflow is manual-only (`workflow_dispatch`). No workflow runs automatically on every push or pull request. Standard GitHub-hosted runners are used; larger paid runners are not configured. Artifact retention is seven days. Check current GitHub plan and usage terms before changing runner classes or retention.
+All three workflows run automatically on pushes to `main` and pull requests targeting `main`. They also retain `workflow_dispatch` for an on-demand build. Windows, Linux, and macOS jobs are independent and can run in parallel; a failure on one platform does not block the other two.
+
+The workflows use standard GitHub-hosted runners, not larger runners. GitHub currently states that standard hosted runners are free and unlimited for public repositories. Larger runners are billed. Automatic push/PR runs do not upload installers or artifacts; this avoids filling the repository's artifact-storage allowance with every CI run. Manual runs upload available packages and the generated npm lockfile for seven days. Keep artifact retention short and review GitHub's current storage limits before changing it.
 
 ## Important limitations
 
@@ -23,8 +25,10 @@ Each workflow is manual-only (`workflow_dispatch`). No workflow runs automatical
 
 ## How to run
 
-Open the repository's **Actions** tab, choose the desired platform workflow, tap **Run workflow**, select `main`, and confirm. Run one workflow at a time while the prototype is being debugged. Each run uploads any produced package and the generated npm lockfile as an artifact for seven days.
+Normal development is automatic: pushing a commit to `main` starts all three platform workflows, and opening/updating a pull request targeting `main` starts the same checks. The three operating-system builds run independently and in parallel when GitHub capacity is available.
+
+For an on-demand package artifact, open the repository's **Actions** tab, choose a platform workflow, tap **Run workflow**, select `main`, and confirm. Manual runs upload any produced package and the generated npm lockfile as an artifact for seven days. Automatic CI runs validate the builds but deliberately do not retain installers.
 
 ## Development priority
 
-Windows remains the first priority for feature development. Linux and macOS builds are added early to catch platform-specific compile and packaging problems rather than postponing all platform work until after the Windows application is complete. Real-device validation remains a later milestone.
+Windows remains the first priority for feature development. Linux and macOS builds run alongside it to catch platform-specific compile and packaging problems early. CI compilation is not real-device validation; launch, installation, permissions, hardware, and runtime behaviour still need testing on actual computers.
