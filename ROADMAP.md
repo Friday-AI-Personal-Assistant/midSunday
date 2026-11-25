@@ -139,7 +139,7 @@ Release numbers are planning labels, not promises or dates. A stage is not compl
 - [ ] Identify any GPU requirements and ensure a CPU fallback where possible.
 - [x] Complete initial desk research mapping Windows hardware APIs and Rust-library candidates for the Hardware Intelligence & Adaptive Resource Manager.
 - [x] Implement the first cross-platform local inventory snapshot for OS/version/architecture, CPU brand and core counts, installed/available RAM, and storage-volume capacity; expose manual refresh in Settings.
-- [ ] Add Windows-specific GPU adapter/VRAM and DXGI memory-budget detection, instruction-set validation, and real-device validation of the baseline detector.
+- [ ] Add DXGI per-process GPU memory-budget/usage detection and validate GPU/CPU inventory against real Windows hardware; the initial adapter inventory and CPU instruction-set probe are now implemented.
 - [ ] Research and design the adaptive resource manager's model recommendations and safe workload scheduling.
 - [x] Compare OpenJarvis hardware auto-detection/recommendation with the proposed midSunday design; do not assume its setup-time heuristic is sufficient for runtime adaptation.
 - [ ] Review all candidate licences, model cards, voice licences, and redistribution terms.
@@ -1181,3 +1181,13 @@ Conversation-derived Awareness must not outlive the conversation messages that s
 - [ ] Verify inference-backend build flags and dispatch before using these fields for runtime recommendations.
 
 This is capability inventory only; it does not change CPU thread settings or claim that the installed AI runtime can use each detected instruction set.
+
+
+### 2026-11-25 — Windows GPU adapter inventory
+
+- [x] Enumerate Windows display adapters through DXGI 1.1 and report adapter name, vendor/device IDs, dedicated video memory, dedicated system memory, shared system memory, and software/remote flags.
+- [x] Preserve multiple adapters and label unsupported/unavailable detection explicitly; keep GPU inspection local and read-only.
+- [x] Display adapter inventory in Settings → System & hardware with clear separation between dedicated VRAM capacity and shared system memory.
+- [ ] Add process-specific DXGI video-memory budget/usage sampling and validate results against real Windows systems.
+
+This is hardware inventory only. It does not prove inference-runtime acceleration, report currently free VRAM, select a model, or configure GPU offload.

@@ -6,6 +6,26 @@ use sysinfo::{CpuRefreshKind, Disks, System};
 
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+pub struct GpuAdapter {
+    pub name: String,
+    pub vendor_id: u32,
+    pub device_id: u32,
+    pub dedicated_video_memory_bytes: u64,
+    pub dedicated_system_memory_bytes: u64,
+    pub shared_system_memory_bytes: u64,
+    pub is_software: bool,
+    pub is_remote: bool,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct GpuDetection {
+    pub status: String,
+    pub adapters: Vec<GpuAdapter>,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct HardwareDisk {
     pub mount_point: String,
     pub total_bytes: u64,
@@ -42,7 +62,7 @@ pub struct HardwareSnapshot {
     pub total_memory_bytes: u64,
     pub available_memory_bytes: u64,
     pub disks: Vec<HardwareDisk>,
-    pub gpu_status: String,
+    pub gpu: GpuDetection,
     pub assessment: CapabilityAssessment,
 }
 
@@ -130,6 +150,57 @@ pub fn assess_capability(
     }
 }
 
+/// Enumerates Windows display adapters through DXGI. Capacity figures are inventory only;
+/// they are not a live memory budget and do not prove inference-runtime acceleration support.
+#[cfg(target_os = "windows")]
+pub fn detect_gpu_adapters() -> GpuDetection {
+    use windows::Win32::Graphics::Dxgi::{CreateDXGIFactory1, IDXGIFactory1, DXGI_ADAPTER_FLAG_REMOTE, DXGI_ADAPTER_FLAG_SOFTWARE};
+
+    let factory = match unsafe { CreateDXGIFactory1::<IDXGIFactory1>() } {
+        Ok(factory) => factory,
+        Err(_) => return GpuDetection { status: "unavailable".to_owned(), adapters: Vec::new() },
+    };
+
+    let mut adapters = Vec::new();
+    let mut enumeration_ended = false;
+    for index in 0..32_u32 {
+        let adapter = match unsafe { factory.EnumAdapters1(index) } {
+            Ok(adapter) => adapter,
+            Err(_) => { enumeration_ended = true; break; }
+        };
+        let desc = match unsafe { adapter.GetDesc1() } {
+            Ok(desc) => desc,
+            Err(_) => continue,
+        };
+        let name = String::from_utf16_lossy(&desc.Description)
+            .trim_end_matches('\\0')
+            .trim()
+            .to_owned();
+        adapters.push(GpuAdapter {
+            name: if name.is_empty() { "Unnamed display adapter".to_owned() } else { name },
+            vendor_id: desc.VendorId,
+            device_id: desc.DeviceId,
+            dedicated_video_memory_bytes: desc.DedicatedVideoMemory as u64,
+            dedicated_system_memory_bytes: desc.DedicatedSystemMemory as u64,
+            shared_system_memory_bytes: desc.SharedSystemMemory as u64,
+            is_software: desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE.0 != 0,
+            is_remote: desc.Flags & DXGI_ADAPTER_FLAG_REMOTE.0 != 0,
+        });
+    }
+
+    let status = if adapters.is_empty() {
+        if enumeration_ended { "no_adapters" } else { "unavailable" }
+    } else {
+        "detected"
+    };
+    GpuDetection { status: status.to_owned(), adapters }
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn detect_gpu_adapters() -> GpuDetection {
+    GpuDetection { status: "unsupported_platform".to_owned(), adapters: Vec::new() }
+}
+
 /// Collects a one-time snapshot without inspecting running processes or user content.
 pub fn collect_hardware_snapshot() -> HardwareSnapshot {
     let mut system = System::new();
@@ -168,7 +239,7 @@ pub fn collect_hardware_snapshot() -> HardwareSnapshot {
         total_memory_bytes,
         available_memory_bytes,
         disks,
-        gpu_status: "not_detected_yet".to_owned(),
+        gpu: detect_gpu_adapters(),
         assessment: assess_capability(total_memory_bytes, available_memory_bytes, logical_core_count),
     }
 }
@@ -194,7 +265,7 @@ mod tests {
                 total_bytes: 512 * 1024 * 1024 * 1024,
                 available_bytes: 256 * 1024 * 1024 * 1024,
             }],
-            gpu_status: "not_detected_yet".to_owned(),
+            gpu: GpuDetection { status: "unsupported_platform".to_owned(), adapters: Vec::new() },
             assessment: assess_capability(16 * 1024 * 1024 * 1024, 8 * 1024 * 1024 * 1024, 8),
         };
         let value = serde_json::to_value(&snapshot).unwrap();
@@ -222,7 +293,7 @@ mod tests {
             gpu_status: "not_detected_yet".to_owned(),
             assessment: assess_capability(0, 0, 0),
         };
-        assert_eq!(snapshot.gpu_status, "not_detected_yet");
+        assert_eq!(snapshot.gpu.status, "unsupported_platform");
         assert_eq!(snapshot.assessment.suggested_mode, "Undetermined");
         assert_eq!(snapshot.cpu_instruction_sets.status, "unsupported_architecture");
     }
@@ -261,5 +332,35 @@ mod tests {
         let assessment = assess_capability(0, 0, 8);
         assert_eq!(assessment.suggested_mode, "Undetermined");
         assert!(assessment.rationale.contains("could not read enough"));
+    }
+}
+
+#[cfg(test)]
+mod gpu_tests {
+    use super::*;
+
+    #[test]
+    fn gpu_inventory_serializes_distinct_memory_categories() {
+        let inventory = GpuDetection {
+            status: "detected".to_owned(),
+            adapters: vec![GpuAdapter {
+                name: "Example integrated GPU".to_owned(), vendor_id: 0x8086, device_id: 1,
+                dedicated_video_memory_bytes: 128 * 1024 * 1024,
+                dedicated_system_memory_bytes: 0,
+                shared_system_memory_bytes: 8 * 1024 * 1024 * 1024,
+                is_software: false, is_remote: false,
+            }],
+        };
+        let value = serde_json::to_value(inventory).unwrap();
+        assert_eq!(value["adapters"][0]["dedicatedVideoMemoryBytes"], 128_u64 * 1024 * 1024);
+        assert_eq!(value["adapters"][0]["sharedSystemMemoryBytes"], 8_u64 * 1024 * 1024 * 1024);
+        assert_eq!(value["adapters"][0]["vendorId"], 0x8086);
+    }
+
+    #[test]
+    fn unsupported_gpu_detection_is_explicit_and_empty() {
+        let inventory = GpuDetection { status: "unsupported_platform".to_owned(), adapters: Vec::new() };
+        assert!(inventory.adapters.is_empty());
+        assert_eq!(inventory.status, "unsupported_platform");
     }
 }

@@ -7,11 +7,13 @@ type Section = "chat" | "characters" | "settings";
 type Message = { id: number; role: "user" | "assistant" | "system"; text: string };
 type RuntimeStatusSnapshot = { status: string; detail: string | null };
 type HardwareDisk = { mountPoint: string; totalBytes: number; availableBytes: number };
+type GpuAdapter = { name: string; vendorId: number; deviceId: number; dedicatedVideoMemoryBytes: number; dedicatedSystemMemoryBytes: number; sharedSystemMemoryBytes: number; isSoftware: boolean; isRemote: boolean };
+type GpuDetection = { status: string; adapters: GpuAdapter[] };
 type HardwareSnapshot = {
   osName: string | null; osVersion: string | null; architecture: string;
   cpuModel: string | null; cpuInstructionSets: { status: string; features: string[] }; logicalCoreCount: number; physicalCoreCount: number | null;
   totalMemoryBytes: number; availableMemoryBytes: number; disks: HardwareDisk[];
-  gpuStatus: string;
+  gpu: GpuDetection;
   assessment: { suggestedMode: string; memoryTier: string; rationale: string; currentMemoryPressure: boolean; limitations: string };
 };
 type EngineSettings = { executablePath: string; modelPath: string; contextTokens: number; cpuThreads: number | null };
@@ -1277,7 +1279,12 @@ export default function App() {
                 <div className="hardware-subsection"><strong>Storage volumes</strong>
                   {hardwareSnapshot.disks.length === 0 ? <p className="settings-footnote">No storage-volume information was available.</p> : hardwareSnapshot.disks.map((disk) => <div className="hardware-disk" key={disk.mountPoint}><span>{disk.mountPoint}</span><span>{formatModelSize(disk.availableBytes)} free of {formatModelSize(disk.totalBytes)}</span></div>)}
                 </div>
-                <div className="hardware-note"><strong>GPU detection:</strong> Not included yet. Dedicated GPU/VRAM and Windows DXGI memory-budget detection remain planned. This assessment does not select a model, change performance settings, download anything, or guarantee compatibility.</div>
+                <div className="hardware-subsection"><strong>Graphics adapters (DXGI on Windows)</strong>
+                  <p className="settings-footnote">{hardwareSnapshot.gpu.status === "detected" ? "Display adapters reported by Windows:" : hardwareSnapshot.gpu.status === "unsupported_platform" ? "DXGI adapter inventory is currently implemented for Windows only." : hardwareSnapshot.gpu.status === "no_adapters" ? "Windows did not report a display adapter." : "GPU adapter information is unavailable on this system."}</p>
+                  {hardwareSnapshot.gpu.adapters.map((adapter, index) => <div className="hardware-gpu" key={adapter.vendorId + "-" + adapter.deviceId + "-" + index}><strong>{adapter.name}</strong><span>Vendor 0x{adapter.vendorId.toString(16).padStart(4, "0")} · Device 0x{adapter.deviceId.toString(16).padStart(4, "0")}</span><span>Dedicated video memory: {formatModelSize(adapter.dedicatedVideoMemoryBytes)}</span><span>Dedicated system memory: {formatModelSize(adapter.dedicatedSystemMemoryBytes)} · Shared system memory: {formatModelSize(adapter.sharedSystemMemoryBytes)}</span>{(adapter.isSoftware || adapter.isRemote) && <span>{[adapter.isSoftware ? "Software adapter" : "", adapter.isRemote ? "Remote adapter" : ""].filter(Boolean).join(" · ")}</span>}</div>)}
+                  <p className="settings-footnote">DXGI capacity values are not current free VRAM or this app's memory budget. Shared memory is system RAM, not dedicated VRAM. Runtime acceleration and live GPU memory-budget checks are not verified yet.</p>
+                </div>
+                <div className="hardware-note">This assessment does not select a model, change performance settings, download anything, or guarantee compatibility.</div>
               </>}
               <div className="setting-row"><div><strong>Start with Windows</strong><p>Launch midSunday when you sign in. Not implemented yet.</p></div><button className={startWithWindows ? "toggle on" : "toggle"} role="switch" aria-checked={startWithWindows} onClick={() => setStartWithWindows(!startWithWindows)}><i /></button></div>
             </section>

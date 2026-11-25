@@ -328,3 +328,9 @@ h1 { margin: 0; color: #eef5ef; font-size: clamp(25px, 3vw, 34px); font-weight: 
 /* Runtime-detected CPU instruction-set labels */
 .cpu-feature-list { display: flex; flex-wrap: wrap; gap: 7px; margin: 2px 0 8px; }
 .cpu-feature { padding: 5px 8px; border: 1px solid var(--line); border-radius: 6px; color: #cbd9ce; background: rgba(255,255,255,.025); font-size: 9px; font-weight: 600; letter-spacing: .02em; }
+
+
+/* Windows DXGI graphics-adapter inventory */
+.hardware-gpu { display: grid; gap: 5px; padding: 11px 0; border-top: 1px solid var(--line); }
+.hardware-gpu strong { color: #dce8de; font-size: 10px; overflow-wrap: anywhere; }
+.hardware-gpu span { color: #9aab9f; font-size: 9px; line-height: 1.5; overflow-wrap: anywhere; }

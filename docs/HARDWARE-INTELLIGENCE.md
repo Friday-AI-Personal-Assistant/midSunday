@@ -305,3 +305,16 @@ The hardware snapshot reports optional CPU instruction-set features using Rust s
 On x86, Rust's AVX/AVX2 probes account for operating-system support for extended register state; a raw CPUID flag alone would be insufficient. Detection is read-only, local, and uses no external executable or vendor utility.
 
 The UI displays the detected features as informational labels. These are CPU/OS capabilities only: they do not prove that llama.cpp or another inference runtime includes matching optimized kernels, and they do not establish GPU acceleration support. Runtime-specific compatibility checks remain separate.
+
+
+## 17. Windows DXGI display-adapter inventory prototype (2026-11-25)
+
+The Windows hardware snapshot now uses Microsoft's Rust `windows` bindings and DXGI 1.1 adapter enumeration to report display-adapter name, PCI/ACPI vendor and device IDs, dedicated video memory capacity, dedicated system memory, shared system memory, and software/remote adapter flags. Multiple adapters are retained rather than selecting one based on display output order.
+
+The implementation is Windows-only and degrades to an explicit unsupported/unavailable status on other platforms or when DXGI cannot be queried. It performs read-only local enumeration; no vendor utility, administrator permission, network request, driver installation, or GPU benchmark is required. The enumeration has a defensive 32-adapter bound.
+
+**Important limits:** These are adapter capacity figures, not current free VRAM, not the process-specific DXGI memory budget, and not proof that a selected inference runtime can accelerate on that adapter. Shared system memory remains separate from dedicated video memory. Software and remote adapters are identified so they are not mistaken for local hardware accelerators.
+
+The next GPU work remains process-specific `IDXGIAdapter3::QueryVideoMemoryInfo` budget/usage sampling, followed by validation against Windows tools on real multi-GPU and integrated/discrete systems. No model selection or automatic offload is enabled by this inventory slice.
+
+References: Microsoft [EnumAdapters1](https://learn.microsoft.com/en-us/windows/win32/api/dxgi/nf-dxgi-idxgifactory1-enumadapters1), [DXGI_ADAPTER_DESC1](https://learn.microsoft.com/en-us/windows/win32/api/dxgi/ns-dxgi-dxgi_adapter_desc1), and the [windows 0.62.2 Rust bindings](https://microsoft.github.io/windows-docs-rs/doc/windows/Win32/Graphics/Dxgi/).
