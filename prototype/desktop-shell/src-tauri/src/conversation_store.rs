@@ -177,7 +177,7 @@ impl ConversationStore {
             .map_err(|error| format!("Could not enable local database constraints: {error}"))?;
         let schema_version: i64 = connection.pragma_query_value(None, "user_version", |row| row.get(0))
             .map_err(|error| format!("Could not read local database version: {error}"))?;
-        if schema_version > 6 {
+        if schema_version > 7 {
             return Err(format!("This midSunday database uses a newer schema version ({schema_version}) than this app supports."));
         }
         if schema_version == 0 {
@@ -321,6 +321,20 @@ impl ConversationStore {
                  PRAGMA user_version = 6;"
             ).map_err(|error| format!("Could not apply Awareness review-queue migration: {error}"))?;
             transaction.commit().map_err(|error| format!("Could not finish Awareness review-queue migration: {error}"))?;
+        }
+        let current_version: i64 = connection.pragma_query_value(None, "user_version", |row| row.get(0))
+            .map_err(|error| format!("Could not recheck local database version: {error}"))?;
+        if current_version == 6 {
+            let transaction = connection.unchecked_transaction()
+                .map_err(|error| format!("Could not prepare Awareness provenance-index migration: {error}"))?;
+            transaction.execute_batch(
+                "CREATE INDEX IF NOT EXISTS idx_awareness_items_source
+                   ON awareness_items(source_type, source_record_id);
+                 CREATE INDEX IF NOT EXISTS idx_awareness_suggestions_source
+                   ON awareness_suggestions(source_type, source_record_id);
+                 PRAGMA user_version = 7;"
+            ).map_err(|error| format!("Could not apply Awareness provenance-index migration: {error}"))?;
+            transaction.commit().map_err(|error| format!("Could not finish Awareness provenance-index migration: {error}"))?;
         }
         Ok(Self { connection: Mutex::new(connection) })
     }
@@ -888,11 +902,45 @@ impl ConversationStore {
 
     pub fn delete(&self, conversation_id: i64) -> Result<(), String> {
         if conversation_id <= 0 { return Err("Invalid conversation identifier.".to_owned()); }
-        let connection = self.lock()?;
-        let changed = connection.execute("DELETE FROM conversations WHERE id = ?1", params![conversation_id])
+        let mut connection = self.lock()?;
+        let transaction = connection.transaction()
+            .map_err(|error| format!("Could not begin conversation deletion: {error}"))?;
+        let exists: bool = transaction.query_row(
+            "SELECT EXISTS(SELECT 1 FROM conversations WHERE id = ?1)",
+            params![conversation_id], |row| row.get(0),
+        ).map_err(|error| error.to_string())?;
+        if !exists { return Err("Conversation was not found.".to_owned()); }
+
+        // Awareness facts and pending suggestions derived from this conversation
+        // are dependent on its messages. Remove them in the same transaction.
+        transaction.execute(
+            "INSERT INTO awareness_history(event_type, awareness_item_id, category, occurred_at)
+             SELECT 'deleted', id, category, ?2 FROM awareness_items
+             WHERE source_type = 'conversation'
+               AND source_record_id IN (
+                 SELECT id FROM conversation_messages WHERE conversation_id = ?1
+               )",
+            params![conversation_id, unix_time()],
+        ).map_err(|error| format!("Could not record source-linked Awareness deletion: {error}"))?;
+        transaction.execute(
+            "DELETE FROM awareness_items
+             WHERE source_type = 'conversation'
+               AND source_record_id IN (
+                 SELECT id FROM conversation_messages WHERE conversation_id = ?1
+               )",
+            params![conversation_id],
+        ).map_err(|error| format!("Could not remove source-linked Awareness items: {error}"))?;
+        transaction.execute(
+            "DELETE FROM awareness_suggestions
+             WHERE source_type = 'conversation'
+               AND source_record_id IN (
+                 SELECT id FROM conversation_messages WHERE conversation_id = ?1
+               )",
+            params![conversation_id],
+        ).map_err(|error| format!("Could not remove source-linked Awareness suggestions: {error}"))?;
+        transaction.execute("DELETE FROM conversations WHERE id = ?1", params![conversation_id])
             .map_err(|error| error.to_string())?;
-        if changed == 0 { return Err("Conversation was not found.".to_owned()); }
-        Ok(())
+        transaction.commit().map_err(|error| format!("Could not finish conversation deletion: {error}"))
     }
 
 
@@ -1001,10 +1049,29 @@ impl ConversationStore {
     }
 
     pub fn clear_all(&self) -> Result<usize, String> {
-        let connection = self.lock()?;
-        let transaction = connection.unchecked_transaction().map_err(|error| error.to_string())?;
+        let mut connection = self.lock()?;
+        let transaction = connection.transaction().map_err(|error| error.to_string())?;
         let count: usize = transaction.query_row("SELECT COUNT(*) FROM conversations", [], |row| row.get(0))
             .map_err(|error| error.to_string())?;
+        transaction.execute(
+            "INSERT INTO awareness_history(event_type, awareness_item_id, category, occurred_at)
+             SELECT 'deleted', id, category, ?1 FROM awareness_items
+             WHERE source_type = 'conversation'
+               AND source_record_id IN (SELECT id FROM conversation_messages)",
+            params![unix_time()],
+        ).map_err(|error| format!("Could not record source-linked Awareness deletion: {error}"))?;
+        transaction.execute(
+            "DELETE FROM awareness_items
+             WHERE source_type = 'conversation'
+               AND source_record_id IN (SELECT id FROM conversation_messages)",
+            [],
+        ).map_err(|error| format!("Could not remove source-linked Awareness items: {error}"))?;
+        transaction.execute(
+            "DELETE FROM awareness_suggestions
+             WHERE source_type = 'conversation'
+               AND source_record_id IN (SELECT id FROM conversation_messages)",
+            [],
+        ).map_err(|error| format!("Could not remove source-linked Awareness suggestions: {error}"))?;
         transaction.execute("DELETE FROM conversations", [])
             .map_err(|error| format!("Could not clear local conversations: {error}"))?;
         transaction.commit().map_err(|error| error.to_string())?;
@@ -1322,7 +1389,7 @@ mod tests {
         assert!(store.memory_enabled().unwrap());
         assert_eq!(store.get_awareness_settings().unwrap(), AwarenessSettings::default());
         let version: i64 = store.lock().unwrap().pragma_query_value(None, "user_version", |row| row.get(0)).unwrap();
-        assert_eq!(version, 6);
+        assert_eq!(version, 7);
     }
 
     #[test]
@@ -1459,6 +1526,50 @@ mod tests {
         store.delete(conversation.id).unwrap();
         assert!(store.list().unwrap().is_empty());
         assert!(store.messages(conversation.id).unwrap().is_empty());
+    }
+
+    #[test]
+    fn deleting_conversation_also_deletes_derived_awareness_and_pending_suggestions() {
+        let store = store();
+        let conversation = store.create("Source conversation").unwrap();
+        store.append(conversation.id, "user", "I enjoy astronomy.").unwrap();
+        let message = store.messages(conversation.id).unwrap().remove(0);
+        store.save_awareness_settings(AwarenessSettings {
+            enabled: true, learn_conversations: true, ..AwarenessSettings::default()
+        }).unwrap();
+        let learned = store.record_learned_awareness_item(
+            "I enjoy astronomy.", "interests", "conversation", Some(message.id), "inferred", 0.8
+        ).unwrap().unwrap();
+        let suggestion = store.create_awareness_suggestion(
+            "I enjoy looking at stars.", "interests", "conversation", Some(message.id), "inferred", 0.7
+        ).unwrap().unwrap();
+
+        store.delete(conversation.id).unwrap();
+
+        assert!(store.messages(conversation.id).unwrap().is_empty());
+        assert!(store.list_awareness_items().unwrap().iter().all(|item| item.id != learned.id));
+        assert!(store.list_awareness_suggestions().unwrap().iter().all(|item| item.id != suggestion.id));
+        assert!(store.list_awareness_history().unwrap().iter().any(|entry|
+            entry.event_type == "deleted" && entry.awareness_item_id == Some(learned.id)
+        ));
+    }
+
+    #[test]
+    fn clearing_conversations_removes_all_conversation_derived_awareness() {
+        let store = store();
+        let conversation = store.create("Source conversation").unwrap();
+        store.append(conversation.id, "user", "I enjoy astronomy.").unwrap();
+        let message = store.messages(conversation.id).unwrap().remove(0);
+        store.save_awareness_settings(AwarenessSettings {
+            enabled: true, learn_conversations: true, ..AwarenessSettings::default()
+        }).unwrap();
+        store.record_learned_awareness_item(
+            "I enjoy astronomy.", "interests", "conversation", Some(message.id), "inferred", 0.8
+        ).unwrap().unwrap();
+
+        assert_eq!(store.clear_all().unwrap(), 1);
+        assert!(store.list_awareness_items().unwrap().is_empty());
+        assert!(store.list_awareness_suggestions().unwrap().is_empty());
     }
 
     #[test]

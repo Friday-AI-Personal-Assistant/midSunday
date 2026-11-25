@@ -3,6 +3,7 @@
 All notable project changes are recorded here. The project is in foundation/prototype development; no application release has been made.
 
 ## 2026-11-25
+- Added Awareness source-lifecycle integrity: deleting one conversation or clearing all conversations now atomically removes its linked learned Awareness items and pending suggestions, records metadata-only deletion history, and preserves unrelated manual Awareness, saved memories, and other chats. Added schema-v7 provenance indexes and regression tests.
 - Corrected the legacy unversioned-database migration test to expect schema version 6 after the new Awareness review-queue migration; all original conversation data assertions remain unchanged.
 - Added the local Awareness Learning Review queue with a versioned SQLite migration, Rust-enforced source/master/category/suppression checks, explicit approve/reject actions, and rejection fingerprints. Suggestions remain pending until user approval; the automatic local extractor is not connected yet.
 - Fixed the legacy Awareness-settings regression test to update the migration-created default preference row instead of inserting a duplicate primary key.

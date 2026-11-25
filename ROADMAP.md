@@ -5,7 +5,7 @@
 > **Roadmap version:** 0.1  
 > **Status:** Foundation / planning  
 > **Repository:** `Friday-AI-Personal-Assistant/midSunday`  
-> **Last updated:** 2026-11-24  
+> **Last updated:** 2026-11-25  
 > **Decision rule:** User-confirmed requirements are binding. Technical choices in this roadmap are proposals until validated and approved.
 
 This document is the long-term project map and recovery reference for midSunday. It is deliberately comprehensive so development can continue even if a ChatGPT conversation is lost, corrupted, or moved. Update this file whenever scope, decisions, priorities, or completion status change.
@@ -939,3 +939,17 @@ This batch supports only deliberate user-entered Awareness items. It does not re
 - [ ] Implement automatic learning only after secret/private-data filtering, source provenance, deletion/relearning safeguards, and user-visible review are in place.
 
 This is a storage/settings foundation only. No password, credential, private message, or search content is collected by the new tables or controls. The future learning pipeline must enforce the binding Awareness privacy contract before any ingestion is enabled.
+
+
+### 2026-11-25 — Awareness source lifecycle and deletion integrity
+
+- [x] Upgrade the local SQLite schema from version 6 to version 7 and add indexes for source-linked Awareness items and pending suggestions.
+- [x] Treat conversation-derived Awareness items and pending suggestions as dependent on their source messages.
+- [x] When a user deletes one conversation, remove its derived Awareness items and pending suggestions in the same database transaction.
+- [x] When a user clears all conversations, remove all conversation-derived Awareness items and pending suggestions in the same transaction.
+- [x] Record metadata-only deletion events for Awareness items removed with their source conversation; never copy source text into the history.
+- [x] Add regression tests for individual conversation deletion and clear-all cleanup.
+- [ ] Add a user-facing source-evidence viewer and explicit per-evidence controls before connecting automatic extraction.
+- [ ] Add equivalent source lifecycle handling for in-app search evidence when a local search-history store is implemented.
+
+Conversation-derived Awareness must not outlive the conversation messages that support it. Deleting a source conversation now removes its linked learned items and pending suggestions atomically, while preserving unrelated manually entered Awareness items, saved memories, and other conversations. This is a lifecycle safeguard, not an active learning feature; automatic extraction remains disabled and unimplemented.
