@@ -143,6 +143,11 @@ fn clear_awareness_suppressions(store: State<'_, ConversationStore>) -> Result<u
 }
 
 #[tauri::command]
+fn get_awareness_source_message(store: State<'_, ConversationStore>, message_id: i64) -> Result<StoredMessage, String> {
+    store.awareness_source_message(message_id)
+}
+
+#[tauri::command]
 fn list_awareness_suggestions(store: State<'_, ConversationStore>) -> Result<Vec<AwarenessSuggestion>, String> {
     store.list_awareness_suggestions()
 }
@@ -467,6 +472,7 @@ pub fn run() {
             record_learned_awareness_item,
             list_awareness_items,
             list_awareness_suggestions,
+            get_awareness_source_message,
             approve_awareness_suggestion,
             reject_awareness_suggestion,
             list_awareness_history,

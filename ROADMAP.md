@@ -949,7 +949,8 @@ This is a storage/settings foundation only. No password, credential, private mes
 - [x] When a user clears all conversations, remove all conversation-derived Awareness items and pending suggestions in the same transaction.
 - [x] Record metadata-only deletion events for Awareness items removed with their source conversation; never copy source text into the history.
 - [x] Add regression tests for individual conversation deletion and clear-all cleanup.
-- [ ] Add a user-facing source-evidence viewer and explicit per-evidence controls before connecting automatic extraction.
+- [x] Add a user-facing, read-only source-evidence viewer for pending conversation-derived suggestions; it retrieves only the original user-authored message and fails closed if it no longer exists.
+- [ ] Add explicit per-evidence controls and source-linked review for saved Awareness items before connecting any broader automatic ingestion.
 - [ ] Add equivalent source lifecycle handling for in-app search evidence when a local search-history store is implemented.
 
 Conversation-derived Awareness must not outlive the conversation messages that support it. Deleting a source conversation now removes its linked learned items and pending suggestions atomically, while preserving unrelated manually entered Awareness items, saved memories, and other conversations. This is a lifecycle safeguard, not an active learning feature; automatic extraction remains disabled and unimplemented.

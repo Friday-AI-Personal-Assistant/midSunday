@@ -906,6 +906,20 @@ impl ConversationStore {
         rows.collect::<Result<Vec<_>, _>>().map_err(|error| error.to_string())
     }
 
+    pub fn awareness_source_message(&self, message_id: i64) -> Result<StoredMessage, String> {
+        if message_id <= 0 { return Err("Invalid Awareness source message identifier.".to_owned()); }
+        let connection = self.lock()?;
+        connection.query_row(
+            "SELECT id, conversation_id, role, content, created_at FROM conversation_messages WHERE id = ?1 AND role = 'user'",
+            params![message_id],
+            |row| Ok(StoredMessage {
+                id: row.get(0)?, conversation_id: row.get(1)?, role: row.get(2)?,
+                content: row.get(3)?, created_at: row.get(4)?,
+            }),
+        ).optional().map_err(|error| format!("Could not read Awareness source evidence: {error}"))?
+         .ok_or_else(|| "The original user message is no longer available.".to_owned())
+    }
+
     pub fn append(&self, conversation_id: i64, role: &str, content: &str) -> Result<(), String> {
         if conversation_id <= 0 { return Err("Invalid conversation identifier.".to_owned()); }
         if role != "user" && role != "assistant" { return Err("Only user and assistant messages can be saved.".to_owned()); }

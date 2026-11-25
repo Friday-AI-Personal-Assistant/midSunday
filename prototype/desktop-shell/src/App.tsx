@@ -115,6 +115,7 @@ export default function App() {
   const [awarenessNotice, setAwarenessNotice] = useState("");
   const [awarenessItems, setAwarenessItems] = useState<AwarenessItem[]>([]);
   const [awarenessSuggestions, setAwarenessSuggestions] = useState<AwarenessSuggestion[]>([]);
+  const [awarenessSourceMessage, setAwarenessSourceMessage] = useState<StoredMessage | null>(null);
   const [awarenessHistory, setAwarenessHistory] = useState<AwarenessHistoryEntry[]>([]);
   const [awarenessSuppressions, setAwarenessSuppressions] = useState<AwarenessSuppression[]>([]);
   const [awarenessDraft, setAwarenessDraft] = useState("");
@@ -422,6 +423,20 @@ export default function App() {
       setAwarenessNotice(created > 0 ? created + " new suggestion" + (created === 1 ? "" : "s") + " added to Learning Review. Review each before approval." : "Analysis finished. No new safe suggestions were found (or matching suggestions already exist).");
     } catch (error) {
       setAwarenessNotice(String(error));
+    } finally {
+      setAwarenessBusy(false);
+    }
+  }
+
+  async function viewAwarenessSource(suggestion: AwarenessSuggestion) {
+    if (suggestion.sourceType !== "conversation" || suggestion.sourceRecordId === null) return;
+    setAwarenessBusy(true);
+    setAwarenessNotice("");
+    try {
+      const message = await invoke<StoredMessage>("get_awareness_source_message", { messageId: suggestion.sourceRecordId });
+      setAwarenessSourceMessage(message);
+    } catch (error) {
+      setAwarenessNotice("Could not open source evidence: " + String(error));
     } finally {
       setAwarenessBusy(false);
     }
@@ -1065,7 +1080,7 @@ export default function App() {
                 <div className="memory-list-heading"><strong>Learning review ({awarenessSuggestions.length})</strong></div>
                 <p className="settings-footnote">Suggestions are not permanent memories. Analyse only the conversation you choose, using the active local model. No background analysis or cloud transfer occurs. Review every suggestion before approval; rejecting one blocks matching information from future learning.</p>
                 <div className="awareness-create-row"><button className="primary-action" type="button" onClick={() => void analyzeCurrentConversation()} disabled={awarenessBusy || isGenerating || activeConversationId === null || runtimeStatus.status !== "ready" || !awarenessSettings.enabled || !awarenessSettings.learnConversations}>{awarenessBusy ? "Working…" : "Analyse current conversation locally"}</button><small>{activeConversationId === null ? "Open a conversation first." : runtimeStatus.status !== "ready" ? "Start the local model first." : !awarenessSettings.enabled || !awarenessSettings.learnConversations ? "Enable Awareness and conversation learning first." : "Uses only the currently open conversation."}</small></div>
-                {awarenessSuggestions.length === 0 ? <p className="settings-footnote">No suggestions waiting for review.</p> : awarenessSuggestions.map((suggestion) => <div className="memory-item" key={suggestion.id}><div className="awareness-item-copy"><p>{suggestion.content}</p><small>{suggestion.category} · {suggestion.sourceType} · {suggestion.knowledgeType} · Confidence {Math.round(suggestion.confidence * 100)}%</small></div><div><button className="primary-action" type="button" onClick={() => void approveAwarenessSuggestion(suggestion)} disabled={awarenessBusy || !awarenessSettings.enabled}>Approve</button><button className="danger-action" type="button" onClick={() => void rejectAwarenessSuggestion(suggestion)} disabled={awarenessBusy}>Reject</button></div></div>)}
+                {awarenessSuggestions.length === 0 ? <p className="settings-footnote">No suggestions waiting for review.</p> : awarenessSuggestions.map((suggestion) => <div className="memory-item" key={suggestion.id}><div className="awareness-item-copy"><p>{suggestion.content}</p><small>{suggestion.category} · {suggestion.sourceType} · {suggestion.knowledgeType} · Confidence {Math.round(suggestion.confidence * 100)}%</small></div><div>{suggestion.sourceType === "conversation" && suggestion.sourceRecordId !== null && <button className="secondary-action" type="button" onClick={() => void viewAwarenessSource(suggestion)} disabled={awarenessBusy}>View source</button>}<button className="primary-action" type="button" onClick={() => void approveAwarenessSuggestion(suggestion)} disabled={awarenessBusy || !awarenessSettings.enabled}>Approve</button><button className="danger-action" type="button" onClick={() => void rejectAwarenessSuggestion(suggestion)} disabled={awarenessBusy}>Reject</button></div></div>)}{awarenessSourceMessage && <div className="awareness-history"><div className="memory-list-heading"><strong>Source evidence · User message #{awarenessSourceMessage.id}</strong><button className="secondary-action" type="button" onClick={() => setAwarenessSourceMessage(null)}>Close</button></div><p>{awarenessSourceMessage.content}</p><small>{new Date(awarenessSourceMessage.createdAt * 1000).toLocaleString()} · Read-only local conversation evidence</small></div>}
               </div>
               <div className="awareness-manager">
                 <div className="path-field"><label htmlFor="new-awareness-item">Add something you want midSunday to know</label><textarea id="new-awareness-item" value={awarenessDraft} onChange={(event) => setAwarenessDraft(event.target.value)} maxLength={2000} rows={3} placeholder="Example: I enjoy learning about technology and anime." /><small>{awarenessDraft.length.toLocaleString()} / 2,000 characters · Only this deliberate entry is saved.</small></div>
