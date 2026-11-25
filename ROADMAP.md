@@ -152,6 +152,7 @@ Release numbers are planning labels, not promises or dates. A stage is not compl
 ### 2026-11-25 — First local hardware inventory prototype
 
 - Added a read-only, on-demand hardware snapshot for OS/version/architecture, CPU model and core counts, installed/available RAM, and storage-volume total/free capacity.
+- Added an on-demand, privacy-limited snapshot of midSunday's own resident and virtual memory; no other processes are enumerated or exposed.
 - Added a Settings → System & hardware panel with manual refresh and clear disclosure that GPU detection and adaptive recommendations are not included yet.
 - Kept hardware inspection local; the snapshot excludes process lists, host names, network interfaces, serial numbers, and user-file contents.
 - Added Rust serialization/privacy regression tests and moved hardware enumeration to a blocking worker so it does not freeze the interface.

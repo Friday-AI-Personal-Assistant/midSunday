@@ -2,7 +2,7 @@
 //! This intentionally does not enumerate processes, host names, network interfaces,
 //! device serial numbers, or private user files.
 use serde::Serialize;
-use sysinfo::{CpuRefreshKind, Disks, System};
+use sysinfo::{get_current_pid, CpuRefreshKind, Disks, ProcessRefreshKind, ProcessesToUpdate, System};
 
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -92,6 +92,16 @@ pub struct CpuInstructionSets {
 
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+pub struct ProcessMemorySnapshot {
+    pub status: String,
+    /// Resident set size (physical memory currently resident).
+    pub resident_bytes: Option<u64>,
+    /// Virtual address-space size; this is not equivalent to physical RAM use.
+    pub virtual_bytes: Option<u64>,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct HardwareSnapshot {
     /// Unix timestamp in seconds captured when this snapshot was collected.
     pub captured_at_unix_seconds: u64,
@@ -104,6 +114,7 @@ pub struct HardwareSnapshot {
     pub physical_core_count: Option<usize>,
     pub total_memory_bytes: u64,
     pub available_memory_bytes: u64,
+    pub process_memory: ProcessMemorySnapshot,
     pub disks: Vec<HardwareDisk>,
     pub gpu: GpuDetection,
     pub assessment: CapabilityAssessment,
@@ -301,7 +312,28 @@ pub fn detect_gpu_adapters() -> GpuDetection {
     GpuDetection { status: "unsupported_platform".to_owned(), adapters: Vec::new() }
 }
 
-/// Collects a one-time snapshot without inspecting running processes or user content.
+/// Queries only the current midSunday process; no other process details are collected.
+pub fn collect_current_process_memory() -> ProcessMemorySnapshot {
+    let Ok(pid) = get_current_pid() else {
+        return ProcessMemorySnapshot { status: "unavailable".to_owned(), resident_bytes: None, virtual_bytes: None };
+    };
+    let mut system = System::new();
+    system.refresh_processes_specifics(
+        ProcessesToUpdate::Some(&[pid]),
+        true,
+        ProcessRefreshKind::nothing().with_memory(),
+    );
+    match system.process(pid) {
+        Some(process) => ProcessMemorySnapshot {
+            status: "detected".to_owned(),
+            resident_bytes: Some(process.memory()),
+            virtual_bytes: Some(process.virtual_memory()),
+        },
+        None => ProcessMemorySnapshot { status: "unavailable".to_owned(), resident_bytes: None, virtual_bytes: None },
+    }
+}
+
+/// Collects a one-time snapshot and queries only midSunday's own process memory.
 pub fn collect_hardware_snapshot() -> HardwareSnapshot {
     let mut system = System::new();
     system.refresh_memory();
@@ -349,6 +381,7 @@ pub fn collect_hardware_snapshot() -> HardwareSnapshot {
         physical_core_count: System::physical_core_count(),
         total_memory_bytes,
         available_memory_bytes,
+        process_memory: collect_current_process_memory(),
         disks,
         gpu: detect_gpu_adapters(),
         assessment: assess_capability(total_memory_bytes, available_memory_bytes, logical_core_count),
@@ -372,6 +405,7 @@ mod tests {
             physical_core_count: Some(4),
             total_memory_bytes: 16 * 1024 * 1024 * 1024,
             available_memory_bytes: 8 * 1024 * 1024 * 1024,
+            process_memory: ProcessMemorySnapshot { status: "detected".to_owned(), resident_bytes: Some(512 * 1024 * 1024), virtual_bytes: Some(2 * 1024 * 1024 * 1024) },
             disks: vec![HardwareDisk {
                 mount_point: "C:\\".to_owned(),
                 total_bytes: 512 * 1024 * 1024 * 1024,
@@ -385,6 +419,8 @@ mod tests {
         let value = serde_json::to_value(&snapshot).unwrap();
         assert_eq!(value["capturedAtUnixSeconds"], 1_795_600_000);
         assert_eq!(value["logicalCoreCount"], 8);
+        assert_eq!(value["processMemory"]["residentBytes"], 512_u64 * 1024 * 1024);
+        assert!(value.get("processes").is_none());
         assert_eq!(value["physicalCoreCount"], 4);
         assert_eq!(value["disks"][0]["availableBytes"], 256_u64 * 1024 * 1024 * 1024);
         assert_eq!(value["disks"][0]["freePercent"], 50);
@@ -392,6 +428,19 @@ mod tests {
         assert!(value.get("hostName").is_none());
         assert!(value.get("processes").is_none());
         assert!(value.get("networkInterfaces").is_none());
+    }
+
+    #[test]
+    fn process_memory_probe_reports_only_the_current_process_or_unavailable() {
+        let snapshot = collect_current_process_memory();
+        assert!(matches!(snapshot.status.as_str(), "detected" | "unavailable"));
+        if snapshot.status == "detected" {
+            assert!(snapshot.resident_bytes.is_some());
+            assert!(snapshot.virtual_bytes.is_some());
+        } else {
+            assert!(snapshot.resident_bytes.is_none());
+            assert!(snapshot.virtual_bytes.is_none());
+        }
     }
 
     #[test]
@@ -407,6 +456,7 @@ mod tests {
             physical_core_count: None,
             total_memory_bytes: 0,
             available_memory_bytes: 0,
+            process_memory: ProcessMemorySnapshot { status: "unavailable".to_owned(), resident_bytes: None, virtual_bytes: None },
             disks: Vec::new(),
             gpu: GpuDetection { status: "unsupported_platform".to_owned(), adapters: Vec::new() },
             assessment: assess_capability(0, 0, 0),

@@ -350,3 +350,12 @@ Each locally enumerated storage volume now includes a conservative free-space pe
 - **Unknown:** capacity is zero or unavailable.
 
 Available bytes are clamped to the reported total before percentages are calculated, and zero-capacity volumes never cause division by zero. Settings shows used-space bars and the corresponding status. This is a general volume warning only: it does not identify the volume containing a configured model, estimate a model's full runtime footprint, predict download/install success, or guarantee adequate space for future models. Values are local, on-demand snapshot data and are not uploaded or stored as a history.
+
+
+## 20. Current midSunday process memory snapshot (2026-11-25)
+
+The on-demand hardware refresh now queries memory for **only the current midSunday process**. It reports resident memory (the process's current physical-memory footprint) and virtual address-space size as separate values. The UI may show resident memory as a percentage of installed physical RAM when that denominator is available.
+
+The probe requests only the current process ID internally and does not return or persist the PID. It does not enumerate other processes or collect their names, command lines, memory use, or application identities. If the operating system does not provide the current process record, the fields remain unavailable rather than being guessed. Values are point-in-time diagnostics and are not a history or a measure of model-only memory.
+
+Virtual address space must not be confused with physical RAM consumption. Resident memory includes all memory resident for the midSunday process, not just an AI model. This metric does not identify individual allocations, prove GPU use, or trigger resource-management actions. It remains local and on-demand.

@@ -15,7 +15,7 @@ type HardwareSnapshot = {
   capturedAtUnixSeconds: number;
   osName: string | null; osVersion: string | null; architecture: string;
   cpuModel: string | null; cpuInstructionSets: { status: string; features: string[] }; logicalCoreCount: number; physicalCoreCount: number | null;
-  totalMemoryBytes: number; availableMemoryBytes: number; disks: HardwareDisk[];
+  totalMemoryBytes: number; availableMemoryBytes: number; processMemory: { status: string; residentBytes: number | null; virtualBytes: number | null }; disks: HardwareDisk[];
   gpu: GpuDetection;
   assessment: { suggestedMode: string; memoryTier: string; rationale: string; currentMemoryPressure: boolean; limitations: string };
 };
@@ -1267,6 +1267,12 @@ export default function App() {
                   <div className="hardware-card"><small>Operating system</small><strong>{hardwareSnapshot.osName ?? "Unknown OS"}</strong><span>{hardwareSnapshot.osVersion ?? "Version unavailable"} · {hardwareSnapshot.architecture}</span></div>
                   <div className="hardware-card"><small>Processor</small><strong>{hardwareSnapshot.cpuModel ?? "CPU model unavailable"}</strong><span>{hardwareSnapshot.physicalCoreCount === null ? "Physical cores unavailable" : hardwareSnapshot.physicalCoreCount + " physical cores"} · {hardwareSnapshot.logicalCoreCount} logical processors</span></div>
                   <div className="hardware-card"><small>Installed memory</small><strong>{formatModelSize(hardwareSnapshot.totalMemoryBytes)}</strong><span>{formatModelSize(hardwareSnapshot.availableMemoryBytes)} currently available</span></div>
+                </div>
+                <div className="hardware-subsection"><strong>midSunday process memory</strong>
+                  {hardwareSnapshot.processMemory.status === "detected" && hardwareSnapshot.processMemory.residentBytes !== null && hardwareSnapshot.processMemory.virtualBytes !== null
+                    ? <div className="hardware-process-memory"><div><small>Physical memory in use (resident)</small><strong>{formatModelSize(hardwareSnapshot.processMemory.residentBytes)}</strong></div><div><small>Virtual address space</small><strong>{formatModelSize(hardwareSnapshot.processMemory.virtualBytes)}</strong></div><span>{hardwareSnapshot.totalMemoryBytes > 0 ? ((hardwareSnapshot.processMemory.residentBytes / hardwareSnapshot.totalMemoryBytes) * 100).toFixed(1) + "% of installed RAM" : "Installed RAM percentage unavailable"}</span></div>
+                    : <p className="settings-footnote">midSunday could not read its own process memory in this snapshot.</p>}
+                  <p className="settings-footnote">Only the midSunday process is queried. Other running applications, process names, and command lines are not collected. Virtual address space is not the same as physical RAM use.</p>
                 </div>
                 <div className="hardware-subsection"><strong>CPU instruction-set capabilities</strong>
                   <p className="settings-footnote">{hardwareSnapshot.cpuInstructionSets.status === "detected" ? "Runtime-detected CPU/OS features:" : "Instruction-set detection is unavailable for this processor architecture."}</p>
