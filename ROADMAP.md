@@ -1191,3 +1191,14 @@ This is capability inventory only; it does not change CPU thread settings or cla
 - [ ] Add process-specific DXGI video-memory budget/usage sampling and validate results against real Windows systems.
 
 This is hardware inventory only. It does not prove inference-runtime acceleration, report currently free VRAM, select a model, or configure GPU offload.
+
+
+### 2026-11-25 — Windows process-specific GPU memory budget snapshot
+
+- [x] Query DXGI local and non-local memory budget/usage for the current midSunday process where `IDXGIAdapter3` is available.
+- [x] Preserve independent status for each adapter and each memory segment; failed queries never hide adapter inventory.
+- [x] Display process usage, OS budget, and reservation headroom as a refresh-time snapshot without reserving or changing memory.
+- [ ] Compare reported values against Windows Task Manager and validate integrated/discrete multi-GPU systems on real devices.
+- [ ] Add event-driven budget-change notifications only when a real runtime consumer needs them and lifecycle handling is designed.
+
+This is not total free VRAM and does not prove that the AI inference runtime is using the adapter. No GPU memory is reserved or model offload enabled.

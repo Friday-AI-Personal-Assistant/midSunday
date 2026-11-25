@@ -6,6 +6,23 @@ use sysinfo::{CpuRefreshKind, Disks, System};
 
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+pub struct GpuMemorySegment {
+    pub budget_bytes: u64,
+    pub current_usage_bytes: u64,
+    pub available_for_reservation_bytes: u64,
+    pub current_reservation_bytes: u64,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct GpuMemoryBudget {
+    pub status: String,
+    pub local: Option<GpuMemorySegment>,
+    pub non_local: Option<GpuMemorySegment>,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct GpuAdapter {
     pub name: String,
     pub vendor_id: u32,
@@ -14,6 +31,7 @@ pub struct GpuAdapter {
     pub dedicated_system_memory_bytes: u64,
     pub shared_system_memory_bytes: u64,
     pub is_software: bool,
+    pub memory_budget: GpuMemoryBudget,
 }
 
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
@@ -149,11 +167,34 @@ pub fn assess_capability(
     }
 }
 
-/// Enumerates Windows display adapters through DXGI. Capacity figures are inventory only;
-/// they are not a live memory budget and do not prove inference-runtime acceleration support.
+/// Queries one process-specific DXGI memory segment. This is a point-in-time snapshot.
+#[cfg(target_os = "windows")]
+fn query_gpu_memory_segment(
+    adapter: &windows::Win32::Graphics::Dxgi::IDXGIAdapter3,
+    group: windows::Win32::Graphics::Dxgi::DXGI_MEMORY_SEGMENT_GROUP,
+) -> Option<GpuMemorySegment> {
+    use windows::Win32::Graphics::Dxgi::DXGI_QUERY_VIDEO_MEMORY_INFO;
+    let mut info = DXGI_QUERY_VIDEO_MEMORY_INFO::default();
+    if unsafe { adapter.QueryVideoMemoryInfo(0, group, &mut info) }.is_err() {
+        return None;
+    }
+    Some(GpuMemorySegment {
+        budget_bytes: info.Budget,
+        current_usage_bytes: info.CurrentUsage,
+        available_for_reservation_bytes: info.AvailableForReservation,
+        current_reservation_bytes: info.CurrentReservation,
+    })
+}
+
+/// Enumerates Windows display adapters through DXGI and samples the current process's
+/// local/non-local video-memory budgets where IDXGIAdapter3 is available.
 #[cfg(target_os = "windows")]
 pub fn detect_gpu_adapters() -> GpuDetection {
-    use windows::Win32::Graphics::Dxgi::{CreateDXGIFactory1, IDXGIFactory1, DXGI_ADAPTER_FLAG_SOFTWARE};
+    use windows::Win32::Graphics::Dxgi::{
+        CreateDXGIFactory1, IDXGIAdapter1, IDXGIAdapter3, IDXGIFactory1,
+        DXGI_ADAPTER_FLAG_SOFTWARE, DXGI_MEMORY_SEGMENT_GROUP_LOCAL,
+        DXGI_MEMORY_SEGMENT_GROUP_NON_LOCAL,
+    };
 
     let factory = match unsafe { CreateDXGIFactory1::<IDXGIFactory1>() } {
         Ok(factory) => factory,
@@ -176,6 +217,23 @@ pub fn detect_gpu_adapters() -> GpuDetection {
             .trim_end_matches('\0')
             .trim()
             .to_owned();
+        let memory_budget = match adapter.cast::<IDXGIAdapter3>() {
+            Ok(adapter3) => {
+                let local = query_gpu_memory_segment(&adapter3, DXGI_MEMORY_SEGMENT_GROUP_LOCAL);
+                let non_local = query_gpu_memory_segment(&adapter3, DXGI_MEMORY_SEGMENT_GROUP_NON_LOCAL);
+                let status = match (local.is_some(), non_local.is_some()) {
+                    (true, true) => "detected",
+                    (true, false) | (false, true) => "partial",
+                    (false, false) => "unavailable",
+                };
+                GpuMemoryBudget { status: status.to_owned(), local, non_local }
+            }
+            Err(_) => GpuMemoryBudget {
+                status: "unsupported_interface".to_owned(),
+                local: None,
+                non_local: None,
+            },
+        };
         adapters.push(GpuAdapter {
             name: if name.is_empty() { "Unnamed display adapter".to_owned() } else { name },
             vendor_id: desc.VendorId,
@@ -184,6 +242,7 @@ pub fn detect_gpu_adapters() -> GpuDetection {
             dedicated_system_memory_bytes: desc.DedicatedSystemMemory as u64,
             shared_system_memory_bytes: desc.SharedSystemMemory as u64,
             is_software: desc.Flags & (DXGI_ADAPTER_FLAG_SOFTWARE.0 as u32) != 0,
+            memory_budget,
         });
     }
 
@@ -350,12 +409,30 @@ mod gpu_tests {
                 dedicated_system_memory_bytes: 0,
                 shared_system_memory_bytes: 8 * 1024 * 1024 * 1024,
                 is_software: false,
+                memory_budget: GpuMemoryBudget {
+                    status: "detected".to_owned(),
+                    local: Some(GpuMemorySegment {
+                        budget_bytes: 4 * 1024 * 1024 * 1024,
+                        current_usage_bytes: 512 * 1024 * 1024,
+                        available_for_reservation_bytes: 2 * 1024 * 1024 * 1024,
+                        current_reservation_bytes: 0,
+                    }),
+                    non_local: Some(GpuMemorySegment {
+                        budget_bytes: 8 * 1024 * 1024 * 1024,
+                        current_usage_bytes: 256 * 1024 * 1024,
+                        available_for_reservation_bytes: 4 * 1024 * 1024 * 1024,
+                        current_reservation_bytes: 0,
+                    }),
+                },
             }],
         };
         let value = serde_json::to_value(inventory).unwrap();
         assert_eq!(value["adapters"][0]["dedicatedVideoMemoryBytes"], 128_u64 * 1024 * 1024);
         assert_eq!(value["adapters"][0]["sharedSystemMemoryBytes"], 8_u64 * 1024 * 1024 * 1024);
         assert_eq!(value["adapters"][0]["vendorId"], 0x8086);
+        assert_eq!(value["adapters"][0]["memoryBudget"]["local"]["budgetBytes"], 4_u64 * 1024 * 1024 * 1024);
+        assert_eq!(value["adapters"][0]["memoryBudget"]["local"]["currentUsageBytes"], 512_u64 * 1024 * 1024);
+        assert_eq!(value["adapters"][0]["memoryBudget"]["status"], "detected");
     }
 
     #[test]

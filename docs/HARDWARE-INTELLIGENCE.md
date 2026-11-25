@@ -318,3 +318,14 @@ The implementation is Windows-only and degrades to an explicit unsupported/unava
 The next GPU work remains process-specific `IDXGIAdapter3::QueryVideoMemoryInfo` budget/usage sampling, followed by validation against Windows tools on real multi-GPU and integrated/discrete systems. No model selection or automatic offload is enabled by this inventory slice.
 
 References: Microsoft [EnumAdapters1](https://learn.microsoft.com/en-us/windows/win32/api/dxgi/nf-dxgi-idxgifactory1-enumadapters1), [DXGI_ADAPTER_DESC1](https://learn.microsoft.com/en-us/windows/win32/api/dxgi/ns-dxgi-dxgi_adapter_desc1), and the [windows 0.62.2 Rust bindings](https://microsoft.github.io/windows-docs-rs/doc/windows/Win32/Graphics/Dxgi/).
+
+
+## 18. Windows process-specific DXGI memory budget snapshot (2026-11-25)
+
+The Windows inventory now attempts to query `IDXGIAdapter3::QueryVideoMemoryInfo` for node zero on each enumerated adapter. It records separate local and non-local segment values: the operating-system budget, current usage attributed to the midSunday process, available-for-reservation amount, and current reservation. Each segment is optional and reports an explicit query status; a missing interface or failed query does not erase the adapter inventory.
+
+This is a point-in-time, read-only snapshot refreshed only when the user requests a hardware refresh. It does not register budget-change events, reserve memory, change GPU settings, create a graphics device, select an adapter, or prove that the local AI runtime uses that adapter. The OS can revise budgets after the snapshot. Non-local memory is system-backed and must not be presented as dedicated VRAM. The current process usage may be low or zero before a GPU workload has allocated resources.
+
+Microsoft documents that the budget is the process's OS-provided target and that usage beyond it can cause performance penalties. See [IDXGIAdapter3::QueryVideoMemoryInfo](https://learn.microsoft.com/en-us/windows/win32/api/dxgi1_4/nf-dxgi1_4-idxgiadapter3-queryvideomemoryinfo), [DXGI_QUERY_VIDEO_MEMORY_INFO](https://learn.microsoft.com/en-us/windows/win32/api/dxgi1_4/ns-dxgi1_4-dxgi_query_video_memory_info), and the [windows 0.62.2 Rust bindings](https://microsoft.github.io/windows-docs-rs/doc/windows/Win32/Graphics/Dxgi/struct.IDXGIAdapter3.html).
+
+Real-device comparison against Windows Task Manager / GPU engine telemetry and multi-GPU hardware remains required before using these fields for recommendations or workload scheduling.
