@@ -173,7 +173,7 @@ pub fn detect_gpu_adapters() -> GpuDetection {
             Err(_) => continue,
         };
         let name = String::from_utf16_lossy(&desc.Description)
-            .trim_end_matches('\\0')
+            .trim_end_matches('\0')
             .trim()
             .to_owned();
         adapters.push(GpuAdapter {
