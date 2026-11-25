@@ -116,3 +116,4 @@ All notable project changes are recorded here. The project is in foundation/prot
 
 
 - Added local HIARM storage headroom indicators with safe free-space percentages, Healthy/Low/Critical/Unknown classifications, accessible used-space meters, and regression tests. Model-specific storage fit remains future work.
+- Fixed nullable GGUF parameter-count and context-length rendering so the shared frontend TypeScript build succeeds on Windows, Linux, and macOS.
