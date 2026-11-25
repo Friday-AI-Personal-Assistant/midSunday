@@ -123,6 +123,15 @@ pub struct MemoryImportResult {
 
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+pub struct MemorySearchPage {
+    pub items: Vec<SavedMemory>,
+    pub total: usize,
+    pub offset: usize,
+    pub limit: usize,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct ConversationSummary {
     pub id: i64,
     pub title: String,
@@ -203,7 +212,7 @@ impl ConversationStore {
             .map_err(|error| format!("Could not enable local database constraints: {error}"))?;
         let schema_version: i64 = connection.pragma_query_value(None, "user_version", |row| row.get(0))
             .map_err(|error| format!("Could not read local database version: {error}"))?;
-        if schema_version > 7 {
+        if schema_version > 8 {
             return Err(format!("This midSunday database uses a newer schema version ({schema_version}) than this app supports."));
         }
         if schema_version == 0 {
@@ -361,6 +370,34 @@ impl ConversationStore {
                  PRAGMA user_version = 7;"
             ).map_err(|error| format!("Could not apply Awareness provenance-index migration: {error}"))?;
             transaction.commit().map_err(|error| format!("Could not finish Awareness provenance-index migration: {error}"))?;
+        }
+        let current_version: i64 = connection.pragma_query_value(None, "user_version", |row| row.get(0))
+            .map_err(|error| format!("Could not recheck local search-index version: {error}"))?;
+        if current_version == 7 {
+            let transaction = connection.unchecked_transaction()
+                .map_err(|error| format!("Could not prepare saved-memory search migration: {error}"))?;
+            transaction.execute_batch(
+                "CREATE VIRTUAL TABLE IF NOT EXISTS saved_memories_fts
+                   USING fts5(content, content='saved_memories', content_rowid='id');
+                 CREATE TRIGGER IF NOT EXISTS saved_memories_fts_insert
+                   AFTER INSERT ON saved_memories BEGIN
+                     INSERT INTO saved_memories_fts(rowid, content) VALUES (new.id, new.content);
+                   END;
+                 CREATE TRIGGER IF NOT EXISTS saved_memories_fts_delete
+                   AFTER DELETE ON saved_memories BEGIN
+                     INSERT INTO saved_memories_fts(saved_memories_fts, rowid, content)
+                     VALUES ('delete', old.id, old.content);
+                   END;
+                 CREATE TRIGGER IF NOT EXISTS saved_memories_fts_update
+                   AFTER UPDATE OF content ON saved_memories BEGIN
+                     INSERT INTO saved_memories_fts(saved_memories_fts, rowid, content)
+                     VALUES ('delete', old.id, old.content);
+                     INSERT INTO saved_memories_fts(rowid, content) VALUES (new.id, new.content);
+                   END;
+                 INSERT INTO saved_memories_fts(saved_memories_fts) VALUES ('rebuild');
+                 PRAGMA user_version = 8;"
+            ).map_err(|error| format!("Could not create saved-memory search index: {error}"))?;
+            transaction.commit().map_err(|error| format!("Could not finish saved-memory search migration: {error}"))?;
         }
         Ok(Self { connection: Mutex::new(connection) })
     }
@@ -885,6 +922,47 @@ impl ConversationStore {
             id: row.get(0)?, content: row.get(1)?, created_at: row.get(2)?, updated_at: row.get(3)?,
         })).map_err(|error| error.to_string())?;
         rows.collect::<Result<Vec<_>, _>>().map_err(|error| error.to_string())
+    }
+
+    pub fn search_memories(&self, query: &str, offset: usize) -> Result<MemorySearchPage, String> {
+        const PAGE_SIZE: usize = 25;
+        const MAX_OFFSET: usize = 1_000_000;
+        if offset > MAX_OFFSET {
+            return Err("That memory search page is too far ahead.".to_owned());
+        }
+        let trimmed = query.trim();
+        if trimmed.is_empty() || trimmed.chars().count() > 256 {
+            return Err("Enter a search of 1 to 256 characters.".to_owned());
+        }
+        let terms: Vec<String> = trimmed.split(|ch: char| !ch.is_alphanumeric())
+            .filter(|term| !term.is_empty())
+            .take(12)
+            .map(|term| term.chars().take(64).collect::<String>())
+            .filter(|term| !term.is_empty())
+            .collect();
+        if terms.is_empty() {
+            return Err("Use at least one letter or number in your search.".to_owned());
+        }
+        let match_query = terms.iter().map(|term| format!("\"{}\"", term))
+            .collect::<Vec<_>>().join(" AND ");
+        let connection = self.lock()?;
+        let total: i64 = connection.query_row(
+            "SELECT COUNT(*) FROM saved_memories_fts WHERE saved_memories_fts MATCH ?1",
+            params![match_query], |row| row.get(0),
+        ).map_err(|error| format!("Could not search saved memories: {error}"))?;
+        let mut statement = connection.prepare(
+            "SELECT m.id, m.content, m.created_at, m.updated_at
+             FROM saved_memories_fts f JOIN saved_memories m ON m.id = f.rowid
+             WHERE saved_memories_fts MATCH ?1
+             ORDER BY bm25(saved_memories_fts), m.updated_at DESC, m.id DESC
+             LIMIT ?2 OFFSET ?3"
+        ).map_err(|error| format!("Could not prepare saved-memory search: {error}"))?;
+        let rows = statement.query_map(params![match_query, PAGE_SIZE as i64, offset as i64], |row| Ok(SavedMemory {
+            id: row.get(0)?, content: row.get(1)?, created_at: row.get(2)?, updated_at: row.get(3)?,
+        })).map_err(|error| format!("Could not read saved-memory search results: {error}"))?;
+        let items = rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|error| format!("Could not collect saved-memory search results: {error}"))?;
+        Ok(MemorySearchPage { items, total: total as usize, offset, limit: PAGE_SIZE })
     }
 
     pub fn create_memory(&self, content: &str) -> Result<SavedMemory, String> {
@@ -1673,7 +1751,7 @@ mod tests {
         assert!(store.memory_enabled().unwrap());
         assert_eq!(store.get_awareness_settings().unwrap(), AwarenessSettings::default());
         let version: i64 = store.lock().unwrap().pragma_query_value(None, "user_version", |row| row.get(0)).unwrap();
-        assert_eq!(version, 7);
+        assert_eq!(version, 8);
     }
 
     #[test]
@@ -1816,6 +1894,40 @@ mod tests {
         }).to_string();
         assert!(destination.import_memories(&repeated).is_err());
         assert!(destination.list_memories().unwrap().is_empty());
+    }
+
+    #[test]
+    fn saved_memory_fts_search_supports_paging_and_tracks_changes() {
+        let store = store();
+        for index in 0..31 {
+            store.create_memory(&format!("Astronomy note number {index}")).unwrap();
+        }
+        store.create_memory("Cooking and family recipes").unwrap();
+        let first = store.search_memories("astronomy", 0).unwrap();
+        assert_eq!(first.total, 31);
+        assert_eq!(first.items.len(), 25);
+        let second = store.search_memories("astronomy", 25).unwrap();
+        assert_eq!(second.total, 31);
+        assert_eq!(second.items.len(), 6);
+        let target = first.items[0].clone();
+        store.update_memory(target.id, "Gardening and astronomy are interesting").unwrap();
+        assert_eq!(store.search_memories("astronomy", 0).unwrap().total, 31);
+        store.delete_memory(target.id).unwrap();
+        assert_eq!(store.search_memories("astronomy", 0).unwrap().total, 30);
+        assert_eq!(store.search_memories("recipes", 0).unwrap().total, 1);
+        store.clear_memories().unwrap();
+        assert_eq!(store.search_memories("astronomy", 0).unwrap().total, 0);
+    }
+
+    #[test]
+    fn saved_memory_search_treats_user_query_as_literal_terms() {
+        let store = store();
+        store.create_memory("I enjoy science fiction and astronomy").unwrap();
+        store.create_memory("I enjoy cooking").unwrap();
+        assert_eq!(store.search_memories("science AND fiction", 0).unwrap().total, 1);
+        assert_eq!(store.search_memories("science OR cooking", 0).unwrap().total, 0);
+        assert!(store.search_memories("!!!", 0).is_err());
+        assert!(store.search_memories(&"x".repeat(257), 0).is_err());
     }
 
     #[test]

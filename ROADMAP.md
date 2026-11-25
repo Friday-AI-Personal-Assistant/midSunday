@@ -272,7 +272,9 @@ Release numbers are planning labels, not promises or dates. A stage is not compl
 - [ ] Explain password/recovery-key loss clearly: password-protected backups cannot be recovered by midSunday or Google if the user loses the only decryption secret. Never transmit or store the backup password/recovery key with Google.
 - [ ] Test interrupted backups, corrupted/tampered archives, wrong passwords, disk-full conditions, offline operation, duplicate restores, schema upgrades, and restore across Windows, Linux, and macOS.
 - [ ] Investigate encryption at rest using operating-system-protected keys; do not claim local data is encrypted until implemented and tested.
-- [ ] Add pagination/indexing and scalable local retrieval (SQLite FTS5 is an initial candidate; embeddings remain optional and must be locally processed by default).
+- [x] Add a versioned SQLite FTS5 index for saved memories, maintained by insert/update/delete triggers and rebuilt from existing records during migration.
+- [x] Add local all-terms memory search with bounded query parsing, relevance ordering, 25-result pagination, and tests for index lifecycle and query-syntax safety.
+- [ ] Extend indexed retrieval to Awareness and conversation history; embeddings remain optional and must be locally processed by default.
 
 **Awareness privacy and control contract (binding product requirements):**
 1. No passwords, credentials, authentication secrets, payment details, or private data are to be collected or stored as Awareness.

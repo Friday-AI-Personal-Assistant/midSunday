@@ -133,6 +133,11 @@ export default function App() {
   const [editingMemoryDraft, setEditingMemoryDraft] = useState("");
   const [memoryBusy, setMemoryBusy] = useState(false);
   const [memoryNotice, setMemoryNotice] = useState("");
+  const [memorySearchQuery, setMemorySearchQuery] = useState("");
+  const [memorySearchResults, setMemorySearchResults] = useState<SavedMemory[] | null>(null);
+  const [memorySearchTotal, setMemorySearchTotal] = useState(0);
+  const [memorySearchOffset, setMemorySearchOffset] = useState(0);
+  const [memorySearchBusy, setMemorySearchBusy] = useState(false);
   const [userProfile, setUserProfile] = useState<UserProfile>(DEFAULT_USER_PROFILE);
   const [userProfileDraft, setUserProfileDraft] = useState<UserProfile>(DEFAULT_USER_PROFILE);
   const [userProfileBusy, setUserProfileBusy] = useState(false);
@@ -298,7 +303,36 @@ export default function App() {
   async function refreshMemories() {
     const items = await invoke<SavedMemory[]>("list_saved_memories");
     setMemories(items);
+    setMemorySearchResults(null);
+    setMemorySearchTotal(0);
+    setMemorySearchOffset(0);
     return items;
+  }
+
+  async function searchSavedMemories(offset = 0) {
+    if (memorySearchBusy) return;
+    setMemorySearchBusy(true);
+    setMemoryNotice("");
+    try {
+      const page = await invoke<{ items: SavedMemory[]; total: number; offset: number; limit: number }>(
+        "search_saved_memories", { query: memorySearchQuery, offset }
+      );
+      setMemorySearchResults(page.items);
+      setMemorySearchTotal(page.total);
+      setMemorySearchOffset(page.offset);
+    } catch (error) {
+      setMemorySearchResults(null);
+      setMemoryNotice("Could not search saved memories: " + String(error));
+    } finally {
+      setMemorySearchBusy(false);
+    }
+  }
+
+  function clearMemorySearch() {
+    setMemorySearchQuery("");
+    setMemorySearchResults(null);
+    setMemorySearchTotal(0);
+    setMemorySearchOffset(0);
   }
 
   async function addMemory() {
@@ -1183,9 +1217,11 @@ export default function App() {
                 <button className="primary-action" type="button" onClick={() => void addMemory()} disabled={memoryBusy || !memoryDraft.trim()}>{memoryBusy ? "Saving…" : "Save memory"}</button>
                 <p className="settings-footnote">There is no arbitrary 100-entry cap. Saved memories remain on this device until you edit or delete them. Available disk space still limits how much can be stored; midSunday will not silently discard older entries.</p>
                 <p className="settings-footnote">The separate 20-entry / 4 KiB limit controls how much saved memory can be included in one local model prompt when memory is enabled. Other entries remain saved locally and are not automatically erased.</p>
-                <div className="memory-list-heading"><strong>Saved memory entries ({memories.length})</strong><div><input ref={memoryImportFileRef} className="visually-hidden-file" type="file" accept=".json,application/json" onChange={(event) => void importSavedMemories(event)} /><button className="secondary-action" type="button" onClick={() => memoryImportFileRef.current?.click()} disabled={memoryImportBusy}>{memoryImportBusy ? "Importing…" : "Import JSON"}</button><button className="secondary-action" type="button" onClick={() => void exportSavedMemories()} disabled={memories.length === 0}>Export JSON</button><button className="danger-action" type="button" onClick={() => void clearSavedMemories()} disabled={memoryBusy || memories.length === 0}>Clear all</button></div></div>
+                <div className="path-field"><label htmlFor="memory-search">Search saved memories</label><div className="memory-search-row"><input id="memory-search" type="search" value={memorySearchQuery} onChange={(event) => setMemorySearchQuery(event.target.value)} maxLength={256} placeholder="Search words or phrases" /><button className="secondary-action" type="button" onClick={() => void searchSavedMemories(0)} disabled={memorySearchBusy || !memorySearchQuery.trim()}>{memorySearchBusy ? "Searching…" : "Search"}</button>{memorySearchResults !== null && <button className="secondary-action" type="button" onClick={clearMemorySearch}>Clear search</button>}</div><small>Search runs locally. All entered terms must match.</small></div>
+                <div className="memory-list-heading"><strong>{memorySearchResults === null ? `Saved memory entries (${memories.length})` : `Search results (${memorySearchTotal})`}</strong><div><input ref={memoryImportFileRef} className="visually-hidden-file" type="file" accept=".json,application/json" onChange={(event) => void importSavedMemories(event)} /><button className="secondary-action" type="button" onClick={() => memoryImportFileRef.current?.click()} disabled={memoryImportBusy}>{memoryImportBusy ? "Importing…" : "Import JSON"}</button><button className="secondary-action" type="button" onClick={() => void exportSavedMemories()} disabled={memories.length === 0}>Export JSON</button><button className="danger-action" type="button" onClick={() => void clearSavedMemories()} disabled={memoryBusy || memories.length === 0}>Clear all</button></div></div>
                 <p className="settings-footnote">Memory JSON import/export is a portable convenience format, not the planned password-protected encrypted Backup & Restore system. Keep exported files somewhere secure.</p>
-                {memories.length === 0 ? <p className="settings-footnote">No saved memories yet. Add only details you want midSunday to remember. You can edit or delete each entry later.</p> : memories.map((memory) => <div className="memory-item" key={memory.id}>{editingMemoryId === memory.id ? <div className="memory-edit"><textarea value={editingMemoryDraft} onChange={(event) => setEditingMemoryDraft(event.target.value)} maxLength={2000} rows={3} /><div><button className="primary-action" type="button" onClick={() => void saveMemoryEdit()} disabled={memoryBusy || !editingMemoryDraft.trim()}>Save changes</button><button className="secondary-action" type="button" onClick={() => setEditingMemoryId(null)}>Cancel</button></div></div> : <><p>{memory.content}</p><div><button className="secondary-action" type="button" onClick={() => { setEditingMemoryId(memory.id); setEditingMemoryDraft(memory.content); }}>Edit</button><button className="danger-action" type="button" onClick={() => void deleteMemory(memory)} disabled={memoryBusy}>Delete</button></div></>}</div>)}
+                {(memorySearchResults ?? memories).length === 0 ? <p className="settings-footnote">{memorySearchResults === null ? "No saved memories yet. Add only details you want midSunday to remember. You can edit or delete each entry later." : "No saved memories matched all of those terms."}</p> : (memorySearchResults ?? memories).map((memory) => <div className="memory-item" key={memory.id}>{editingMemoryId === memory.id ? <div className="memory-edit"><textarea value={editingMemoryDraft} onChange={(event) => setEditingMemoryDraft(event.target.value)} maxLength={2000} rows={3} /><div><button className="primary-action" type="button" onClick={() => void saveMemoryEdit()} disabled={memoryBusy || !editingMemoryDraft.trim()}>Save changes</button><button className="secondary-action" type="button" onClick={() => setEditingMemoryId(null)}>Cancel</button></div></div> : <><p>{memory.content}</p><div><button className="secondary-action" type="button" onClick={() => { setEditingMemoryId(memory.id); setEditingMemoryDraft(memory.content); }}>Edit</button><button className="danger-action" type="button" onClick={() => void deleteMemory(memory)} disabled={memoryBusy}>Delete</button></div></>}</div>)}
+                {memorySearchResults !== null && <div className="memory-list-heading"><span className="settings-footnote">Showing {memorySearchOffset + 1}–{Math.min(memorySearchOffset + memorySearchResults.length, memorySearchTotal)} of {memorySearchTotal}</span><div><button className="secondary-action" type="button" onClick={() => void searchSavedMemories(Math.max(0, memorySearchOffset - 25))} disabled={memorySearchBusy || memorySearchOffset === 0}>Previous</button><button className="secondary-action" type="button" onClick={() => void searchSavedMemories(memorySearchOffset + 25)} disabled={memorySearchBusy || memorySearchOffset + memorySearchResults.length >= memorySearchTotal}>Next</button></div></div>}
                 {memoryNotice && <p className="memory-notice" role="status">{memoryNotice}</p>}
               </div>
               <div className="setting-row"><div><strong>Cloud connection</strong><p>Cloud features are not connected or enabled. Memories stay on this device and are sent only to the configured local model when enabled.</p></div><span className="locked-label">OFF</span></div>

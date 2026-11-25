@@ -12,7 +12,7 @@ use tauri::{ipc::Channel, State};
 use serde::Deserialize;
 use runtime::{ConversationMessage, GenerationRequest, RuntimeConfig};
 use runtime_manager::{RuntimeManager, RuntimeStatusSnapshot};
-use conversation_store::{AwarenessHistoryEntry, AwarenessItem, AwarenessSettings, AwarenessSuggestion, AwarenessSuppression, ConversationStore, ConversationSummary, ImportResult, MemoryImportResult, SavedMemory, StoredMessage, UserProfile};
+use conversation_store::{AwarenessHistoryEntry, AwarenessItem, AwarenessSettings, AwarenessSuggestion, AwarenessSuppression, ConversationStore, ConversationSummary, ImportResult, MemoryImportResult, MemorySearchPage, SavedMemory, StoredMessage, UserProfile};
 use engine_settings::{EngineSettings, EngineSettingsStore};
 use companion_settings::{CompanionSettings, CompanionSettingsStore};
 use model_catalog::{LocalModel, ModelCatalog, ModelVerification};
@@ -85,6 +85,11 @@ fn clear_conversations(store: State<'_, ConversationStore>) -> Result<usize, Str
 #[tauri::command]
 fn list_saved_memories(store: State<'_, ConversationStore>) -> Result<Vec<SavedMemory>, String> {
     store.list_memories()
+}
+
+#[tauri::command]
+fn search_saved_memories(store: State<'_, ConversationStore>, query: String, offset: usize) -> Result<MemorySearchPage, String> {
+    store.search_memories(&query, offset)
 }
 
 #[tauri::command]
@@ -480,6 +485,7 @@ pub fn run() {
             clear_conversations,
             list_saved_memories,
             create_saved_memory,
+            search_saved_memories,
             update_saved_memory,
             delete_saved_memory,
             clear_saved_memories,
