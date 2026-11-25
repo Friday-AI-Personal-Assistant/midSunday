@@ -158,6 +158,21 @@ fn export_awareness_items(store: State<'_, ConversationStore>) -> Result<String,
 }
 
 #[tauri::command]
+fn record_learned_awareness_item(
+    store: State<'_, ConversationStore>,
+    content: String,
+    category: String,
+    source_type: String,
+    source_record_id: Option<i64>,
+    knowledge_type: String,
+    confidence: f64,
+) -> Result<Option<AwarenessItem>, String> {
+    store.record_learned_awareness_item(
+        &content, &category, &source_type, source_record_id, &knowledge_type, confidence,
+    )
+}
+
+#[tauri::command]
 fn get_awareness_settings(store: State<'_, ConversationStore>) -> Result<AwarenessSettings, String> {
     store.get_awareness_settings()
 }
@@ -369,6 +384,7 @@ pub fn run() {
             export_saved_memories,
             get_awareness_settings,
             save_awareness_settings,
+            record_learned_awareness_item,
             list_awareness_items,
             list_awareness_history,
             clear_awareness_history,

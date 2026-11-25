@@ -16,11 +16,13 @@ pub struct AwarenessSettings {
     pub enabled: bool,
     pub learn_conversations: bool,
     pub learn_searches: bool,
+    #[serde(default)]
+    pub excluded_categories: Vec<String>,
 }
 
 impl Default for AwarenessSettings {
     fn default() -> Self {
-        Self { enabled: false, learn_conversations: false, learn_searches: false }
+        Self { enabled: false, learn_conversations: false, learn_searches: false, excluded_categories: Vec::new() }
     }
 }
 
@@ -304,7 +306,14 @@ impl ConversationStore {
         }
     }
 
-    pub fn save_awareness_settings(&self, settings: AwarenessSettings) -> Result<AwarenessSettings, String> {
+    pub fn save_awareness_settings(&self, mut settings: AwarenessSettings) -> Result<AwarenessSettings, String> {
+        let mut categories = Vec::with_capacity(settings.excluded_categories.len());
+        for category in settings.excluded_categories.iter() {
+            let cleaned = clean_awareness_category(category)?;
+            if !categories.contains(&cleaned) { categories.push(cleaned); }
+        }
+        categories.sort();
+        settings.excluded_categories = categories;
         let json = serde_json::to_string(&settings)
             .map_err(|error| format!("Could not encode Awareness settings: {error}"))?;
         let connection = self.lock()?;
@@ -314,6 +323,66 @@ impl ConversationStore {
             params![json],
         ).map_err(|error| format!("Could not save Awareness settings: {error}"))?;
         Ok(settings)
+    }
+
+    /// Store one candidate from an explicitly enabled in-app source. This is a
+    /// guarded ingestion boundary for future extractors; it does not itself read
+    /// conversations or run automatic extraction.
+    pub fn record_learned_awareness_item(
+        &self,
+        content: &str,
+        category: &str,
+        source_type: &str,
+        source_record_id: Option<i64>,
+        knowledge_type: &str,
+        confidence: f64,
+    ) -> Result<Option<AwarenessItem>, String> {
+        let content = clean_awareness_content(content)?;
+        let category = clean_awareness_category(category)?;
+        if source_type != "conversation" && source_type != "in_app_search" {
+            return Err("Automatic Awareness can only use approved in-app sources.".to_owned());
+        }
+        if knowledge_type != "observed" && knowledge_type != "inferred" {
+            return Err("Awareness knowledge type must be observed or inferred.".to_owned());
+        }
+        if !confidence.is_finite() || !(0.0..=1.0).contains(&confidence) {
+            return Err("Awareness confidence must be between 0 and 1.".to_owned());
+        }
+        if source_record_id.is_some_and(|id| id <= 0) {
+            return Err("Invalid Awareness source record identifier.".to_owned());
+        }
+
+        let settings = self.get_awareness_settings()?;
+        let source_enabled = match source_type {
+            "conversation" => settings.learn_conversations,
+            "in_app_search" => settings.learn_searches,
+            _ => false,
+        };
+        if !settings.enabled || !source_enabled || settings.excluded_categories.contains(&category) {
+            return Ok(None);
+        }
+
+        let connection = self.lock()?;
+        let fingerprint = awareness_content_fingerprint(&content);
+        let suppressed: bool = connection.query_row(
+            "SELECT EXISTS(SELECT 1 FROM awareness_suppressions WHERE content_hash = ?1)",
+            params![fingerprint], |row| row.get(0),
+        ).map_err(|error| format!("Could not check Awareness exclusion: {error}"))?;
+        if suppressed { return Ok(None); }
+
+        let now = unix_time();
+        connection.execute(
+            "INSERT INTO awareness_items(content, category, source_type, knowledge_type, confidence, source_record_id, created_at, updated_at)
+             VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, ?7)",
+            params![content, category, source_type, knowledge_type, confidence, source_record_id, now],
+        ).map_err(|error| format!("Could not save learned Awareness item: {error}"))?;
+        let id = connection.last_insert_rowid();
+        Self::record_awareness_history(&connection, "added", Some(id), Some(&category))?;
+        Ok(Some(AwarenessItem {
+            id, content, category, source_type: source_type.to_owned(),
+            knowledge_type: knowledge_type.to_owned(), confidence, source_record_id,
+            created_at: now, updated_at: now,
+        }))
     }
 
     fn record_awareness_history(
@@ -1432,4 +1501,79 @@ mod tests {
         assert!(store.list().unwrap().is_empty());
         assert!(store.messages(first.id).unwrap().is_empty());
     }
+    #[test]
+    fn automatic_awareness_ingestion_obeys_master_source_category_and_suppression_controls() {
+        let store = store();
+
+        // Old and default settings remain opt-in: no learning before consent.
+        assert!(store.record_learned_awareness_item(
+            "I enjoy astronomy.", "interests", "conversation", Some(1), "inferred", 0.7
+        ).unwrap().is_none());
+
+        let mut settings = AwarenessSettings::default();
+        settings.enabled = true;
+        settings.learn_conversations = true;
+        settings.learn_searches = false;
+        settings.excluded_categories = vec!["goals".to_owned()];
+        store.save_awareness_settings(settings).unwrap();
+
+        // A source with its own switch OFF and a category excluded by the user
+        // are both rejected without creating an item.
+        assert!(store.record_learned_awareness_item(
+            "I searched for astronomy.", "interests", "in_app_search", Some(2), "observed", 1.0
+        ).unwrap().is_none());
+        assert!(store.record_learned_awareness_item(
+            "I want to learn astronomy.", "goals", "conversation", Some(3), "inferred", 0.8
+        ).unwrap().is_none());
+        assert!(store.list_awareness_items().unwrap().is_empty());
+
+        let learned = store.record_learned_awareness_item(
+            "I enjoy astronomy.", "interests", "conversation", Some(4), "inferred", 0.7
+        ).unwrap().unwrap();
+        assert_eq!(learned.source_type, "conversation");
+        assert_eq!(learned.source_record_id, Some(4));
+        assert_eq!(learned.knowledge_type, "inferred");
+
+        // Deletion creates a fingerprint; automatic ingestion cannot recreate it.
+        store.delete_awareness_item(learned.id).unwrap();
+        assert!(store.record_learned_awareness_item(
+            "I enjoy astronomy.", "interests", "conversation", Some(5), "inferred", 0.7
+        ).unwrap().is_none());
+        assert!(store.list_awareness_items().unwrap().is_empty());
+    }
+
+    #[test]
+    fn awareness_settings_validate_and_normalize_excluded_categories() {
+        let store = store();
+        let settings = AwarenessSettings {
+            enabled: false,
+            learn_conversations: false,
+            learn_searches: false,
+            excluded_categories: vec!["Goals".to_owned(), "goals".to_owned(), "other".to_owned()],
+        };
+        let saved = store.save_awareness_settings(settings).unwrap();
+        assert_eq!(saved.excluded_categories, vec!["goals".to_owned(), "other".to_owned()]);
+        let loaded = store.get_awareness_settings().unwrap();
+        assert_eq!(loaded.excluded_categories, saved.excluded_categories);
+        assert!(store.save_awareness_settings(AwarenessSettings {
+            excluded_categories: vec!["medical".to_owned()],
+            ..AwarenessSettings::default()
+        }).is_err());
+    }
+
+    #[test]
+    fn awareness_settings_legacy_json_defaults_category_exclusions() {
+        let store = store();
+        let connection = store.lock().unwrap();
+        connection.execute(
+            "INSERT INTO app_preferences(key, value) VALUES('awareness_settings', ?1)",
+            params![r#"{"enabled":true,"learnConversations":true,"learnSearches":false}"#],
+        ).unwrap();
+        drop(connection);
+        let loaded = store.get_awareness_settings().unwrap();
+        assert!(loaded.enabled);
+        assert!(loaded.learn_conversations);
+        assert!(loaded.excluded_categories.is_empty());
+    }
+
 }

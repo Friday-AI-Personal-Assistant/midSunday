@@ -239,7 +239,7 @@ Release numbers are planning labels, not promises or dates. A stage is not compl
 - [x] Add an Awareness settings panel that clearly states automatic learning is not active yet, so saved preferences cannot be mistaken for active collection.
 - [ ] Evolve explicit saved memory into a dedicated **Awareness** system; preserve existing user-created memories during migration.
 - [ ] Remove the temporary fixed 100-item memory cap as part of the scalable Awareness design; use available local storage responsibly, show storage usage/warnings, and never silently discard knowledge.
-- [ ] Add automatic, opt-in learning from conversations inside midSunday and a separate opt-in for searches performed inside midSunday.
+- [ ] Connect a privacy-reviewed local extraction pipeline to the guarded automatic-ingestion boundary for opt-in conversations and, separately, in-app searches. The guarded storage entry point is implemented, but no automatic extraction or activity collection is active yet.
 - [ ] Make every learning source, feature, category, and optional capability independently controllable with clear on/off settings; provide pause/resume controls without forcing deletion.
 - [ ] Keep Awareness disabled until the user explicitly enables it; do not silently enable new learning sources after an update.
 - [ ] Store learned knowledge and its provenance locally, including when it was learned, its source, whether it is observed or inferred, and an appropriate confidence indicator.
@@ -251,7 +251,8 @@ Release numbers are planning labels, not promises or dates. A stage is not compl
 - [ ] Initially limit automatic learning to interactions that happen inside midSunday. Any future browser, operating-system, or third-party-app source must be a separately named, explicitly permissioned, independently switchable integration.
 - [ ] Never collect or store passwords, authentication codes, tokens, API keys, private keys, payment-card/banking credentials, or other secrets. Do not capture keystrokes, password fields, or clipboard contents as a background learning source.
 - [ ] Do not monitor or ingest private messages, email contents, files, microphone audio, or activity in other applications unless a future narrowly scoped feature is explicitly requested, separately permissioned, and independently switchable. Raw voice recordings must not be retained by default.
-- [ ] Avoid automatically inferring or retaining sensitive personal attributes. Provide category exclusions and user review; when in doubt, do not learn it.
+- [x] Add independently switchable Awareness category exclusions, enforced in Rust at the guarded automatic-ingestion boundary; manual user-entered items remain an explicit user action.
+- [ ] Avoid automatically inferring or retaining sensitive personal attributes beyond user-approved, non-excluded categories; when in doubt, do not learn it.
 - [ ] Keep all Awareness data on-device by default. No background upload, telemetry of personal content, cloud memory, or external model transfer; any future cloud use requires separate informed consent and a clear data-transfer explanation.
 - [ ] Provide user-controlled export, backup/restore, deletion, and retention settings. Deletion must cover source evidence and derived awareness where applicable, including safeguards against accidental re-learning.
 - [ ] Investigate encryption at rest using operating-system-protected keys; do not claim local data is encrypted until implemented and tested.
@@ -266,7 +267,7 @@ Release numbers are planning labels, not promises or dates. A stage is not compl
 6. "No fixed item-count limit" does not mean infinite storage; actual capacity is bounded by the user's device. midSunday must explain storage use and must not silently delete records.
 7. The system must distinguish observed facts from inferences, show provenance, and avoid treating learned text as trusted instructions.
 
-**Exit gate:** Users understand what is stored, can control every learning source and setting, and can inspect/export/delete learned knowledge and relevant source evidence without hidden copies or unexpected cloud transfer. The existing explicit-memory implementation is the starting point only. The initial Awareness schema and opt-in preference controls are now implemented, but no automatic learning is active. Scalable item management, secret filtering, source-event ingestion, user-visible learning history, intelligent retrieval, import/restore, retention controls, and real desktop crash/restart verification remain open.
+**Exit gate:** Users understand what is stored, can control every learning source and setting, and can inspect/export/delete learned knowledge and relevant source evidence without hidden copies or unexpected cloud transfer. The initial Awareness schema, opt-in preferences, category exclusions, and Rust-enforced guarded ingestion boundary are implemented. No automatic extraction or activity collection is active yet. Connecting the local extraction pipeline, scalable retrieval, import/restore, retention controls, and real desktop crash/restart verification remain open.
 
 ## Phase 6 — Voice and multilingual experience
 

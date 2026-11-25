@@ -14,11 +14,11 @@ type StoredMessage = { id: number; conversationId: number; role: "user" | "assis
 type SavedMemory = { id: number; content: string; createdAt: number; updatedAt: number };
 type UserProfile = { preferredName: string; useName: boolean };
 const DEFAULT_USER_PROFILE: UserProfile = { preferredName: "", useName: false };
-type AwarenessSettings = { enabled: boolean; learnConversations: boolean; learnSearches: boolean };
+type AwarenessSettings = { enabled: boolean; learnConversations: boolean; learnSearches: boolean; excludedCategories: string[] };
 type AwarenessItem = { id: number; content: string; category: string; sourceType: string; knowledgeType: string; confidence: number; sourceRecordId: number | null; createdAt: number; updatedAt: number };
 type AwarenessHistoryEntry = { id: number; eventType: string; awarenessItemId: number | null; category: string | null; occurredAt: number };
 type AwarenessSuppression = { category: string | null; sourceType: string; createdAt: number };
-const DEFAULT_AWARENESS_SETTINGS: AwarenessSettings = { enabled: false, learnConversations: false, learnSearches: false };
+const DEFAULT_AWARENESS_SETTINGS: AwarenessSettings = { enabled: false, learnConversations: false, learnSearches: false, excludedCategories: [] };
 const AWARENESS_CATEGORIES = ["interests", "preferences", "communication", "projects", "goals", "other"];
 type CompanionProfile = { id: string; name: string; instructions: string };
 type CompanionSettings = { schemaVersion: number; selectedPersonality: string; customInstructions: string; profiles: CompanionProfile[] };
@@ -376,7 +376,7 @@ export default function App() {
     try {
       const saved = await invoke<AwarenessSettings>("save_awareness_settings", { settings: next });
       setAwarenessSettings(saved);
-      setAwarenessNotice("Awareness preferences saved on this device. Automatic learning is not active in this build.");
+      setAwarenessNotice("Awareness preferences saved on this device. Automatic extraction is not active yet.");
     } catch (error) {
       setAwarenessNotice("Could not save Awareness preferences: " + String(error));
     } finally {
@@ -384,8 +384,16 @@ export default function App() {
     }
   }
 
-  async function toggleAwarenessSetting(key: keyof AwarenessSettings) {
+  async function toggleAwarenessSetting(key: "enabled" | "learnConversations" | "learnSearches") {
     await saveAwarenessSettings({ ...awarenessSettings, [key]: !awarenessSettings[key] });
+  }
+
+  async function toggleAwarenessCategoryExclusion(category: string) {
+    const excluded = awarenessSettings.excludedCategories.includes(category);
+    const excludedCategories = excluded
+      ? awarenessSettings.excludedCategories.filter((item) => item !== category)
+      : [...awarenessSettings.excludedCategories, category];
+    await saveAwarenessSettings({ ...awarenessSettings, excludedCategories });
   }
 
   async function refreshAwarenessItems() {
@@ -996,7 +1004,15 @@ export default function App() {
               <div className="setting-row"><div><strong>Enable Awareness</strong><p>Master switch. Turn this off at any time to pause all automatic learning without deleting saved information.</p></div><button className={awarenessSettings.enabled ? "toggle on" : "toggle"} type="button" role="switch" aria-checked={awarenessSettings.enabled} disabled={awarenessBusy} onClick={() => void toggleAwarenessSetting("enabled")}><i /></button></div>
               <div className="setting-row"><div><strong>Learn from conversations</strong><p>Allow future Awareness learning from conversations inside midSunday. Private data and credentials must be filtered out.</p></div><button className={awarenessSettings.learnConversations ? "toggle on" : "toggle"} type="button" role="switch" aria-checked={awarenessSettings.learnConversations} disabled={!awarenessSettings.enabled || awarenessBusy} onClick={() => void toggleAwarenessSetting("learnConversations")}><i /></button></div>
               <div className="setting-row"><div><strong>Learn from in-app searches</strong><p>Allow future Awareness learning from searches performed inside midSunday. This does not monitor browser or other-app activity.</p></div><button className={awarenessSettings.learnSearches ? "toggle on" : "toggle"} type="button" role="switch" aria-checked={awarenessSettings.learnSearches} disabled={!awarenessSettings.enabled || awarenessBusy} onClick={() => void toggleAwarenessSetting("learnSearches")}><i /></button></div>
-              <p className="settings-footnote">Important: automatic learning is not active. These switches do not collect conversation or search activity. All switches start OFF. The items below are only saved when you deliberately add them. Passwords, authentication secrets, payment credentials, private messages, and other private data must never be stored here.</p>
+              <div className="awareness-history">
+                <div className="memory-list-heading"><strong>Categories excluded from automatic learning</strong></div>
+                <p className="settings-footnote">Switch on any category you do not want automatic learning to save. These exclusions are enforced by the local Rust storage layer. They do not prevent you from deliberately adding or editing an item yourself.</p>
+                {AWARENESS_CATEGORIES.map((category) => {
+                  const excluded = awarenessSettings.excludedCategories.includes(category);
+                  return <div className="setting-row" key={category}><div><strong>{category[0].toUpperCase() + category.slice(1)}</strong><p>{excluded ? "Excluded from automatic learning." : "Eligible only when Awareness and an approved source are enabled."}</p></div><button className={excluded ? "toggle on" : "toggle"} type="button" role="switch" aria-checked={excluded} disabled={awarenessBusy} onClick={() => void toggleAwarenessCategoryExclusion(category)}><i /></button></div>;
+                })}
+              </div>
+              <p className="settings-footnote">Important: all learning switches start OFF. Category exclusions are saved locally. Automatic extraction is not active yet. Passwords, authentication secrets, payment credentials, private messages, and other private data must never be stored here.</p>
               <div className="awareness-manager">
                 <div className="path-field"><label htmlFor="new-awareness-item">Add something you want midSunday to know</label><textarea id="new-awareness-item" value={awarenessDraft} onChange={(event) => setAwarenessDraft(event.target.value)} maxLength={2000} rows={3} placeholder="Example: I enjoy learning about technology and anime." /><small>{awarenessDraft.length.toLocaleString()} / 2,000 characters · Only this deliberate entry is saved.</small></div>
                 <div className="awareness-create-row"><label htmlFor="awareness-category">Category</label><select id="awareness-category" value={awarenessCategory} onChange={(event) => setAwarenessCategory(event.target.value)}>{AWARENESS_CATEGORIES.map((category) => <option key={category} value={category}>{category[0].toUpperCase() + category.slice(1)}</option>)}</select><button className="primary-action" type="button" onClick={() => void addAwarenessItem()} disabled={awarenessBusy || !awarenessDraft.trim()}>{awarenessBusy ? "Saving…" : "Add item"}</button></div>
