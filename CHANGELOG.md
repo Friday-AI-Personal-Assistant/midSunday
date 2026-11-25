@@ -3,6 +3,7 @@
 All notable project changes are recorded here. The project is in foundation/prototype development; no application release has been made.
 
 ## 2026-11-25
+- Added runtime-detected CPU instruction-set inventory for x86/x86-64 (SSE, AVX, AVX2, FMA) and AArch64 NEON, displayed in System & hardware with explicit runtime-compatibility caveats.
 - Added a preliminary local HIARM capability assessment based on installed RAM and logical CPU count, including an independent low-current-memory warning and explicit limitations. It is informational only and does not select models or change settings.
 - Added the first local HIARM hardware inventory baseline for OS, CPU, RAM, and storage, with on-demand refresh in Settings. GPU detection and adaptive recommendations remain future work.
 - Recorded the internal commercial licensing plan: one-time lifetime-use target, six months of included updates, paid upgrades thereafter, verified website checkout, email/recovery delivery, one active device, transfer/revocation, and strict separation from private app data. Pricing, offline verification policy, payment/email providers, and final legal terms remain open.

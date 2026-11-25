@@ -9,7 +9,7 @@ type RuntimeStatusSnapshot = { status: string; detail: string | null };
 type HardwareDisk = { mountPoint: string; totalBytes: number; availableBytes: number };
 type HardwareSnapshot = {
   osName: string | null; osVersion: string | null; architecture: string;
-  cpuModel: string | null; logicalCoreCount: number; physicalCoreCount: number | null;
+  cpuModel: string | null; cpuInstructionSets: { status: string; features: string[] }; logicalCoreCount: number; physicalCoreCount: number | null;
   totalMemoryBytes: number; availableMemoryBytes: number; disks: HardwareDisk[];
   gpuStatus: string;
   assessment: { suggestedMode: string; memoryTier: string; rationale: string; currentMemoryPressure: boolean; limitations: string };
@@ -1262,6 +1262,11 @@ export default function App() {
                   <div className="hardware-card"><small>Operating system</small><strong>{hardwareSnapshot.osName ?? "Unknown OS"}</strong><span>{hardwareSnapshot.osVersion ?? "Version unavailable"} · {hardwareSnapshot.architecture}</span></div>
                   <div className="hardware-card"><small>Processor</small><strong>{hardwareSnapshot.cpuModel ?? "CPU model unavailable"}</strong><span>{hardwareSnapshot.physicalCoreCount === null ? "Physical cores unavailable" : hardwareSnapshot.physicalCoreCount + " physical cores"} · {hardwareSnapshot.logicalCoreCount} logical processors</span></div>
                   <div className="hardware-card"><small>Installed memory</small><strong>{formatModelSize(hardwareSnapshot.totalMemoryBytes)}</strong><span>{formatModelSize(hardwareSnapshot.availableMemoryBytes)} currently available</span></div>
+                </div>
+                <div className="hardware-subsection"><strong>CPU instruction-set capabilities</strong>
+                  <p className="settings-footnote">{hardwareSnapshot.cpuInstructionSets.status === "detected" ? "Runtime-detected CPU/OS features:" : "Instruction-set detection is unavailable for this processor architecture."}</p>
+                  {hardwareSnapshot.cpuInstructionSets.features.length > 0 ? <div className="cpu-feature-list">{hardwareSnapshot.cpuInstructionSets.features.map((feature) => <span className="cpu-feature" key={feature}>{feature}</span>)}</div> : <p className="settings-footnote">No optional features were reported.</p>}
+                  <p className="settings-footnote">These results do not confirm that an installed AI runtime was built with matching optimizations or can use a GPU.</p>
                 </div>
                 <div className="hardware-assessment">
                   <div className="hardware-assessment-heading"><small>Preliminary capability assessment</small><strong>{hardwareSnapshot.assessment.suggestedMode}</strong><span>{hardwareSnapshot.assessment.memoryTier} · based on installed RAM and CPU core count</span></div>

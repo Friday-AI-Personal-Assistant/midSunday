@@ -293,3 +293,15 @@ These thresholds are intentionally conservative and provisional. They do not cer
 - Do not describe the suggested mode as a guaranteed compatibility result or benchmark-backed recommendation.
 
 This is the first HIARM assessment slice, not the adaptive resource manager. Live monitoring, model catalogue estimates, GPU detection, and workload scheduling remain separate future work.
+
+
+## 16. Runtime-detected CPU instruction sets (2026-11-25)
+
+The hardware snapshot reports optional CPU instruction-set features using Rust standard-library runtime probes:
+- x86/x86-64: SSE2, SSE3, SSSE3, SSE4.1, SSE4.2, AVX, AVX2, and FMA where detected.
+- AArch64: NEON where detected.
+- Other architectures: explicitly report detection as unsupported rather than implying the processor has no capabilities.
+
+On x86, Rust's AVX/AVX2 probes account for operating-system support for extended register state; a raw CPUID flag alone would be insufficient. Detection is read-only, local, and uses no external executable or vendor utility.
+
+The UI displays the detected features as informational labels. These are CPU/OS capabilities only: they do not prove that llama.cpp or another inference runtime includes matching optimized kernels, and they do not establish GPU acceleration support. Runtime-specific compatibility checks remain separate.

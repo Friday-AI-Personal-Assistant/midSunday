@@ -24,11 +24,19 @@ pub struct CapabilityAssessment {
 
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+pub struct CpuInstructionSets {
+    pub status: String,
+    pub features: Vec<String>,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct HardwareSnapshot {
     pub os_name: Option<String>,
     pub os_version: Option<String>,
     pub architecture: String,
     pub cpu_model: Option<String>,
+    pub cpu_instruction_sets: CpuInstructionSets,
     pub logical_core_count: usize,
     pub physical_core_count: Option<usize>,
     pub total_memory_bytes: u64,
@@ -36,6 +44,36 @@ pub struct HardwareSnapshot {
     pub disks: Vec<HardwareDisk>,
     pub gpu_status: String,
     pub assessment: CapabilityAssessment,
+}
+
+/// Detects optional CPU features with Rust runtime probes. These are CPU/OS capabilities,
+/// not proof that an installed inference runtime was compiled with matching optimized kernels.
+pub fn detect_cpu_instruction_sets() -> CpuInstructionSets {
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    {
+        let mut features = Vec::new();
+        if std::is_x86_feature_detected!("sse2") { features.push("SSE2".to_owned()); }
+        if std::is_x86_feature_detected!("sse3") { features.push("SSE3".to_owned()); }
+        if std::is_x86_feature_detected!("ssse3") { features.push("SSSE3".to_owned()); }
+        if std::is_x86_feature_detected!("sse4.1") { features.push("SSE4.1".to_owned()); }
+        if std::is_x86_feature_detected!("sse4.2") { features.push("SSE4.2".to_owned()); }
+        if std::is_x86_feature_detected!("avx") { features.push("AVX".to_owned()); }
+        if std::is_x86_feature_detected!("avx2") { features.push("AVX2".to_owned()); }
+        if std::is_x86_feature_detected!("fma") { features.push("FMA".to_owned()); }
+        features.sort();
+        CpuInstructionSets { status: "detected".to_owned(), features }
+    }
+    #[cfg(target_arch = "aarch64")]
+    {
+        let mut features = Vec::new();
+        if std::arch::is_aarch64_feature_detected!("neon") { features.push("NEON".to_owned()); }
+        features.sort();
+        CpuInstructionSets { status: "detected".to_owned(), features }
+    }
+    #[cfg(not(any(target_arch = "x86", target_arch = "x86_64", target_arch = "aarch64")))]
+    {
+        CpuInstructionSets { status: "unsupported_architecture".to_owned(), features: Vec::new() }
+    }
 }
 
 /// Produces a conservative, non-binding starting profile from installed RAM and CPU topology.
@@ -124,6 +162,7 @@ pub fn collect_hardware_snapshot() -> HardwareSnapshot {
         os_version: System::long_os_version().or_else(System::os_version),
         architecture: std::env::consts::ARCH.to_owned(),
         cpu_model,
+        cpu_instruction_sets: detect_cpu_instruction_sets(),
         logical_core_count,
         physical_core_count: System::physical_core_count(),
         total_memory_bytes,
@@ -145,6 +184,7 @@ mod tests {
             os_version: Some("Windows 10".to_owned()),
             architecture: "x86_64".to_owned(),
             cpu_model: Some("Example CPU".to_owned()),
+            cpu_instruction_sets: CpuInstructionSets { status: "detected".to_owned(), features: vec!["SSE2".to_owned(), "AVX2".to_owned()] },
             logical_core_count: 8,
             physical_core_count: Some(4),
             total_memory_bytes: 16 * 1024 * 1024 * 1024,
@@ -173,6 +213,7 @@ mod tests {
             os_version: None,
             architecture: "unknown".to_owned(),
             cpu_model: None,
+            cpu_instruction_sets: CpuInstructionSets { status: "unsupported_architecture".to_owned(), features: Vec::new() },
             logical_core_count: 0,
             physical_core_count: None,
             total_memory_bytes: 0,
@@ -183,6 +224,17 @@ mod tests {
         };
         assert_eq!(snapshot.gpu_status, "not_detected_yet");
         assert_eq!(snapshot.assessment.suggested_mode, "Undetermined");
+        assert_eq!(snapshot.cpu_instruction_sets.status, "unsupported_architecture");
+    }
+
+    #[test]
+    fn cpu_instruction_set_detection_returns_only_known_feature_names() {
+        let detected = detect_cpu_instruction_sets();
+        assert!(matches!(detected.status.as_str(), "detected" | "unsupported_architecture"));
+        let allowed = ["SSE2", "SSE3", "SSSE3", "SSE4.1", "SSE4.2", "AVX", "AVX2", "FMA", "NEON"];
+        assert!(detected.features.iter().all(|feature| allowed.contains(&feature.as_str())));
+        assert!(detected.features.windows(2).all(|pair| pair[0] < pair[1]));
+        if detected.status == "unsupported_architecture" { assert!(detected.features.is_empty()); }
     }
 
     #[test]

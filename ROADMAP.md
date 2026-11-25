@@ -1170,3 +1170,14 @@ Conversation-derived Awareness must not outlive the conversation messages that s
 - Displayed the rationale and limitations in Settings → System & hardware.
 - Kept the assessment informational only: it does not choose or download models, alter settings, start/stop workloads, or claim benchmark-backed compatibility.
 - Added Rust tests for memory/CPU thresholds, low-memory headroom, and incomplete hardware data. GPU/VRAM and real-device validation remain future work.
+
+
+### 2026-11-25 — CPU instruction-set inventory
+
+- [x] Add runtime detection for common x86/x86-64 SIMD features (SSE family, AVX, AVX2, FMA) using Rust's OS-aware feature probes.
+- [x] Add AArch64 NEON detection and explicit unsupported-architecture status elsewhere.
+- [x] Display detected CPU/OS capabilities in Settings → System & hardware.
+- [x] Add regression coverage for serialisation and the detector's feature allow-list.
+- [ ] Verify inference-backend build flags and dispatch before using these fields for runtime recommendations.
+
+This is capability inventory only; it does not change CPU thread settings or claim that the installed AI runtime can use each detected instruction set.
