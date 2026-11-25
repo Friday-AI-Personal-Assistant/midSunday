@@ -177,6 +177,43 @@ Release numbers are planning labels, not promises or dates. A stage is not compl
 
 **Exit gate:** The primary user journeys and design system are approved, including clear states for offline use and errors.
 
+### Appearance & theme system — approved visual direction (planned)
+
+The product owner approved five optional themes. **Sunday Green is the default signature identity**; the other four are equally available to every user. Theme choice is personal preference and must never be gender-locked or associated with gender stereotypes.
+
+#### Approved theme identities and proposed palette starting points
+
+These HEX values are initial design tokens, not final locked colours. Refine them during visual design and verify accessible contrast for every foreground/background pairing.
+
+| Theme | Visual direction | Primary | Deep / strong | Accent | Light surface | Dark surface | Main text |
+|---|---|---|---|---|---|---|---|
+| **Sunday Green** (default) | Calm, modern, professional; the midSunday signature | `#176B45` | `#104B35` | `#36A878` | `#F4F8F5` | `#111B16` | `#17211B` |
+| **Midnight Blue** | Deep navy, subtle blue highlights, premium and technology-inspired | `#315B9A` | `#14243D` | `#65A6F2` | `#F3F6FB` | `#101827` | `#172235` |
+| **Lavender Dream** | Soft lavender, gentle purple and light backgrounds; elegant and relaxing | `#8064B5` | `#58427F` | `#B39AE8` | `#F8F5FC` | `#1C1726` | `#282133` |
+| **Rose Blossom** | Blush pink, rose accents and warm neutral surfaces; soft and welcoming | `#C05A7A` | `#873B57` | `#E58AA5` | `#FFF6F8` | `#24171D` | `#302128` |
+| **Warm Sand** | Cream, beige and subtle brown; peaceful, warm and minimal | `#94734E` | `#655039` | `#C4A77D` | `#FAF7F0` | `#201C16` | `#2C271F` |
+
+#### Required behaviour and design rules
+
+- [ ] Establish **Sunday Green** as the first complete design system: navigation/sidebar, chat workspace, typography, buttons, cards, dialogs, settings, notifications, empty/loading/error states, and focus states.
+- [ ] Build the remaining four themes on the same shared component system and semantic design tokens; they must feel like five expressions of one product, not five separate applications.
+- [ ] Add **Settings → Appearance & Themes** with all five named theme choices and clear visual previews/swatches.
+- [ ] Support instant live preview before the user applies or keeps a theme; provide an obvious way to revert/cancel.
+- [ ] Provide light and dark appearances for each theme, refining each palette for both modes rather than merely inverting colours.
+- [ ] Include **Follow System / System Default** so the app follows the operating system's light/dark preference, plus a manual light/dark override.
+- [ ] Persist the selected theme and appearance mode locally on the device and restore them after restart. No account, cloud service, or network connection is required.
+- [ ] Apply theme tokens consistently throughout every screen and shared component; avoid scattered hard-coded colours that make themes incomplete.
+- [ ] Maintain readable text, accessible contrast, visible keyboard focus, usable control states, and clear status/error meanings in every theme and mode. Colour must not be the only way to communicate status.
+- [ ] Theme switching must not change application functionality, user data, model behaviour, privacy settings, or performance in a material way.
+- [ ] Keep theme selection entirely local; do not transmit the user's appearance preference.
+- [ ] Consider future custom accent colours and user-created themes after the five built-in themes are stable.
+
+#### Implementation guidance
+
+Use semantic tokens (for example, primary, primary-strong, accent, surface, elevated-surface, text, muted-text, border, focus, success, warning, and danger) rather than tying components directly to a theme's raw HEX values. A theme should supply token values for light and dark modes. The proposed HEX palette above is a starting reference for design work; contrast testing and refinement take precedence over preserving a particular value.
+
+**Status:** Theme names, overall visual directions, default theme, and equal availability are approved product decisions. Palette HEX values are proposals. Layout, final colour contrast, previews, persistence, system-following behaviour, and implementation remain planned work; recording this specification does not mean the theme feature has been implemented.
+
 ## Phase 3 — Engineering foundation and desktop shell
 
 **Goal:** Create a reliable, secure, maintainable desktop application.
