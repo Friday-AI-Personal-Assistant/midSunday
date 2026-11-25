@@ -3,6 +3,7 @@
 All notable project changes are recorded here. The project is in foundation/prototype development; no application release has been made.
 
 ## 2026-11-25
+- Corrected the remaining Awareness ingestion fixture to assert the actual database-generated source-message ID instead of a hard-coded ID; source provenance validation remains unchanged.
 - Fixed four legacy Awareness tests to create real conversation messages and use their persisted IDs, preserving strict source-provenance validation.
 - Hardened Awareness provenance and review actions: conversation-derived entries require an existing source message; approval and rejection use atomic transactions; settings and suppression are rechecked at approval. Added regression coverage for missing/deleted sources and failed approvals.
 - Corrected the legacy unversioned-database migration test to expect schema version 7 after the source-lifecycle migration; the migration itself and data-preservation assertions were already passing.

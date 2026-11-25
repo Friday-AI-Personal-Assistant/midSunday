@@ -1852,7 +1852,7 @@ mod tests {
 
         // Old and default settings remain opt-in: no learning before consent.
         assert!(store.record_learned_awareness_item(
-            "I enjoy astronomy.", "interests", "conversation", Some(1), "inferred", 0.7
+            "I enjoy astronomy.", "interests", "conversation", Some(source_id), "inferred", 0.7
         ).unwrap().is_none());
 
         let mut settings = AwarenessSettings::default();
@@ -1876,7 +1876,7 @@ mod tests {
             "I enjoy astronomy.", "interests", "conversation", Some(source_id), "inferred", 0.7
         ).unwrap().unwrap();
         assert_eq!(learned.source_type, "conversation");
-        assert_eq!(learned.source_record_id, Some(4));
+        assert_eq!(learned.source_record_id, Some(source_id));
         assert_eq!(learned.knowledge_type, "inferred");
 
         // Deletion creates a fingerprint; automatic ingestion cannot recreate it.
