@@ -11,7 +11,7 @@ mod runtime_manager;
 use tauri::{ipc::Channel, State};
 use runtime::{ConversationMessage, GenerationRequest, RuntimeConfig};
 use runtime_manager::{RuntimeManager, RuntimeStatusSnapshot};
-use conversation_store::{AwarenessHistoryEntry, AwarenessItem, AwarenessSettings, AwarenessSuppression, ConversationStore, ConversationSummary, ImportResult, SavedMemory, StoredMessage, UserProfile};
+use conversation_store::{AwarenessHistoryEntry, AwarenessItem, AwarenessSettings, AwarenessSuggestion, AwarenessSuppression, ConversationStore, ConversationSummary, ImportResult, SavedMemory, StoredMessage, UserProfile};
 use engine_settings::{EngineSettings, EngineSettingsStore};
 use companion_settings::{CompanionSettings, CompanionSettingsStore};
 use model_catalog::{LocalModel, ModelCatalog, ModelVerification};
@@ -125,6 +125,21 @@ fn list_awareness_suppressions(store: State<'_, ConversationStore>) -> Result<Ve
 #[tauri::command]
 fn clear_awareness_suppressions(store: State<'_, ConversationStore>) -> Result<usize, String> {
     store.clear_awareness_suppressions()
+}
+
+#[tauri::command]
+fn list_awareness_suggestions(store: State<'_, ConversationStore>) -> Result<Vec<AwarenessSuggestion>, String> {
+    store.list_awareness_suggestions()
+}
+
+#[tauri::command]
+fn approve_awareness_suggestion(store: State<'_, ConversationStore>, id: i64) -> Result<AwarenessItem, String> {
+    store.approve_awareness_suggestion(id)
+}
+
+#[tauri::command]
+fn reject_awareness_suggestion(store: State<'_, ConversationStore>, id: i64) -> Result<(), String> {
+    store.reject_awareness_suggestion(id)
 }
 
 #[tauri::command]
@@ -386,6 +401,9 @@ pub fn run() {
             save_awareness_settings,
             record_learned_awareness_item,
             list_awareness_items,
+            list_awareness_suggestions,
+            approve_awareness_suggestion,
+            reject_awareness_suggestion,
             list_awareness_history,
             clear_awareness_history,
             list_awareness_suppressions,

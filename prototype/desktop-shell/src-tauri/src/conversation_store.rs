@@ -40,6 +40,19 @@ pub struct AwarenessItem {
     pub updated_at: i64,
 }
 
+#[derive(Clone, Debug, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct AwarenessSuggestion {
+    pub id: i64,
+    pub content: String,
+    pub category: String,
+    pub source_type: String,
+    pub knowledge_type: String,
+    pub confidence: f64,
+    pub source_record_id: Option<i64>,
+    pub created_at: i64,
+}
+
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct AwarenessSuppression {
@@ -164,7 +177,7 @@ impl ConversationStore {
             .map_err(|error| format!("Could not enable local database constraints: {error}"))?;
         let schema_version: i64 = connection.pragma_query_value(None, "user_version", |row| row.get(0))
             .map_err(|error| format!("Could not read local database version: {error}"))?;
-        if schema_version > 5 {
+        if schema_version > 6 {
             return Err(format!("This midSunday database uses a newer schema version ({schema_version}) than this app supports."));
         }
         if schema_version == 0 {
@@ -287,6 +300,28 @@ impl ConversationStore {
             ).map_err(|error| format!("Could not apply Awareness suppression migration: {error}"))?;
             transaction.commit().map_err(|error| format!("Could not finish Awareness suppression migration: {error}"))?;
         }
+        let current_version: i64 = connection.pragma_query_value(None, "user_version", |row| row.get(0))
+            .map_err(|error| format!("Could not recheck local database version: {error}"))?;
+        if current_version == 5 {
+            let transaction = connection.unchecked_transaction()
+                .map_err(|error| format!("Could not prepare Awareness review-queue migration: {error}"))?;
+            transaction.execute_batch(
+                "CREATE TABLE IF NOT EXISTS awareness_suggestions (
+                   id INTEGER PRIMARY KEY AUTOINCREMENT,
+                   content TEXT NOT NULL,
+                   category TEXT NOT NULL,
+                   source_type TEXT NOT NULL CHECK(source_type IN ('conversation', 'in_app_search')),
+                   knowledge_type TEXT NOT NULL CHECK(knowledge_type IN ('observed', 'inferred')),
+                   confidence REAL NOT NULL CHECK(confidence >= 0.0 AND confidence <= 1.0),
+                   source_record_id INTEGER,
+                   created_at INTEGER NOT NULL
+                 );
+                 CREATE INDEX IF NOT EXISTS idx_awareness_suggestions_time
+                   ON awareness_suggestions(created_at DESC, id DESC);
+                 PRAGMA user_version = 6;"
+            ).map_err(|error| format!("Could not apply Awareness review-queue migration: {error}"))?;
+            transaction.commit().map_err(|error| format!("Could not finish Awareness review-queue migration: {error}"))?;
+        }
         Ok(Self { connection: Mutex::new(connection) })
     }
 
@@ -383,6 +418,111 @@ impl ConversationStore {
             knowledge_type: knowledge_type.to_owned(), confidence, source_record_id,
             created_at: now, updated_at: now,
         }))
+    }
+
+    /// Store a screened candidate for explicit user review. Candidates are never
+    /// promoted to permanent Awareness without a separate approval action.
+    pub fn create_awareness_suggestion(
+        &self, content: &str, category: &str, source_type: &str,
+        source_record_id: Option<i64>, knowledge_type: &str, confidence: f64,
+    ) -> Result<Option<AwarenessSuggestion>, String> {
+        let content = clean_awareness_content(content)?;
+        let category = clean_awareness_category(category)?;
+        if source_type != "conversation" && source_type != "in_app_search" {
+            return Err("Awareness suggestions can only use approved in-app sources.".to_owned());
+        }
+        if knowledge_type != "observed" && knowledge_type != "inferred" {
+            return Err("Awareness knowledge type must be observed or inferred.".to_owned());
+        }
+        if !confidence.is_finite() || !(0.0..=1.0).contains(&confidence) {
+            return Err("Awareness confidence must be between 0 and 1.".to_owned());
+        }
+        if source_record_id.is_some_and(|id| id <= 0) {
+            return Err("Invalid Awareness source record identifier.".to_owned());
+        }
+        let settings = self.get_awareness_settings()?;
+        let source_enabled = match source_type {
+            "conversation" => settings.learn_conversations,
+            "in_app_search" => settings.learn_searches,
+            _ => false,
+        };
+        if !settings.enabled || !source_enabled || settings.excluded_categories.contains(&category) {
+            return Ok(None);
+        }
+        let connection = self.lock()?;
+        let fingerprint = awareness_content_fingerprint(&content);
+        let suppressed: bool = connection.query_row(
+            "SELECT EXISTS(SELECT 1 FROM awareness_suppressions WHERE content_hash = ?1)",
+            params![fingerprint], |row| row.get(0),
+        ).map_err(|error| format!("Could not check Awareness exclusion: {error}"))?;
+        if suppressed { return Ok(None); }
+        let now = unix_time();
+        connection.execute(
+            "INSERT INTO awareness_suggestions(content, category, source_type, knowledge_type, confidence, source_record_id, created_at)
+             VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            params![content, category, source_type, knowledge_type, confidence, source_record_id, now],
+        ).map_err(|error| format!("Could not save Awareness suggestion: {error}"))?;
+        Ok(Some(AwarenessSuggestion {
+            id: connection.last_insert_rowid(), content, category,
+            source_type: source_type.to_owned(), knowledge_type: knowledge_type.to_owned(),
+            confidence, source_record_id, created_at: now,
+        }))
+    }
+
+    pub fn list_awareness_suggestions(&self) -> Result<Vec<AwarenessSuggestion>, String> {
+        let connection = self.lock()?;
+        let mut statement = connection.prepare(
+            "SELECT id, content, category, source_type, knowledge_type, confidence, source_record_id, created_at
+             FROM awareness_suggestions ORDER BY created_at DESC, id DESC"
+        ).map_err(|error| format!("Could not read Awareness suggestions: {error}"))?;
+        let rows = statement.query_map([], |row| Ok(AwarenessSuggestion {
+            id: row.get(0)?, content: row.get(1)?, category: row.get(2)?,
+            source_type: row.get(3)?, knowledge_type: row.get(4)?, confidence: row.get(5)?,
+            source_record_id: row.get(6)?, created_at: row.get(7)?,
+        })).map_err(|error| error.to_string())?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(|error| error.to_string())
+    }
+
+    pub fn approve_awareness_suggestion(&self, id: i64) -> Result<AwarenessItem, String> {
+        let suggestion = {
+            let connection = self.lock()?;
+            connection.query_row(
+                "SELECT content, category, source_type, knowledge_type, confidence, source_record_id
+                 FROM awareness_suggestions WHERE id = ?1",
+                params![id],
+                |row| Ok((
+                    row.get::<_, String>(0)?, row.get::<_, String>(1)?, row.get::<_, String>(2)?,
+                    row.get::<_, String>(3)?, row.get::<_, f64>(4)?, row.get::<_, Option<i64>>(5)?,
+                )),
+            ).optional().map_err(|error| format!("Could not read Awareness suggestion: {error}"))?
+             .ok_or_else(|| "This Awareness suggestion no longer exists.".to_owned())?
+        };
+        let item = self.record_learned_awareness_item(
+            &suggestion.0, &suggestion.1, &suggestion.2, suggestion.5, &suggestion.3, suggestion.4,
+        )?.ok_or_else(|| "Awareness is paused or this suggestion is excluded. It remains in review.".to_owned())?;
+        let connection = self.lock()?;
+        connection.execute("DELETE FROM awareness_suggestions WHERE id = ?1", params![id])
+            .map_err(|error| format!("Saved the item but could not clear its suggestion: {error}"))?;
+        Ok(item)
+    }
+
+    pub fn reject_awareness_suggestion(&self, id: i64) -> Result<(), String> {
+        let connection = self.lock()?;
+        let suggestion = connection.query_row(
+            "SELECT content, category, source_type FROM awareness_suggestions WHERE id = ?1",
+            params![id],
+            |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?, row.get::<_, String>(2)?)),
+        ).optional().map_err(|error| format!("Could not read Awareness suggestion: {error}"))?
+         .ok_or_else(|| "This Awareness suggestion no longer exists.".to_owned())?;
+        let fingerprint = awareness_content_fingerprint(&suggestion.0);
+        connection.execute(
+            "INSERT OR IGNORE INTO awareness_suppressions(content_hash, category, source_type, created_at)
+             VALUES(?1, ?2, ?3, ?4)",
+            params![fingerprint, suggestion.1, suggestion.2, unix_time()],
+        ).map_err(|error| format!("Could not protect rejected Awareness information: {error}"))?;
+        connection.execute("DELETE FROM awareness_suggestions WHERE id = ?1", params![id])
+            .map_err(|error| format!("Could not remove rejected Awareness suggestion: {error}"))?;
+        Ok(())
     }
 
     fn record_awareness_history(
@@ -1182,7 +1322,7 @@ mod tests {
         assert!(store.memory_enabled().unwrap());
         assert_eq!(store.get_awareness_settings().unwrap(), AwarenessSettings::default());
         let version: i64 = store.lock().unwrap().pragma_query_value(None, "user_version", |row| row.get(0)).unwrap();
-        assert_eq!(version, 5);
+        assert_eq!(version, 6);
     }
 
     #[test]
@@ -1540,6 +1680,57 @@ mod tests {
             "I enjoy astronomy.", "interests", "conversation", Some(5), "inferred", 0.7
         ).unwrap().is_none());
         assert!(store.list_awareness_items().unwrap().is_empty());
+    }
+
+    #[test]
+    fn awareness_suggestions_require_opt_in_and_category_allowance() {
+        let store = store();
+        assert!(store.create_awareness_suggestion(
+            "I enjoy astronomy.", "interests", "conversation", Some(1), "inferred", 0.8
+        ).unwrap().is_none());
+        store.save_awareness_settings(AwarenessSettings {
+            enabled: true, learn_conversations: true, learn_searches: false,
+            excluded_categories: vec!["goals".to_owned()],
+        }).unwrap();
+        assert!(store.create_awareness_suggestion(
+            "I enjoy astronomy.", "interests", "conversation", Some(1), "inferred", 0.8
+        ).unwrap().is_some());
+        assert!(store.create_awareness_suggestion(
+            "I want to learn astronomy.", "goals", "conversation", Some(2), "inferred", 0.8
+        ).unwrap().is_none());
+        assert_eq!(store.list_awareness_suggestions().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn approving_awareness_suggestion_promotes_only_after_opt_in() {
+        let store = store();
+        store.save_awareness_settings(AwarenessSettings {
+            enabled: true, learn_conversations: true, ..AwarenessSettings::default()
+        }).unwrap();
+        let suggestion = store.create_awareness_suggestion(
+            "I enjoy astronomy.", "interests", "conversation", Some(7), "inferred", 0.8
+        ).unwrap().unwrap();
+        let item = store.approve_awareness_suggestion(suggestion.id).unwrap();
+        assert_eq!(item.content, "I enjoy astronomy.");
+        assert!(store.list_awareness_suggestions().unwrap().is_empty());
+        assert_eq!(store.list_awareness_items().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn rejecting_awareness_suggestion_creates_relearning_exclusion() {
+        let store = store();
+        store.save_awareness_settings(AwarenessSettings {
+            enabled: true, learn_conversations: true, ..AwarenessSettings::default()
+        }).unwrap();
+        let suggestion = store.create_awareness_suggestion(
+            "I enjoy astronomy.", "interests", "conversation", Some(7), "inferred", 0.8
+        ).unwrap().unwrap();
+        store.reject_awareness_suggestion(suggestion.id).unwrap();
+        assert!(store.list_awareness_suggestions().unwrap().is_empty());
+        assert_eq!(store.list_awareness_suppressions().unwrap().len(), 1);
+        assert!(store.create_awareness_suggestion(
+            "I enjoy astronomy.", "interests", "conversation", Some(8), "inferred", 0.8
+        ).unwrap().is_none());
     }
 
     #[test]

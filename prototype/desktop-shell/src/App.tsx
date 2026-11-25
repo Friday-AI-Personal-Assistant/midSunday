@@ -15,6 +15,7 @@ type SavedMemory = { id: number; content: string; createdAt: number; updatedAt: 
 type UserProfile = { preferredName: string; useName: boolean };
 const DEFAULT_USER_PROFILE: UserProfile = { preferredName: "", useName: false };
 type AwarenessSettings = { enabled: boolean; learnConversations: boolean; learnSearches: boolean; excludedCategories: string[] };
+type AwarenessSuggestion = { id: number; content: string; category: string; sourceType: string; knowledgeType: string; confidence: number; sourceRecordId: number | null; createdAt: number };
 type AwarenessItem = { id: number; content: string; category: string; sourceType: string; knowledgeType: string; confidence: number; sourceRecordId: number | null; createdAt: number; updatedAt: number };
 type AwarenessHistoryEntry = { id: number; eventType: string; awarenessItemId: number | null; category: string | null; occurredAt: number };
 type AwarenessSuppression = { category: string | null; sourceType: string; createdAt: number };
@@ -113,6 +114,7 @@ export default function App() {
   const [awarenessBusy, setAwarenessBusy] = useState(false);
   const [awarenessNotice, setAwarenessNotice] = useState("");
   const [awarenessItems, setAwarenessItems] = useState<AwarenessItem[]>([]);
+  const [awarenessSuggestions, setAwarenessSuggestions] = useState<AwarenessSuggestion[]>([]);
   const [awarenessHistory, setAwarenessHistory] = useState<AwarenessHistoryEntry[]>([]);
   const [awarenessSuppressions, setAwarenessSuppressions] = useState<AwarenessSuppression[]>([]);
   const [awarenessDraft, setAwarenessDraft] = useState("");
@@ -397,14 +399,44 @@ export default function App() {
   }
 
   async function refreshAwarenessItems() {
-    const [items, history, suppressions] = await Promise.all([
+    const [items, history, suppressions, suggestions] = await Promise.all([
       invoke<AwarenessItem[]>("list_awareness_items"),
       invoke<AwarenessHistoryEntry[]>("list_awareness_history"),
       invoke<AwarenessSuppression[]>("list_awareness_suppressions"),
+      invoke<AwarenessSuggestion[]>("list_awareness_suggestions"),
     ]);
     setAwarenessItems(items);
     setAwarenessHistory(history);
     setAwarenessSuppressions(suppressions);
+    setAwarenessSuggestions(suggestions);
+  }
+
+  async function approveAwarenessSuggestion(suggestion: AwarenessSuggestion) {
+    if (awarenessBusy) return;
+    setAwarenessBusy(true);
+    try {
+      await invoke<AwarenessItem>("approve_awareness_suggestion", { id: suggestion.id });
+      await refreshAwarenessItems();
+      setAwarenessNotice("Suggestion approved and added to your local Awareness items.");
+    } catch (error) {
+      setAwarenessNotice(String(error));
+    } finally {
+      setAwarenessBusy(false);
+    }
+  }
+
+  async function rejectAwarenessSuggestion(suggestion: AwarenessSuggestion) {
+    if (awarenessBusy || !window.confirm("Reject this suggestion and block matching information from future automatic learning?")) return;
+    setAwarenessBusy(true);
+    try {
+      await invoke<void>("reject_awareness_suggestion", { id: suggestion.id });
+      await refreshAwarenessItems();
+      setAwarenessNotice("Suggestion rejected. Matching information is now excluded from future automatic learning.");
+    } catch (error) {
+      setAwarenessNotice(String(error));
+    } finally {
+      setAwarenessBusy(false);
+    }
   }
 
   async function clearAwarenessHistory() {
@@ -1013,6 +1045,11 @@ export default function App() {
                 })}
               </div>
               <p className="settings-footnote">Important: all learning switches start OFF. Category exclusions are saved locally. Automatic extraction is not active yet. Passwords, authentication secrets, payment credentials, private messages, and other private data must never be stored here.</p>
+              <div className="awareness-history">
+                <div className="memory-list-heading"><strong>Learning review ({awarenessSuggestions.length})</strong></div>
+                <p className="settings-footnote">Suggestions are not permanent memories. Review each one before approval. Rejecting a suggestion also blocks matching information from future automatic learning. The local extraction step is being connected separately; no suggestions are generated in this build yet.</p>
+                {awarenessSuggestions.length === 0 ? <p className="settings-footnote">No suggestions waiting for review.</p> : awarenessSuggestions.map((suggestion) => <div className="memory-item" key={suggestion.id}><div className="awareness-item-copy"><p>{suggestion.content}</p><small>{suggestion.category} · {suggestion.sourceType} · {suggestion.knowledgeType} · Confidence {Math.round(suggestion.confidence * 100)}%</small></div><div><button className="primary-action" type="button" onClick={() => void approveAwarenessSuggestion(suggestion)} disabled={awarenessBusy || !awarenessSettings.enabled}>Approve</button><button className="danger-action" type="button" onClick={() => void rejectAwarenessSuggestion(suggestion)} disabled={awarenessBusy}>Reject</button></div></div>)}
+              </div>
               <div className="awareness-manager">
                 <div className="path-field"><label htmlFor="new-awareness-item">Add something you want midSunday to know</label><textarea id="new-awareness-item" value={awarenessDraft} onChange={(event) => setAwarenessDraft(event.target.value)} maxLength={2000} rows={3} placeholder="Example: I enjoy learning about technology and anime." /><small>{awarenessDraft.length.toLocaleString()} / 2,000 characters · Only this deliberate entry is saved.</small></div>
                 <div className="awareness-create-row"><label htmlFor="awareness-category">Category</label><select id="awareness-category" value={awarenessCategory} onChange={(event) => setAwarenessCategory(event.target.value)}>{AWARENESS_CATEGORIES.map((category) => <option key={category} value={category}>{category[0].toUpperCase() + category.slice(1)}</option>)}</select><button className="primary-action" type="button" onClick={() => void addAwarenessItem()} disabled={awarenessBusy || !awarenessDraft.trim()}>{awarenessBusy ? "Saving…" : "Add item"}</button></div>
