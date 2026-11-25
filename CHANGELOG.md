@@ -3,6 +3,7 @@
 All notable project changes are recorded here. The project is in foundation/prototype development; no application release has been made.
 
 ## 2026-11-25
+- Updated the existing memory-size/export regression test to reflect removal of the old 100-entry cap; it now verifies 125 entries can be saved, exported, and cleared while empty and oversized entries remain rejected.
 - Removed the arbitrary 100-entry cap from explicitly saved memories. Each entry retains its existing content validation, while the separate 20-entry / 4 KiB prompt-context budget remains unchanged. Added a Rust regression test proving more than 100 memories persist without automatic eviction.
 - Added source-linked controls for saved conversation-derived Awareness facts. Users can review the original message and explicitly delete only the linked saved fact while preserving the conversation. The Rust transaction verifies the item/message relationship and source existence, records metadata-only history, and blocks matching relearning with a one-way fingerprint. Added regression coverage for mismatched-source rejection and successful deletion.
 - Added an OFF-by-default control for using approved Awareness in local chat. When explicitly enabled alongside the Awareness master switch, the app retrieves only keyword-relevant approved items (maximum 12 entries / 2 KiB), frames them as untrusted reference data, and leaves new-learning permissions independent. Added Rust tests for opt-in gating and relevance filtering.

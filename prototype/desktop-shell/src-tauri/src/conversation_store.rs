@@ -1686,19 +1686,19 @@ mod tests {
     }
 
     #[test]
-    fn validates_memory_size_and_limit_and_exports_separately() {
+    fn validates_memory_size_and_exports_without_an_arbitrary_count_limit() {
         let store = store();
         assert!(store.create_memory("  ").is_err());
         assert!(store.create_memory(&"x".repeat(4_097)).is_err());
-        for index in 0..100 {
+        for index in 0..125 {
             store.create_memory(&format!("Memory {index}")).unwrap();
         }
-        assert!(store.create_memory("One too many").is_err());
+        assert_eq!(store.list_memories().unwrap().len(), 125);
         let export: serde_json::Value = serde_json::from_str(&store.export_memories().unwrap()).unwrap();
         assert_eq!(export["format"], "midSunday-memory-export");
         assert_eq!(export["formatVersion"], 1);
-        assert_eq!(export["memories"].as_array().unwrap().len(), 100);
-        assert!(store.clear_memories().unwrap() == 100);
+        assert_eq!(export["memories"].as_array().unwrap().len(), 125);
+        assert_eq!(store.clear_memories().unwrap(), 125);
         assert!(store.list_memories().unwrap().is_empty());
     }
 
