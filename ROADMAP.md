@@ -950,6 +950,7 @@ This is a storage/settings foundation only. No password, credential, private mes
 - [x] Record metadata-only deletion events for Awareness items removed with their source conversation; never copy source text into the history.
 - [x] Add regression tests for individual conversation deletion and clear-all cleanup.
 - [x] Add a user-facing, read-only source-evidence viewer for pending conversation-derived suggestions; it retrieves only the original user-authored message and fails closed if it no longer exists.
+- [x] Add source-evidence viewing to saved conversation-derived Awareness items as well as pending suggestions. The viewer returns only the original user-authored message and fails closed when unavailable.
 - [ ] Add explicit per-evidence controls and source-linked review for saved Awareness items before connecting any broader automatic ingestion.
 - [ ] Add equivalent source lifecycle handling for in-app search evidence when a local search-history store is implemented.
 

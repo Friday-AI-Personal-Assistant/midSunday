@@ -1320,6 +1320,24 @@ mod tests {
     }
 
     #[test]
+    fn awareness_source_evidence_returns_only_existing_user_messages() {
+        let store = store();
+        let conversation = store.create("Source evidence test").unwrap();
+        store.append(conversation.id, "user", "I enjoy astronomy.").unwrap();
+        store.append(conversation.id, "assistant", "That is interesting.").unwrap();
+        let messages = store.messages(conversation.id).unwrap();
+        let user_message = messages.iter().find(|message| message.role == "user").unwrap();
+        let assistant_message = messages.iter().find(|message| message.role == "assistant").unwrap();
+
+        let evidence = store.awareness_source_message(user_message.id).unwrap();
+        assert_eq!(evidence.content, "I enjoy astronomy.");
+        assert_eq!(evidence.role, "user");
+        assert!(store.awareness_source_message(assistant_message.id).is_err());
+        assert!(store.awareness_source_message(i64::MAX).is_err());
+        assert!(store.awareness_source_message(0).is_err());
+    }
+
+    #[test]
     fn creates_edits_lists_and_deletes_explicit_memories() {
         let store = store();
         let created = store.create_memory("I prefer simple explanations.").unwrap();
