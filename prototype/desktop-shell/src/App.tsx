@@ -7,7 +7,7 @@ type Section = "chat" | "characters" | "settings";
 type Message = { id: number; role: "user" | "assistant" | "system"; text: string };
 type RuntimeStatusSnapshot = { status: string; detail: string | null };
 type HardwareDisk = { mountPoint: string; totalBytes: number; availableBytes: number };
-type GpuAdapter = { name: string; vendorId: number; deviceId: number; dedicatedVideoMemoryBytes: number; dedicatedSystemMemoryBytes: number; sharedSystemMemoryBytes: number; isSoftware: boolean; isRemote: boolean };
+type GpuAdapter = { name: string; vendorId: number; deviceId: number; dedicatedVideoMemoryBytes: number; dedicatedSystemMemoryBytes: number; sharedSystemMemoryBytes: number; isSoftware: boolean };
 type GpuDetection = { status: string; adapters: GpuAdapter[] };
 type HardwareSnapshot = {
   osName: string | null; osVersion: string | null; architecture: string;
@@ -1281,7 +1281,7 @@ export default function App() {
                 </div>
                 <div className="hardware-subsection"><strong>Graphics adapters (DXGI on Windows)</strong>
                   <p className="settings-footnote">{hardwareSnapshot.gpu.status === "detected" ? "Display adapters reported by Windows:" : hardwareSnapshot.gpu.status === "unsupported_platform" ? "DXGI adapter inventory is currently implemented for Windows only." : hardwareSnapshot.gpu.status === "no_adapters" ? "Windows did not report a display adapter." : "GPU adapter information is unavailable on this system."}</p>
-                  {hardwareSnapshot.gpu.adapters.map((adapter, index) => <div className="hardware-gpu" key={adapter.vendorId + "-" + adapter.deviceId + "-" + index}><strong>{adapter.name}</strong><span>Vendor 0x{adapter.vendorId.toString(16).padStart(4, "0")} · Device 0x{adapter.deviceId.toString(16).padStart(4, "0")}</span><span>Dedicated video memory: {formatModelSize(adapter.dedicatedVideoMemoryBytes)}</span><span>Dedicated system memory: {formatModelSize(adapter.dedicatedSystemMemoryBytes)} · Shared system memory: {formatModelSize(adapter.sharedSystemMemoryBytes)}</span>{(adapter.isSoftware || adapter.isRemote) && <span>{[adapter.isSoftware ? "Software adapter" : "", adapter.isRemote ? "Remote adapter" : ""].filter(Boolean).join(" · ")}</span>}</div>)}
+                  {hardwareSnapshot.gpu.adapters.map((adapter, index) => <div className="hardware-gpu" key={adapter.vendorId + "-" + adapter.deviceId + "-" + index}><strong>{adapter.name}</strong><span>Vendor 0x{adapter.vendorId.toString(16).padStart(4, "0")} · Device 0x{adapter.deviceId.toString(16).padStart(4, "0")}</span><span>Dedicated video memory: {formatModelSize(adapter.dedicatedVideoMemoryBytes)}</span><span>Dedicated system memory: {formatModelSize(adapter.dedicatedSystemMemoryBytes)} · Shared system memory: {formatModelSize(adapter.sharedSystemMemoryBytes)}</span>{adapter.isSoftware && <span>Software adapter (not a physical GPU)</span>}</div>)}
                   <p className="settings-footnote">DXGI capacity values are not current free VRAM or this app's memory budget. Shared memory is system RAM, not dedicated VRAM. Runtime acceleration and live GPU memory-budget checks are not verified yet.</p>
                 </div>
                 <div className="hardware-note">This assessment does not select a model, change performance settings, download anything, or guarantee compatibility.</div>

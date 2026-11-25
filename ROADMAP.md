@@ -1185,7 +1185,7 @@ This is capability inventory only; it does not change CPU thread settings or cla
 
 ### 2026-11-25 — Windows GPU adapter inventory
 
-- [x] Enumerate Windows display adapters through DXGI 1.1 and report adapter name, vendor/device IDs, dedicated video memory, dedicated system memory, shared system memory, and software/remote flags.
+- [x] Enumerate Windows display adapters through DXGI 1.1 and report adapter name, vendor/device IDs, dedicated video memory, dedicated system memory, shared system memory, and software-adapter flags.
 - [x] Preserve multiple adapters and label unsupported/unavailable detection explicitly; keep GPU inspection local and read-only.
 - [x] Display adapter inventory in Settings → System & hardware with clear separation between dedicated VRAM capacity and shared system memory.
 - [ ] Add process-specific DXGI video-memory budget/usage sampling and validate results against real Windows systems.

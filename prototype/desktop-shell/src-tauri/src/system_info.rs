@@ -14,7 +14,6 @@ pub struct GpuAdapter {
     pub dedicated_system_memory_bytes: u64,
     pub shared_system_memory_bytes: u64,
     pub is_software: bool,
-    pub is_remote: bool,
 }
 
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
@@ -154,7 +153,7 @@ pub fn assess_capability(
 /// they are not a live memory budget and do not prove inference-runtime acceleration support.
 #[cfg(target_os = "windows")]
 pub fn detect_gpu_adapters() -> GpuDetection {
-    use windows::Win32::Graphics::Dxgi::{CreateDXGIFactory1, IDXGIFactory1, DXGI_ADAPTER_FLAG_REMOTE, DXGI_ADAPTER_FLAG_SOFTWARE};
+    use windows::Win32::Graphics::Dxgi::{CreateDXGIFactory1, IDXGIFactory1, DXGI_ADAPTER_FLAG_SOFTWARE};
 
     let factory = match unsafe { CreateDXGIFactory1::<IDXGIFactory1>() } {
         Ok(factory) => factory,
@@ -163,6 +162,7 @@ pub fn detect_gpu_adapters() -> GpuDetection {
 
     let mut adapters = Vec::new();
     let mut enumeration_ended = false;
+    let mut descriptor_failures = 0_usize;
     for index in 0..32_u32 {
         let adapter = match unsafe { factory.EnumAdapters1(index) } {
             Ok(adapter) => adapter,
@@ -170,7 +170,7 @@ pub fn detect_gpu_adapters() -> GpuDetection {
         };
         let desc = match unsafe { adapter.GetDesc1() } {
             Ok(desc) => desc,
-            Err(_) => continue,
+            Err(_) => { descriptor_failures += 1; continue; }
         };
         let name = String::from_utf16_lossy(&desc.Description)
             .trim_end_matches('\0')
@@ -184,12 +184,13 @@ pub fn detect_gpu_adapters() -> GpuDetection {
             dedicated_system_memory_bytes: desc.DedicatedSystemMemory as u64,
             shared_system_memory_bytes: desc.SharedSystemMemory as u64,
             is_software: desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE.0 != 0,
-            is_remote: desc.Flags & DXGI_ADAPTER_FLAG_REMOTE.0 != 0,
         });
     }
 
     let status = if adapters.is_empty() {
-        if enumeration_ended { "no_adapters" } else { "unavailable" }
+        if descriptor_failures > 0 { "unavailable" } else if enumeration_ended { "no_adapters" } else { "unavailable" }
+    } else if descriptor_failures > 0 {
+        "partial"
     } else {
         "detected"
     };
@@ -348,7 +349,7 @@ mod gpu_tests {
                 dedicated_video_memory_bytes: 128 * 1024 * 1024,
                 dedicated_system_memory_bytes: 0,
                 shared_system_memory_bytes: 8 * 1024 * 1024 * 1024,
-                is_software: false, is_remote: false,
+                is_software: false,
             }],
         };
         let value = serde_json::to_value(inventory).unwrap();

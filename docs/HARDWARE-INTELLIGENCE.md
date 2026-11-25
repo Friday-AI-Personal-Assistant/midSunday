@@ -309,11 +309,11 @@ The UI displays the detected features as informational labels. These are CPU/OS 
 
 ## 17. Windows DXGI display-adapter inventory prototype (2026-11-25)
 
-The Windows hardware snapshot now uses Microsoft's Rust `windows` bindings and DXGI 1.1 adapter enumeration to report display-adapter name, PCI/ACPI vendor and device IDs, dedicated video memory capacity, dedicated system memory, shared system memory, and software/remote adapter flags. Multiple adapters are retained rather than selecting one based on display output order.
+The Windows hardware snapshot now uses Microsoft's Rust `windows` bindings and DXGI 1.1 adapter enumeration to report display-adapter name, PCI/ACPI vendor and device IDs, dedicated video memory capacity, dedicated system memory, shared system memory, and software-adapter flags. Multiple adapters are retained rather than selecting one based on display output order.
 
 The implementation is Windows-only and degrades to an explicit unsupported/unavailable status on other platforms or when DXGI cannot be queried. It performs read-only local enumeration; no vendor utility, administrator permission, network request, driver installation, or GPU benchmark is required. The enumeration has a defensive 32-adapter bound.
 
-**Important limits:** These are adapter capacity figures, not current free VRAM, not the process-specific DXGI memory budget, and not proof that a selected inference runtime can accelerate on that adapter. Shared system memory remains separate from dedicated video memory. Software and remote adapters are identified so they are not mistaken for local hardware accelerators.
+**Important limits:** These are adapter capacity figures, not current free VRAM, not the process-specific DXGI memory budget, and not proof that a selected inference runtime can accelerate on that adapter. Shared system memory remains separate from dedicated video memory. Software adapters are identified so they are not mistaken for physical hardware accelerators. DXGI remote-adapter classification is not treated as reliable because its remote flag is reserved.
 
 The next GPU work remains process-specific `IDXGIAdapter3::QueryVideoMemoryInfo` budget/usage sampling, followed by validation against Windows tools on real multi-GPU and integrated/discrete systems. No model selection or automatic offload is enabled by this inventory slice.
 
