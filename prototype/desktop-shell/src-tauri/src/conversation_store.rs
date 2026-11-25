@@ -1846,6 +1846,9 @@ mod tests {
     #[test]
     fn automatic_awareness_ingestion_obeys_master_source_category_and_suppression_controls() {
         let store = store();
+        let conversation = store.create("Learning source").unwrap();
+        store.append(conversation.id, "user", "I enjoy astronomy.").unwrap();
+        let source_id = store.messages(conversation.id).unwrap()[0].id;
 
         // Old and default settings remain opt-in: no learning before consent.
         assert!(store.record_learned_awareness_item(
@@ -1870,7 +1873,7 @@ mod tests {
         assert!(store.list_awareness_items().unwrap().is_empty());
 
         let learned = store.record_learned_awareness_item(
-            "I enjoy astronomy.", "interests", "conversation", Some(4), "inferred", 0.7
+            "I enjoy astronomy.", "interests", "conversation", Some(source_id), "inferred", 0.7
         ).unwrap().unwrap();
         assert_eq!(learned.source_type, "conversation");
         assert_eq!(learned.source_record_id, Some(4));
@@ -1879,7 +1882,7 @@ mod tests {
         // Deletion creates a fingerprint; automatic ingestion cannot recreate it.
         store.delete_awareness_item(learned.id).unwrap();
         assert!(store.record_learned_awareness_item(
-            "I enjoy astronomy.", "interests", "conversation", Some(5), "inferred", 0.7
+            "I enjoy astronomy.", "interests", "conversation", Some(source_id), "inferred", 0.7
         ).unwrap().is_none());
         assert!(store.list_awareness_items().unwrap().is_empty());
     }
@@ -1887,18 +1890,21 @@ mod tests {
     #[test]
     fn awareness_suggestions_require_opt_in_and_category_allowance() {
         let store = store();
+        let conversation = store.create("Suggestion source").unwrap();
+        store.append(conversation.id, "user", "I enjoy astronomy.").unwrap();
+        let source_id = store.messages(conversation.id).unwrap()[0].id;
         assert!(store.create_awareness_suggestion(
-            "I enjoy astronomy.", "interests", "conversation", Some(1), "inferred", 0.8
+            "I enjoy astronomy.", "interests", "conversation", Some(source_id), "inferred", 0.8
         ).unwrap().is_none());
         store.save_awareness_settings(AwarenessSettings {
             enabled: true, learn_conversations: true, learn_searches: false,
             excluded_categories: vec!["goals".to_owned()],
         }).unwrap();
         assert!(store.create_awareness_suggestion(
-            "I enjoy astronomy.", "interests", "conversation", Some(1), "inferred", 0.8
+            "I enjoy astronomy.", "interests", "conversation", Some(source_id), "inferred", 0.8
         ).unwrap().is_some());
         assert!(store.create_awareness_suggestion(
-            "I want to learn astronomy.", "goals", "conversation", Some(2), "inferred", 0.8
+            "I want to learn astronomy.", "goals", "conversation", Some(source_id), "inferred", 0.8
         ).unwrap().is_none());
         assert_eq!(store.list_awareness_suggestions().unwrap().len(), 1);
     }
@@ -1906,11 +1912,14 @@ mod tests {
     #[test]
     fn approving_awareness_suggestion_promotes_only_after_opt_in() {
         let store = store();
+        let conversation = store.create("Approval source").unwrap();
+        store.append(conversation.id, "user", "I enjoy astronomy.").unwrap();
+        let source_id = store.messages(conversation.id).unwrap()[0].id;
         store.save_awareness_settings(AwarenessSettings {
             enabled: true, learn_conversations: true, ..AwarenessSettings::default()
         }).unwrap();
         let suggestion = store.create_awareness_suggestion(
-            "I enjoy astronomy.", "interests", "conversation", Some(7), "inferred", 0.8
+            "I enjoy astronomy.", "interests", "conversation", Some(source_id), "inferred", 0.8
         ).unwrap().unwrap();
         let item = store.approve_awareness_suggestion(suggestion.id).unwrap();
         assert_eq!(item.content, "I enjoy astronomy.");
@@ -1921,17 +1930,20 @@ mod tests {
     #[test]
     fn rejecting_awareness_suggestion_creates_relearning_exclusion() {
         let store = store();
+        let conversation = store.create("Rejection source").unwrap();
+        store.append(conversation.id, "user", "I enjoy astronomy.").unwrap();
+        let source_id = store.messages(conversation.id).unwrap()[0].id;
         store.save_awareness_settings(AwarenessSettings {
             enabled: true, learn_conversations: true, ..AwarenessSettings::default()
         }).unwrap();
         let suggestion = store.create_awareness_suggestion(
-            "I enjoy astronomy.", "interests", "conversation", Some(7), "inferred", 0.8
+            "I enjoy astronomy.", "interests", "conversation", Some(source_id), "inferred", 0.8
         ).unwrap().unwrap();
         store.reject_awareness_suggestion(suggestion.id).unwrap();
         assert!(store.list_awareness_suggestions().unwrap().is_empty());
         assert_eq!(store.list_awareness_suppressions().unwrap().len(), 1);
         assert!(store.create_awareness_suggestion(
-            "I enjoy astronomy.", "interests", "conversation", Some(8), "inferred", 0.8
+            "I enjoy astronomy.", "interests", "conversation", Some(source_id), "inferred", 0.8
         ).unwrap().is_none());
     }
 
