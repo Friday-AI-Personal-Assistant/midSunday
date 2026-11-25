@@ -39,6 +39,7 @@ The following reflect decisions and priorities already expressed by the product 
 - Product descriptor: **AI Personal Companion**.
 - Independent product and repository, separate from FRIDAY.
 - Cross-platform target: Windows, Linux, and macOS, using one shared application codebase and separate native builds. Windows remains the first feature and debugging priority.
+- Windows compatibility target: Windows 10 and Windows 11. The initial supported Windows 10 baseline will be Windows 10 version 22H2, with earlier Windows 10 builds investigated and supported only when the selected Tauri/WebView2/runtime stack passes compatibility testing. Windows 11 supported releases will be tested as first-class targets. Windows 7 and 8/8.1 are not official targets.
 - Offline/local operation is a central product requirement, not a marketing afterthought.
 - Local chat, voice, memory, and carefully controlled PC interaction are intended core capabilities.
 - Online capabilities, such as web, Google, and YouTube search, naturally require an internet connection.
@@ -375,8 +376,24 @@ Release numbers are planning labels, not promises or dates. A stage is not compl
 - [ ] Test low disk space, interrupted downloads, and model corruption.
 - [ ] Test sleep/resume, app restart, forced shutdown, and power loss recovery.
 - [ ] Test long-running sessions and memory leaks.
+- [ ] Test Windows 10 version 22H2 as the initial Windows 10 baseline and test current supported Windows 11 releases; investigate earlier Windows 10 builds before claiming support for them.
+- [ ] Verify the required Microsoft Edge WebView2 Runtime is present, healthy, and compatible; provide a clear installation/repair path when it is missing or damaged.
+- [ ] Verify Windows installer prerequisites and native dependencies before application launch where possible; show a useful installer or Windows-native error if the app cannot start because a prerequisite is missing.
 - [ ] Test Windows scaling, multiple displays, and accessibility settings.
 - [ ] Publish a compatibility matrix based on actual results.
+ 
+### Diagnostics, health checks, and user-facing error reporting
+
+- [ ] Run a startup health check for required application files, runtime components, database/schema state, model registration and file integrity, permissions, and available disk space.
+- [ ] Monitor important runtime conditions and detect recoverable failures such as model-engine startup errors, missing/corrupt model files, database failures, microphone/speaker problems, and optional network-feature failures.
+- [ ] Capture application crashes and Rust panics safely, and use frontend error boundaries so one broken screen does not silently break the whole interface.
+- [ ] Present clear native-style dialogs that explain what happened, its severity, what the user can do next, and whether retry or a safe repair is available.
+- [ ] Distinguish informational messages, warnings, and critical errors; never label a recoverable issue as a fatal app failure.
+- [ ] Add Settings → Diagnostics with health status, recent error details, log location, and guided checks/repair actions.
+- [ ] Keep diagnostic logs on the device by default; exclude conversation content, memories, passwords, API keys, and private files.
+- [ ] Allow users to review and explicitly export diagnostic reports; never upload logs or enable telemetry automatically.
+- [ ] Provide a limited pre-launch/installer prerequisite check for failures that prevent the main application from starting at all.
+- [ ] Test missing DLL/runtime, damaged app files, database migration failures, low disk space/RAM, model corruption, permission denial, device loss, and unexpected shutdown scenarios.
 - [ ] Remove or qualify claims that are not supported by testing.
 
 **Exit gate:** Published hardware requirements and performance statements are supported by repeatable tests. Unsupported configurations fail gracefully.
@@ -428,7 +445,7 @@ Release numbers are planning labels, not promises or dates. A stage is not compl
 **Goal:** Deliver a safe and understandable Windows beta.
 
 - [ ] Create reproducible release builds.
-- [ ] Create Windows installer and uninstall flow.
+- [ ] Create Windows installer and uninstall flow with clear prerequisite checks and recovery guidance for missing or damaged runtime components.
 - [ ] Decide how model downloads are presented and stored.
 - [ ] Test fresh install, upgrade, downgrade policy, and uninstall data choices.
 - [ ] Implement signed updates or another secure update mechanism after evaluating cost and certificate requirements.
@@ -998,3 +1015,11 @@ Conversation-derived Awareness must not outlive the conversation messages that s
 - Failed review actions must leave the pending queue and permanent Awareness state consistent.
 - Manual user-entered Awareness remains independent of conversation source references and automatic-learning switches.
 - Automatic extraction remains inactive until separately implemented and explicitly opted in.
+
+### 2026-11-25 — Windows 10/11 compatibility and diagnostics direction
+
+- Confirmed Windows 10 and Windows 11 as the intended Windows support targets, while retaining one shared cross-platform application codebase.
+- Set Windows 10 version 22H2 as the initial compatibility baseline; earlier Windows 10 builds must be evaluated against the actual Tauri, WebView2, and runtime dependencies before being advertised as supported.
+- Added requirements for startup health checks, runtime/crash detection, clear user-facing error dialogs, a Diagnostics centre, local-by-default logs, and user-approved diagnostic export only.
+- Added installer/pre-launch prerequisite checks for failures such as missing or damaged WebView2/runtime components that could prevent midSunday itself from opening.
+- Windows 7 and Windows 8/8.1 are not official support targets.
