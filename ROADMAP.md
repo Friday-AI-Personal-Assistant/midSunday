@@ -1297,3 +1297,14 @@ These indicators describe general volume headroom only. They do not guarantee th
 - [ ] Build runtime-aware compatibility checks and hardware recommendations only after measured benchmark and real-device validation.
 
 The metadata is supplied by the GGUF file and is descriptive, not authoritative. Missing or inaccurate fields remain unavailable or are displayed as reported; this batch does not select models, alter context settings, guarantee compatibility, or perform resource management.
+
+### 2026-11-25 — Extended GGUF architecture metadata (Batch #115)
+
+- [x] Read selected standard GGUF architecture fields for grouped-query attention KV heads, key/value head lengths, RoPE dimensions, and expert counts.
+- [x] Read standard general quantisation-version and alignment values, preserving the distinction between quantisation version and file-type quantisation label.
+- [x] Display the added fields in the local model library, with absent values explicitly marked unavailable or not provided.
+- [x] Extend synthetic GGUF regression fixtures and assertions for representative architecture metadata.
+- [ ] Validate parser behaviour against a representative real-world GGUF corpus across multiple architectures, quantisations, and exporter versions.
+- [ ] Use verified metadata plus runtime-specific measurements to build conservative context/KV-cache and model resource estimates; do not infer full model RAM/VRAM from parameter count or file size alone.
+
+This batch extends descriptive metadata only. It does not claim runtime compatibility or predict memory use, select models, or change context/resource settings.

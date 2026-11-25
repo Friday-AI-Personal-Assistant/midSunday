@@ -15,6 +15,10 @@ pub struct GgufMetadata {
     pub file_type_code: Option<u32>, pub file_type_description: Option<String>,
     pub parameter_count: Option<u64>, pub context_length: Option<u64>, pub block_count: Option<u64>,
     pub embedding_length: Option<u64>, pub attention_head_count: Option<u64>,
+    pub attention_kv_head_count: Option<u64>, pub attention_key_length: Option<u64>,
+    pub attention_value_length: Option<u64>, pub rope_dimension_count: Option<u64>,
+    pub expert_count: Option<u64>, pub expert_used_count: Option<u64>,
+    pub quantization_version: Option<u32>, pub alignment: Option<u32>,
 }
 #[derive(Debug)]
 enum Value { Text(String), Unsigned(u64), Signed(i64), Other }
@@ -79,10 +83,13 @@ pub fn inspect(input:&str)->Result<GgufMetadata,String>{
     let tensors=read_u64(&mut f)?;let entries=read_u64(&mut f)?;
     if entries>MAX_METADATA_ENTRIES{return Err("The GGUF file declares too many metadata entries for safe inspection.".to_owned());}
     let(mut architecture,mut model_name,mut file_type_code,mut parameter_count,mut context_length,mut block_count,mut embedding_length,mut attention_head_count)=(None,None,None,None,None,None,None,None);
+    let(mut attention_kv_head_count,mut attention_key_length,mut attention_value_length,mut rope_dimension_count,mut expert_count,mut expert_used_count,mut quantization_version,mut alignment)=(None,None,None,None,None,None,None,None);
     for _ in 0..entries{
         let key=read_string(&mut f)?;let kind=read_u32(&mut f)?;
-        let selected=matches!(key.as_str(),"general.architecture"|"general.name"|"general.file_type"|"general.parameter_count")
-            ||key.ends_with(".context_length")||key.ends_with(".block_count")||key.ends_with(".embedding_length")||key.ends_with(".attention.head_count");
+        let selected=matches!(key.as_str(),"general.architecture"|"general.name"|"general.file_type"|"general.parameter_count"|"general.quantization_version"|"general.alignment")
+            ||key.ends_with(".context_length")||key.ends_with(".block_count")||key.ends_with(".embedding_length")||key.ends_with(".attention.head_count")
+            ||key.ends_with(".attention.head_count_kv")||key.ends_with(".attention.key_length")||key.ends_with(".attention.value_length")
+            ||key.ends_with(".rope.dimension_count")||key.ends_with(".expert_count")||key.ends_with(".expert_used_count");
         if !selected{skip_value(&mut f,kind)?;continue;}
         let value=scalar(&mut f,kind)?;
         match key.as_str(){
@@ -90,14 +97,22 @@ pub fn inspect(input:&str)->Result<GgufMetadata,String>{
             "general.name"=>if let Value::Text(v)=value{model_name=Some(v);},
             "general.file_type"=>file_type_code=unsigned(value).and_then(|v|u32::try_from(v).ok()),
             "general.parameter_count"=>parameter_count=unsigned(value),
+            "general.quantization_version"=>quantization_version=unsigned(value).and_then(|v|u32::try_from(v).ok()),
+            "general.alignment"=>alignment=unsigned(value).and_then(|v|u32::try_from(v).ok()),
             _ if key.ends_with(".context_length")=>context_length=unsigned(value),
             _ if key.ends_with(".block_count")=>block_count=unsigned(value),
             _ if key.ends_with(".embedding_length")=>embedding_length=unsigned(value),
+            _ if key.ends_with(".attention.head_count_kv")=>attention_kv_head_count=unsigned(value),
+            _ if key.ends_with(".attention.key_length")=>attention_key_length=unsigned(value),
+            _ if key.ends_with(".attention.value_length")=>attention_value_length=unsigned(value),
             _ if key.ends_with(".attention.head_count")=>attention_head_count=unsigned(value),
+            _ if key.ends_with(".rope.dimension_count")=>rope_dimension_count=unsigned(value),
+            _ if key.ends_with(".expert_count")=>expert_count=unsigned(value),
+            _ if key.ends_with(".expert_used_count")=>expert_used_count=unsigned(value),
             _=>{}
         }
     }
-    Ok(GgufMetadata{format_version:version,file_size_bytes:metadata.len(),tensor_count:tensors,metadata_entry_count:entries,architecture,model_name,file_type_code,file_type_description:file_type_code.and_then(file_type_description),parameter_count,context_length,block_count,embedding_length,attention_head_count})
+    Ok(GgufMetadata{format_version:version,file_size_bytes:metadata.len(),tensor_count:tensors,metadata_entry_count:entries,architecture,model_name,file_type_code,file_type_description:file_type_code.and_then(file_type_description),parameter_count,context_length,block_count,embedding_length,attention_head_count,attention_kv_head_count,attention_key_length,attention_value_length,rope_dimension_count,expert_count,expert_used_count,quantization_version,alignment})
 }
 #[cfg(test)]
 mod tests{
@@ -107,13 +122,21 @@ mod tests{
     fn entry_string(o:&mut Vec<u8>,k:&str,v:&str){push_string(o,k);o.extend_from_slice(&8u32.to_le_bytes());push_string(o,v);}
     fn entry_u32(o:&mut Vec<u8>,k:&str,v:u32){push_string(o,k);o.extend_from_slice(&4u32.to_le_bytes());o.extend_from_slice(&v.to_le_bytes());}
     fn fixture()->Vec<u8>{
-        let mut o=b"GGUF".to_vec();o.extend_from_slice(&3u32.to_le_bytes());o.extend_from_slice(&2u64.to_le_bytes());o.extend_from_slice(&8u64.to_le_bytes());
+        let mut o=b"GGUF".to_vec();o.extend_from_slice(&3u32.to_le_bytes());o.extend_from_slice(&2u64.to_le_bytes());o.extend_from_slice(&16u64.to_le_bytes());
         entry_string(&mut o,"general.architecture","llama");entry_string(&mut o,"general.name","Tiny test model");entry_u32(&mut o,"general.file_type",2);
         push_string(&mut o,"general.parameter_count");o.extend_from_slice(&10u32.to_le_bytes());o.extend_from_slice(&7_000_000_000u64.to_le_bytes());
-        entry_u32(&mut o,"llama.context_length",8192);entry_u32(&mut o,"llama.block_count",32);entry_u32(&mut o,"llama.embedding_length",4096);entry_u32(&mut o,"llama.attention.head_count",32);o
+        entry_u32(&mut o,"llama.context_length",8192);entry_u32(&mut o,"llama.block_count",32);entry_u32(&mut o,"llama.embedding_length",4096);entry_u32(&mut o,"llama.attention.head_count",32);
+        entry_u32(&mut o,"llama.attention.head_count_kv",8);
+        entry_u32(&mut o,"llama.attention.key_length",128);
+        entry_u32(&mut o,"llama.attention.value_length",128);
+        entry_u32(&mut o,"llama.rope.dimension_count",128);
+        entry_u32(&mut o,"llama.expert_count",8);
+        entry_u32(&mut o,"llama.expert_used_count",2);
+        entry_u32(&mut o,"general.quantization_version",2);
+        entry_u32(&mut o,"general.alignment",32);o
     }
     fn temp(bytes:&[u8],ext:&str)->std::path::PathBuf{let p=std::env::temp_dir().join(format!("midsunday-gguf-{}-{}.{}",std::process::id(),NEXT.fetch_add(1,Ordering::Relaxed),ext));let mut f=File::create(&p).unwrap();f.write_all(bytes).unwrap();p}
-    #[test]fn reads_core_metadata_without_tensor_payloads(){let p=temp(&fixture(),"gguf");let m=inspect(p.to_str().unwrap()).unwrap();assert_eq!(m.format_version,3);assert_eq!(m.tensor_count,2);assert_eq!(m.architecture.as_deref(),Some("llama"));assert_eq!(m.model_name.as_deref(),Some("Tiny test model"));assert_eq!(m.file_type_code,Some(2));assert_eq!(m.file_type_description.as_deref(),Some("Q4_0"));assert_eq!(m.parameter_count,Some(7_000_000_000));assert_eq!(m.context_length,Some(8192));assert_eq!(m.block_count,Some(32));assert_eq!(m.embedding_length,Some(4096));assert_eq!(m.attention_head_count,Some(32));let _=std::fs::remove_file(p);}
+    #[test]fn reads_core_metadata_without_tensor_payloads(){let p=temp(&fixture(),"gguf");let m=inspect(p.to_str().unwrap()).unwrap();assert_eq!(m.format_version,3);assert_eq!(m.tensor_count,2);assert_eq!(m.architecture.as_deref(),Some("llama"));assert_eq!(m.model_name.as_deref(),Some("Tiny test model"));assert_eq!(m.file_type_code,Some(2));assert_eq!(m.file_type_description.as_deref(),Some("Q4_0"));assert_eq!(m.parameter_count,Some(7_000_000_000));assert_eq!(m.context_length,Some(8192));assert_eq!(m.block_count,Some(32));assert_eq!(m.embedding_length,Some(4096));assert_eq!(m.attention_head_count,Some(32));assert_eq!(m.attention_kv_head_count,Some(8));assert_eq!(m.attention_key_length,Some(128));assert_eq!(m.attention_value_length,Some(128));assert_eq!(m.rope_dimension_count,Some(128));assert_eq!(m.expert_count,Some(8));assert_eq!(m.expert_used_count,Some(2));assert_eq!(m.quantization_version,Some(2));assert_eq!(m.alignment,Some(32));let _=std::fs::remove_file(p);}
     #[test]fn rejects_invalid_magic_and_versions(){let p=temp(b"NOPE","gguf");assert!(inspect(p.to_str().unwrap()).is_err());let _=std::fs::remove_file(p);let mut b=fixture();b[4..8].copy_from_slice(&99u32.to_le_bytes());let p=temp(&b,"gguf");assert!(inspect(p.to_str().unwrap()).unwrap_err().contains("version 99"));let _=std::fs::remove_file(p);}
     #[test]fn rejects_truncated_metadata_and_unreasonable_counts(){let mut b=fixture();b.truncate(35);let p=temp(&b,"gguf");assert!(inspect(p.to_str().unwrap()).is_err());let _=std::fs::remove_file(p);let mut b=fixture();b[20..28].copy_from_slice(&(MAX_METADATA_ENTRIES+1).to_le_bytes());let p=temp(&b,"gguf");assert!(inspect(p.to_str().unwrap()).unwrap_err().contains("too many metadata"));let _=std::fs::remove_file(p);}
     #[test]fn skips_unknown_string_and_array_metadata(){let mut b=b"GGUF".to_vec();b.extend_from_slice(&3u32.to_le_bytes());b.extend_from_slice(&0u64.to_le_bytes());b.extend_from_slice(&2u64.to_le_bytes());push_string(&mut b,"unknown.string");b.extend_from_slice(&8u32.to_le_bytes());push_string(&mut b,"ignored");push_string(&mut b,"unknown.array");b.extend_from_slice(&9u32.to_le_bytes());b.extend_from_slice(&4u32.to_le_bytes());b.extend_from_slice(&3u64.to_le_bytes());for n in [1u32,2,3]{b.extend_from_slice(&n.to_le_bytes());}let p=temp(&b,"gguf");assert_eq!(inspect(p.to_str().unwrap()).unwrap().tensor_count,0);let _=std::fs::remove_file(p);}

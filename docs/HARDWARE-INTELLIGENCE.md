@@ -378,3 +378,11 @@ The implementation uses only Rust standard-library file I/O plus the existing Se
 **Privacy and safety:** inspection is local and read-only. It does not load model weights, copy or modify the GGUF file, start inference, download anything, or transmit the file path or metadata. GGUF metadata is untrusted input and may be missing, incomplete, or inaccurate. The displayed values are descriptive only—not proof of model compatibility, runtime kernel support, safe memory requirements, licence rights, or expected performance. No automatic model selection, context change, or resource allocation is performed.
 
 Regression tests cover representative llama metadata, quantisation labels, unsupported versions, invalid magic, truncated data, excessive metadata counts, unknown string/array fields, and incorrect extensions. Architecture-specific metadata coverage and real-world model corpus validation remain ongoing work.
+
+## 23. Extended GGUF architecture metadata (2026-11-25)
+
+The metadata inspector additionally reads selected standard GGUF integer fields when present: grouped-query attention KV-head count, key/value head lengths, RoPE dimension count, expert count and experts used per token, quantisation-format version, and tensor alignment. Architecture-specific values are read from namespaced metadata keys, alongside the standard `general.quantization_version` and `general.alignment` keys. Both 32-bit and 64-bit unsigned integer encodings are accepted where supported by the GGUF format.
+
+The UI reports absent values as unavailable. It preserves the distinction between attention heads and KV heads. Expert counts are descriptive metadata and do not imply runtime support for a particular MoE implementation. Quantisation version is distinct from the GGML file-type/quantisation label. If alignment is absent, the UI does not claim a file-specific value.
+
+These additions are groundwork for later context/KV-cache estimates and architecture-aware model checks. They do not calculate memory use, choose a model, infer runtime support, or change launch settings. Metadata remains untrusted file-supplied information. Tests use a synthetic GGUF fixture with representative LLaMA-style architecture keys; real-world multi-architecture corpus validation remains open.
