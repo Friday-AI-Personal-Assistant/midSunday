@@ -1133,11 +1133,11 @@ mod tests {
         let store = store();
         assert_eq!(store.get_awareness_settings().unwrap(), AwarenessSettings::default());
         let saved = store.save_awareness_settings(AwarenessSettings {
-            enabled: true, learn_conversations: true, learn_searches: false,
+            enabled: true, learn_conversations: true, learn_searches: false, excluded_categories: Vec::new(),
         }).unwrap();
         assert_eq!(store.get_awareness_settings().unwrap(), saved);
         let paused = store.save_awareness_settings(AwarenessSettings {
-            enabled: false, learn_conversations: true, learn_searches: false,
+            enabled: false, learn_conversations: true, learn_searches: false, excluded_categories: Vec::new(),
         }).unwrap();
         assert!(!paused.enabled);
         assert!(paused.learn_conversations);
