@@ -183,7 +183,7 @@ pub fn detect_gpu_adapters() -> GpuDetection {
             dedicated_video_memory_bytes: desc.DedicatedVideoMemory as u64,
             dedicated_system_memory_bytes: desc.DedicatedSystemMemory as u64,
             shared_system_memory_bytes: desc.SharedSystemMemory as u64,
-            is_software: desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE.0 != 0,
+            is_software: desc.Flags & (DXGI_ADAPTER_FLAG_SOFTWARE.0 as u32) != 0,
         });
     }
 
@@ -291,7 +291,7 @@ mod tests {
             total_memory_bytes: 0,
             available_memory_bytes: 0,
             disks: Vec::new(),
-            gpu_status: "not_detected_yet".to_owned(),
+            gpu: GpuDetection { status: "unsupported_platform".to_owned(), adapters: Vec::new() },
             assessment: assess_capability(0, 0, 0),
         };
         assert_eq!(snapshot.gpu.status, "unsupported_platform");
