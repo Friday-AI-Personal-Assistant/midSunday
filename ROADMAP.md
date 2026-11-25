@@ -1281,3 +1281,19 @@ These indicators describe general volume headroom only. They do not guarantee th
 - [x] Display the matched volume, available bytes, free percentage, and general volume health in Settings.
 - [x] Report unconfigured, inaccessible, missing, and unmatched paths explicitly; do not guess a drive.
 - [ ] Validate path and mount matching on physical Windows, Linux, and macOS devices and add model-specific storage-footprint estimates.
+
+
+### 2026-11-25 — HIARM GGUF model metadata intelligence (Batch #113)
+
+- [x] Add a bounded, read-only GGUF v2/v3 metadata inspector without a new third-party dependency.
+- [x] Extract architecture, embedded model name, GGML file-type/known quantisation label, parameter count, context length, layer/block count, embedding length, attention-head count, tensor count, file size, and container metadata counts when present.
+- [x] Expose inspection through an explicit Settings → Local model library action; run file parsing on a blocking worker.
+- [x] Keep inspection local and read-only: never load tensor weights, copy or modify the model, start inference, download files, or transmit model paths/metadata.
+- [x] Bound metadata entries, strings, and arrays; reject malformed, truncated, unsupported, or unreasonable structures safely; skip unknown supported metadata.
+- [x] Add regression tests for representative metadata, quantisation labels, malformed headers, unsupported versions, truncation, count limits, unknown fields/arrays, and extension validation.
+- [ ] Validate against a representative real-world GGUF corpus across model architectures, quantisations, and exporter versions.
+- [ ] Expand architecture-specific metadata fields only from verified GGUF specifications and fixtures.
+- [ ] Use measured model/runtime/context profiles to estimate RAM, VRAM, KV cache, and disk staging requirements; do not infer compatibility from metadata alone.
+- [ ] Build runtime-aware compatibility checks and hardware recommendations only after measured benchmark and real-device validation.
+
+The metadata is supplied by the GGUF file and is descriptive, not authoritative. Missing or inaccurate fields remain unavailable or are displayed as reported; this batch does not select models, alter context settings, guarantee compatibility, or perform resource management.

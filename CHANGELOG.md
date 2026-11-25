@@ -3,6 +3,7 @@
 All notable project changes are recorded here. The project is in foundation/prototype development; no application release has been made.
 
 ## 2026-11-25
+- Added explicit, bounded GGUF v2/v3 metadata inspection to the local model library, reporting architecture, model name, file type/known quantisation, parameter count, context and architecture dimensions where present. Inspection is local, read-only, runs off the UI thread, and never loads tensor weights or claims compatibility.
 - Added HIARM matching of the configured GGUF model file to its containing storage volume, showing free-space headroom and explicit unresolved-path states without reading model contents or transmitting the path.
 - Added an on-demand midSunday process-memory snapshot showing resident physical memory and virtual address space, with explicit unavailable states and a privacy boundary that queries no other processes.
 - Added runtime-detected CPU instruction-set inventory for x86/x86-64 (SSE, AVX, AVX2, FMA) and AArch64 NEON, displayed in System & hardware with explicit runtime-compatibility caveats.

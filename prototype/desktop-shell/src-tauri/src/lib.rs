@@ -1,6 +1,7 @@
 mod conversation_store;
 mod companion_settings;
 mod engine_settings;
+mod gguf_metadata;
 mod llama_client;
 mod model_catalog;
 mod llama_process;
@@ -16,6 +17,7 @@ use runtime::{ConversationMessage, GenerationRequest, RuntimeConfig};
 use runtime_manager::{RuntimeManager, RuntimeStatusSnapshot};
 use conversation_store::{AwarenessHistoryEntry, AwarenessItem, AwarenessSettings, AwarenessSuggestion, AwarenessSuppression, ConversationStore, ConversationSummary, ImportResult, MemoryImportResult, MemorySearchPage, SavedMemory, StoredMessage, UserProfile};
 use engine_settings::{EngineSettings, EngineSettingsStore};
+use gguf_metadata::GgufMetadata;
 use companion_settings::{CompanionSettings, CompanionSettingsStore};
 use model_catalog::{LocalModel, ModelCatalog, ModelVerification};
 use tauri::Manager;
@@ -257,6 +259,12 @@ fn save_user_profile(store: State<'_, ConversationStore>, profile: UserProfile) 
 }
 
 #[tauri::command]
+async fn inspect_gguf_metadata(file_path: String) -> Result<GgufMetadata, String> {
+    tauri::async_runtime::spawn_blocking(move || gguf_metadata::inspect(&file_path)).await
+        .map_err(|error| format!("GGUF inspection worker failed: {error}"))?
+}
+
+#[tauri::command]
 fn list_local_models(catalog: State<'_, ModelCatalog>) -> Result<Vec<LocalModel>, String> { catalog.list() }
 
 #[tauri::command]
@@ -481,6 +489,7 @@ pub fn run() {
             get_app_status,
             get_hardware_snapshot,
             list_local_models,
+            inspect_gguf_metadata,
             register_local_model,
             remove_local_model,
             verify_local_model,

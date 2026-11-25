@@ -367,3 +367,14 @@ The hardware refresh accepts the configured GGUF model path and resolves the exi
 No model file contents are read. The full configured path is not copied into the hardware snapshot; only the matched mount point and capacity indicators are returned. Empty, missing, inaccessible, or unmatched paths produce explicit statuses. The check runs only when the user refreshes hardware information.
 
 This is volume identification, not a model-fit calculation. It does not estimate download staging space, model conversion overhead, context/KV cache, runtime allocations, or GPU memory. Real-device validation remains required on Windows, Linux, and macOS.
+
+
+## 22. Bounded GGUF metadata inspection (2026-11-25)
+
+The local model library can explicitly inspect the metadata section of an existing .gguf file. The Rust inspector reads the GGUF v2/v3 header and bounded metadata records, then stops before tensor descriptors and tensor weight payloads. It reports container version, file size, tensor count, metadata-entry count, architecture, embedded model name, GGML file-type code and known description, parameter count, context length, block/layer count, embedding length, and attention-head count when those fields are present.
+
+The implementation uses only Rust standard-library file I/O plus the existing Serde dependency; no third-party parser or runtime dependency is added. It enforces limits on metadata entry counts, string lengths, and array lengths, rejects malformed/truncated/unsupported structures with clear errors, and skips unknown supported scalar/array metadata without loading it into memory. Inspection is performed on a blocking worker and is initiated by the user for an individual catalogue entry.
+
+**Privacy and safety:** inspection is local and read-only. It does not load model weights, copy or modify the GGUF file, start inference, download anything, or transmit the file path or metadata. GGUF metadata is untrusted input and may be missing, incomplete, or inaccurate. The displayed values are descriptive only—not proof of model compatibility, runtime kernel support, safe memory requirements, licence rights, or expected performance. No automatic model selection, context change, or resource allocation is performed.
+
+Regression tests cover representative llama metadata, quantisation labels, unsupported versions, invalid magic, truncated data, excessive metadata counts, unknown string/array fields, and incorrect extensions. Architecture-specific metadata coverage and real-world model corpus validation remain ongoing work.

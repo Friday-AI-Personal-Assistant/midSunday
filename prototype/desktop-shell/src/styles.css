@@ -354,3 +354,12 @@ h1 { margin: 0; color: #eef5ef; font-size: clamp(25px, 3vw, 34px); font-weight: 
 .hardware-model-storage span { color: #9aab9f; font-size: 9px; line-height: 1.5; overflow-wrap: anywhere; }
 .hardware-model-storage-low span:last-child { color: #d9b878; }
 .hardware-model-storage-critical span:last-child { color: #e39a90; }
+
+
+/* Read-only GGUF metadata summary in the local model library. */
+.model-metadata-panel { grid-column: 1 / -1; margin-top: 12px; padding: 14px; border: 1px solid var(--border-subtle, rgba(128,128,128,.25)); border-radius: 12px; background: var(--surface-muted, rgba(128,128,128,.06)); }
+.model-metadata-panel > strong { display: block; margin-bottom: 10px; }
+.model-metadata-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; }
+.model-metadata-grid span { display: flex; flex-direction: column; gap: 4px; color: var(--text-muted, #777); font-size: 12px; }
+.model-metadata-grid span strong { color: var(--text-primary, inherit); font-size: 13px; overflow-wrap: anywhere; }
+.model-metadata-panel > p { margin: 10px 0 0; overflow-wrap: anywhere; }
