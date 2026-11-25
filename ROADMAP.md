@@ -974,7 +974,8 @@ This is a storage/settings foundation only. No password, credential, private mes
 - [x] Add regression tests for individual conversation deletion and clear-all cleanup.
 - [x] Add a user-facing, read-only source-evidence viewer for pending conversation-derived suggestions; it retrieves only the original user-authored message and fails closed if it no longer exists.
 - [x] Add source-evidence viewing to saved conversation-derived Awareness items as well as pending suggestions. The viewer returns only the original user-authored message and fails closed when unavailable.
-- [ ] Add explicit per-evidence controls and source-linked review for saved Awareness items before connecting any broader automatic ingestion.
+- [x] Add an explicit source-linked deletion action for saved conversation-derived Awareness items. The Rust layer verifies the exact item/message relationship and source existence, then atomically deletes only the saved fact, records metadata history, and adds a one-way relearning suppression fingerprint; the original conversation remains unchanged.
+- [x] Keep the saved item's evidence panel read-only for original message content while offering a separate, clearly confirmed action to remove the linked saved fact and block matching relearning.
 - [ ] Add equivalent source lifecycle handling for in-app search evidence when a local search-history store is implemented.
 
 Conversation-derived Awareness must not outlive the conversation messages that support it. Deleting a source conversation now removes its linked learned items and pending suggestions atomically, while preserving unrelated manually entered Awareness items, saved memories, and other conversations. This is a lifecycle safeguard, not an active learning feature; automatic extraction remains disabled and unimplemented.

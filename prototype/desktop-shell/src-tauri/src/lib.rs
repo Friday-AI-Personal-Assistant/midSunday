@@ -188,6 +188,15 @@ fn delete_awareness_item(store: State<'_, ConversationStore>, id: i64) -> Result
 }
 
 #[tauri::command]
+fn delete_awareness_item_for_source(
+    store: State<'_, ConversationStore>,
+    id: i64,
+    source_message_id: i64,
+) -> Result<(), String> {
+    store.delete_awareness_item_for_source(id, source_message_id)
+}
+
+#[tauri::command]
 fn clear_awareness_items(store: State<'_, ConversationStore>) -> Result<usize, String> {
     store.clear_awareness_items()
 }
@@ -488,6 +497,7 @@ pub fn run() {
             create_awareness_item,
             update_awareness_item,
             delete_awareness_item,
+            delete_awareness_item_for_source,
             clear_awareness_items,
             export_awareness_items,
             get_user_profile,

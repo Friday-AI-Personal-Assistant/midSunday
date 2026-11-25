@@ -748,6 +748,48 @@ impl ConversationStore {
         Ok(())
     }
 
+    /// Delete a conversation-derived Awareness item only when the supplied
+    /// source message still matches its stored provenance. The deletion,
+    /// suppression fingerprint, and metadata history are atomic.
+    pub fn delete_awareness_item_for_source(&self, id: i64, source_message_id: i64) -> Result<(), String> {
+        if id <= 0 || source_message_id <= 0 {
+            return Err("Invalid Awareness item or source message identifier.".to_owned());
+        }
+        let connection = self.lock()?;
+        let transaction = connection.unchecked_transaction()
+            .map_err(|error| format!("Could not prepare source-linked Awareness deletion: {error}"))?;
+        let previous: Option<(String, String, String)> = transaction.query_row(
+            "SELECT content, category, source_type FROM awareness_items
+             WHERE id = ?1 AND source_record_id = ?2",
+            params![id, source_message_id],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        ).optional().map_err(|error| format!("Could not verify Awareness evidence link: {error}"))?;
+        let Some((content, category, source_type)) = previous else {
+            return Err("This Awareness item is no longer linked to the selected source evidence. Nothing was deleted.".to_owned());
+        };
+        if source_type != "conversation" {
+            return Err("Only conversation-derived Awareness items can be removed from this evidence view.".to_owned());
+        }
+        let source_exists: bool = transaction.query_row(
+            "SELECT EXISTS(SELECT 1 FROM conversation_messages WHERE id = ?1 AND role = 'user')",
+            params![source_message_id], |row| row.get(0),
+        ).map_err(|error| format!("Could not verify source message: {error}"))?;
+        if !source_exists {
+            return Err("The original source message no longer exists. Nothing was deleted.".to_owned());
+        }
+        insert_awareness_suppression(&transaction, &content, &category, &source_type)?;
+        let changed = transaction.execute(
+            "DELETE FROM awareness_items WHERE id = ?1 AND source_record_id = ?2",
+            params![id, source_message_id],
+        ).map_err(|error| format!("Could not delete source-linked Awareness item: {error}"))?;
+        if changed != 1 {
+            return Err("The Awareness item changed before deletion. Nothing was deleted.".to_owned());
+        }
+        Self::record_awareness_history(&transaction, "deleted", Some(id), Some(&category))?;
+        transaction.commit().map_err(|error| format!("Could not finish source-linked Awareness deletion: {error}"))?;
+        Ok(())
+    }
+
     pub fn clear_awareness_items(&self) -> Result<usize, String> {
         let connection = self.lock()?;
         let transaction = connection.unchecked_transaction()
@@ -2080,6 +2122,33 @@ mod tests {
         assert!(store.list_awareness_suggestions().unwrap().is_empty());
         assert_eq!(store.list_awareness_items().unwrap().len(), 1);
     }
+    #[test]
+    fn source_evidence_can_delete_only_its_linked_awareness_item_and_block_relearning() {
+        let store = store();
+        let conversation = store.create("Evidence-linked deletion").unwrap();
+        store.append(conversation.id, "user", "I enjoy astronomy and stargazing.").unwrap();
+        let source = store.messages(conversation.id).unwrap().remove(0);
+        store.save_awareness_settings(AwarenessSettings {
+            enabled: true,
+            learn_conversations: true,
+            ..AwarenessSettings::default()
+        }).unwrap();
+        let item = store.record_learned_awareness_item(
+            "I enjoy astronomy and stargazing.", "interests", "conversation",
+            Some(source.id), "observed", 0.9,
+        ).unwrap().unwrap();
+
+        assert!(store.delete_awareness_item_for_source(item.id, source.id + 1).is_err());
+        assert_eq!(store.list_awareness_items().unwrap().len(), 1);
+        assert!(!store.is_awareness_suppressed(&item.content).unwrap());
+
+        store.delete_awareness_item_for_source(item.id, source.id).unwrap();
+        assert!(store.list_awareness_items().unwrap().is_empty());
+        assert!(store.is_awareness_suppressed(&item.content).unwrap());
+        let history = store.list_awareness_history().unwrap();
+        assert!(history.iter().any(|entry| entry.event_type == "deleted" && entry.awareness_item_id == Some(item.id)));
+    }
+
     #[test]
     fn awareness_context_is_opt_in_and_returns_only_relevant_items() {
         let store = store();
