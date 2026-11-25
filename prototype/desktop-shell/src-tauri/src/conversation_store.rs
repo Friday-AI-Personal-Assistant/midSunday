@@ -1566,7 +1566,7 @@ mod tests {
         let store = store();
         let connection = store.lock().unwrap();
         connection.execute(
-            "INSERT INTO app_preferences(key, value) VALUES('awareness_settings', ?1)",
+            "UPDATE app_preferences SET value = ?1 WHERE key = 'awareness_settings'",
             params![r#"{"enabled":true,"learnConversations":true,"learnSearches":false}"#],
         ).unwrap();
         drop(connection);

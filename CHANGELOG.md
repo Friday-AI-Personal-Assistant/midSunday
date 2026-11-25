@@ -3,6 +3,7 @@
 All notable project changes are recorded here. The project is in foundation/prototype development; no application release has been made.
 
 ## 2026-11-25
+- Fixed the legacy Awareness-settings regression test to update the migration-created default preference row instead of inserting a duplicate primary key.
 - Added independently switchable local Awareness category exclusions in Settings; exclusions are validated, normalized, persisted backward-compatibly, and enforced in Rust by a guarded automatic-ingestion command. Added regression tests for master/source opt-in, category exclusions, deletion fingerprints, legacy settings, and invalid categories. No automatic extraction or activity collection is active yet.
 - Hardened local Awareness screening for credential labels and token prefixes, email addresses, phone-like numeric sequences, long identifiers, payment details, private-message labels, address labels, and selected identity-document labels. Added Rust regression coverage; automatic learning remains disabled and screening is not comprehensive.
 
