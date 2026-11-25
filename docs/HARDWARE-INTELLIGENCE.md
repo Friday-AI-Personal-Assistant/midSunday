@@ -265,3 +265,31 @@ GPU adapter/VRAM enumeration, DXGI memory budgets, instruction-set feature valid
 Hardware detection must not hard-code one model per RAM tier. It should query a versioned model catalogue containing exact model revision, architecture, quantisation, file size, runtime compatibility, context profile, measured peak system RAM, GPU memory behaviour, quality scores, and licence/provenance records. Recommendations should use measured resource estimates for the selected runtime and context, then compare those estimates with live available RAM and DXGI process budgets.
 
 The preliminary Qwen3.5/Gemma 4 candidate ladder and test buckets are recorded in [PHASE-1-RESEARCH.md](PHASE-1-RESEARCH.md#16-preliminary-local-model-ladder--qwen35-and-gemma-4-candidates-2026-11-24). These are research candidates, not installed models or approved defaults.
+
+
+## 15. First non-binding capability assessment (2026-11-25)
+
+The first assessment layer converts the existing local RAM and CPU inventory into a cautious starting-mode suggestion for Settings. It is deliberately separate from model selection and runtime validation.
+
+### Provisional rules
+
+- Below 6 GiB installed RAM: Constrained / Lightweight.
+- 6 GiB to below 12 GiB: Entry / Lightweight.
+- 12 GiB to below 24 GiB: Balanced / Balanced.
+- 24 GiB to below 48 GiB: High-capacity / High capability, provided at least 8 logical processors are detected; otherwise Balanced.
+- 48 GiB or more: Very high-capacity / High capability, provided at least 8 logical processors are detected; otherwise Balanced.
+- Fewer than 4 logical processors caps the suggestion at Lightweight.
+- Missing RAM or CPU topology yields Undetermined rather than a fabricated recommendation.
+- Current available memory is separately flagged when it falls below the greater of 2 GiB or one-sixth of installed RAM. This is a transient warning, not a permanent hardware tier.
+
+These thresholds are intentionally conservative and provisional. They do not certify that a model, context length, GPU offload, or simultaneous speech workload will run. GPU/VRAM, runtime acceleration, model-specific measured memory, and benchmark results are not part of this first assessment.
+
+### Behaviour and privacy
+
+- The assessment is computed locally from the existing snapshot.
+- It is informational only: no model is selected, no setting is changed, no download occurs, and no process is terminated.
+- The user may continue choosing settings manually.
+- The assessment must be recalculated when the hardware snapshot is refreshed.
+- Do not describe the suggested mode as a guaranteed compatibility result or benchmark-backed recommendation.
+
+This is the first HIARM assessment slice, not the adaptive resource manager. Live monitoring, model catalogue estimates, GPU detection, and workload scheduling remain separate future work.

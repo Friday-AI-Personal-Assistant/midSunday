@@ -675,7 +675,8 @@ The product owner confirmed that midSunday must not be designed only for 4 GB ma
 
 - [x] Record multi-tier hardware direction in the decision log.
 - [x] Expand hardware planning profiles to include 6 GB and 64 GB+.
-- [ ] Define resource-aware Automatic / Lightweight / Balanced / High capability modes.
+- [ ] Define user-selectable resource-aware Automatic / Lightweight / Balanced / High capability modes.
+- [x] Implement a first non-binding capability assessment from installed RAM and CPU topology, including a separate current-memory-pressure warning; keep model compatibility and automatic changes out of scope until GPU/runtime data and benchmarks exist.
 - [ ] Benchmark representative machines across available RAM, CPU, and GPU classes.
 - [ ] Build a model catalogue with measured resource requirements and quality trade-offs.
 - [ ] Verify simultaneous LLM/STT/TTS workloads at each supported profile.
@@ -1160,3 +1161,12 @@ Conversation-derived Awareness must not outlive the conversation messages that s
 - Licensing requests contain no private application content, and the application remains usable with local data intact if the licensing service is unavailable.
 - Free-tier limits, payment fees, email costs, legal terms, refund rules, and support obligations are reviewed before launch.
 
+
+
+### 2026-11-25 — First HIARM capability assessment
+
+- Added a local, non-binding starting-mode assessment using installed RAM and logical CPU count, with conservative Lightweight, Balanced, and High capability suggestions.
+- Added an independent warning for low currently available memory; missing hardware values produce an Undetermined result rather than a guessed tier.
+- Displayed the rationale and limitations in Settings → System & hardware.
+- Kept the assessment informational only: it does not choose or download models, alter settings, start/stop workloads, or claim benchmark-backed compatibility.
+- Added Rust tests for memory/CPU thresholds, low-memory headroom, and incomplete hardware data. GPU/VRAM and real-device validation remain future work.

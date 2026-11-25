@@ -12,6 +12,7 @@ type HardwareSnapshot = {
   cpuModel: string | null; logicalCoreCount: number; physicalCoreCount: number | null;
   totalMemoryBytes: number; availableMemoryBytes: number; disks: HardwareDisk[];
   gpuStatus: string;
+  assessment: { suggestedMode: string; memoryTier: string; rationale: string; currentMemoryPressure: boolean; limitations: string };
 };
 type EngineSettings = { executablePath: string; modelPath: string; contextTokens: number; cpuThreads: number | null };
 type LocalModel = { id: string; displayName: string; filePath: string; sizeBytes: number; sha256: string; source: string; license: string; addedAt: number };
@@ -1262,10 +1263,16 @@ export default function App() {
                   <div className="hardware-card"><small>Processor</small><strong>{hardwareSnapshot.cpuModel ?? "CPU model unavailable"}</strong><span>{hardwareSnapshot.physicalCoreCount === null ? "Physical cores unavailable" : hardwareSnapshot.physicalCoreCount + " physical cores"} · {hardwareSnapshot.logicalCoreCount} logical processors</span></div>
                   <div className="hardware-card"><small>Installed memory</small><strong>{formatModelSize(hardwareSnapshot.totalMemoryBytes)}</strong><span>{formatModelSize(hardwareSnapshot.availableMemoryBytes)} currently available</span></div>
                 </div>
+                <div className="hardware-assessment">
+                  <div className="hardware-assessment-heading"><small>Preliminary capability assessment</small><strong>{hardwareSnapshot.assessment.suggestedMode}</strong><span>{hardwareSnapshot.assessment.memoryTier} · based on installed RAM and CPU core count</span></div>
+                  <p>{hardwareSnapshot.assessment.rationale}</p>
+                  {hardwareSnapshot.assessment.currentMemoryPressure && <p className="hardware-pressure" role="status">Current available memory is low compared with the installed RAM. Close unnecessary applications and refresh before attempting a demanding model workload.</p>}
+                  <small className="hardware-assessment-limit">{hardwareSnapshot.assessment.limitations}</small>
+                </div>
                 <div className="hardware-subsection"><strong>Storage volumes</strong>
                   {hardwareSnapshot.disks.length === 0 ? <p className="settings-footnote">No storage-volume information was available.</p> : hardwareSnapshot.disks.map((disk) => <div className="hardware-disk" key={disk.mountPoint}><span>{disk.mountPoint}</span><span>{formatModelSize(disk.availableBytes)} free of {formatModelSize(disk.totalBytes)}</span></div>)}
                 </div>
-                <div className="hardware-note"><strong>GPU detection:</strong> Not included in this first hardware snapshot. Dedicated GPU/VRAM and Windows DXGI memory-budget detection are planned as the next HIARM step. Hardware detection does not yet recommend a model or change performance settings.</div>
+                <div className="hardware-note"><strong>GPU detection:</strong> Not included yet. Dedicated GPU/VRAM and Windows DXGI memory-budget detection remain planned. This assessment does not select a model, change performance settings, download anything, or guarantee compatibility.</div>
               </>}
               <div className="setting-row"><div><strong>Start with Windows</strong><p>Launch midSunday when you sign in. Not implemented yet.</p></div><button className={startWithWindows ? "toggle on" : "toggle"} role="switch" aria-checked={startWithWindows} onClick={() => setStartWithWindows(!startWithWindows)}><i /></button></div>
             </section>
