@@ -878,6 +878,16 @@ This milestone does not implement automatic memory extraction, memory import/res
 The profile is optional and device-local. midSunday uses the preferred name naturally and sparingly only when the user enables that preference. The memory cap stores up to 100 separate entries (up to 2,000 characters each); the prompt builder currently selects up to 20 recently updated entries within 4 KiB. Memory import/restore and automatic memory extraction remain unimplemented.
 
 
+### 2026-11-25 — Awareness sensitive-data screening hardening
+
+- [x] Expand Rust-side Awareness screening for credential labels, common API-token prefixes, email addresses, phone-like numeric sequences, long numeric identifiers, payment details, private-message labels, home-address labels, and selected identity-document labels.
+- [x] Keep screening in the backend validation path so UI changes cannot bypass it.
+- [x] Add regression coverage for international phone formats, tagged email addresses, API secrets, address labels, identity-document labels, and date-of-birth labels.
+- [x] Keep ordinary harmless Awareness facts accepted and preserve the existing item size/category validation.
+- [ ] Independently evaluate broader multilingual and context-aware sensitive-data detection before any automatic learning is enabled.
+
+This is deliberately conservative screening, not comprehensive detection. It can reject some harmless numeric facts and cannot guarantee detection of every secret, private message, address, or sensitive detail. Automatic learning remains disabled and unimplemented; users should never enter secrets or private information into Awareness.
+
 ### 2026-11-24 — Awareness source provenance and relearning exclusions
 
 - [x] Upgrade the local SQLite database from schema v4 to v5 without changing existing conversations, saved memories, Awareness items, or history.

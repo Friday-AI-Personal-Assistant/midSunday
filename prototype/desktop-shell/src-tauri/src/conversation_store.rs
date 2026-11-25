@@ -898,34 +898,43 @@ fn clean_awareness_content(content: &str) -> Result<String, String> {
 
     let lower = content.to_ascii_lowercase();
     let sensitive_markers = [
-        "password:", "passcode:", "pin code:", "one-time password", "one time password",
-        "verification code:", "authentication code:", "security code:", "otp:",
-        "api key:", "api_key=", "access token:", "refresh token:", "secret key:",
-        "private key:", "seed phrase:", "recovery phrase:", "credit card:", "debit card:",
-        "card number:", "cvv:", "cvc:", "bank account:", "routing number:",
-        "private message:", "direct message:", "dm from ",
+        "password", "passcode", "pin code", "one-time password", "one time password",
+        "verification code", "authentication code", "security code", "otp",
+        "api key", "api_key", "access token", "refresh token", "secret key",
+        "private key", "seed phrase", "recovery phrase", "credit card", "debit card",
+        "card number", "cvv", "cvc", "bank account", "routing number",
+        "private message", "direct message", "dm from ", "home address",
+        "residential address", "mailing address", "my address", "date of birth",
+        "birth date", "national id", "national identity", "passport number",
+        "social security", "driver's license", "driving licence", "medical record",
         "-----begin private key-----", "-----begin rsa private key-----",
     ];
     if sensitive_markers.iter().any(|marker| lower.contains(marker)) {
-        return Err("This looks like a password, private message, payment detail, or other sensitive data. It was not saved.".to_owned());
+        return Err("This looks like a credential, private identifier, payment detail, private message, or other sensitive data. It was not saved.".to_owned());
     }
-    if ["sk-", "ghp_", "github_pat_", "xoxb-", "xoxp-", "bearer "]
-        .iter().any(|marker| lower.contains(marker))
-    {
+
+    let secret_prefixes = [
+        "sk-", "sk_live_", "sk-proj-", "ghp_", "gho_", "github_pat_", "glpat-",
+        "xoxb-", "xoxp-", "xoxa-", "xoxr-", "bearer ", "AIza",
+    ];
+    if secret_prefixes.iter().any(|marker| lower.contains(&marker.to_ascii_lowercase())) {
         return Err("This looks like an authentication token or secret. It was not saved.".to_owned());
     }
+
     for part in content.split_whitespace() {
         let candidate = part.trim_matches(|ch: char| !ch.is_alphanumeric() && ch != '@' && ch != '.' && ch != '_' && ch != '-');
         if let Some((local, domain)) = candidate.split_once('@') {
-            if !local.is_empty() && domain.contains('.') {
+            if !local.is_empty() && domain.contains('.') && !domain.starts_with('.') && !domain.ends_with('.') {
                 return Err("Email addresses are treated as private identifiers and are not saved in Awareness.".to_owned());
             }
         }
+
+        let digits = part.chars().filter(|ch| ch.is_ascii_digit()).count();
+        if (7..=19).contains(&digits) {
+            return Err("This may contain a phone number, payment-card number, or other numeric identifier. It was not saved.".to_owned());
+        }
     }
-    let digit_count = content.chars().filter(|ch| ch.is_ascii_digit()).count();
-    if (13..=19).contains(&digit_count) {
-        return Err("This may contain a payment-card or other long numeric identifier. It was not saved.".to_owned());
-    }
+
     Ok(content.to_owned())
 }
 
@@ -990,6 +999,12 @@ mod tests {
         assert!(store.create_awareness_item("My email is person@example.com", "other").is_err());
         assert!(store.create_awareness_item("My card is 4111 1111 1111 1111", "other").is_err());
         assert!(store.create_awareness_item("Token: ghp_abcdefghijklmnopqrstuvwxyz", "other").is_err());
+        assert!(store.create_awareness_item("My phone number is +92 300 1234567", "other").is_err());
+        assert!(store.create_awareness_item("Contact me at person.name+tag@example.co.uk", "other").is_err());
+        assert!(store.create_awareness_item("API_KEY=sk_live_example_secret", "other").is_err());
+        assert!(store.create_awareness_item("My home address: 12 Example Road", "other").is_err());
+        assert!(store.create_awareness_item("Passport number: AB1234567", "other").is_err());
+        assert!(store.create_awareness_item("My date of birth is 1990-01-01", "other").is_err());
         assert!(store.create_awareness_item("A harmless fact", "unknown").is_err());
 
         let export: serde_json::Value = serde_json::from_str(&store.export_awareness_items().unwrap()).unwrap();

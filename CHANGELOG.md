@@ -2,6 +2,9 @@
 
 All notable project changes are recorded here. The project is in foundation/prototype development; no application release has been made.
 
+## 2026-11-25
+- Hardened local Awareness screening for credential labels and token prefixes, email addresses, phone-like numeric sequences, long identifiers, payment details, private-message labels, address labels, and selected identity-document labels. Added Rust regression coverage; automatic learning remains disabled and screening is not comprehensive.
+
 ## 2026-11-24
 - Added local Awareness relearning exclusions: deleted, replaced, and cleared item text is represented only by a SHA-256 fingerprint plus source/category/timestamp metadata; future ingestion can check exclusions before learning.
 - Added source-record provenance to Awareness items, an exclusions review/clear control, and regression tests for normalized matching, deliberate re-entry, and no raw deleted text in the exclusion table.
