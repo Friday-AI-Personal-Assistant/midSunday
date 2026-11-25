@@ -866,9 +866,6 @@ impl ConversationStore {
     pub fn create_memory(&self, content: &str) -> Result<SavedMemory, String> {
         let content = clean_memory(content)?;
         let connection = self.lock()?;
-        let count: i64 = connection.query_row("SELECT COUNT(*) FROM saved_memories", [], |row| row.get(0))
-            .map_err(|error| error.to_string())?;
-        if count >= 100 { return Err("You can save up to 100 memories.".to_owned()); }
         let now = unix_time();
         connection.execute(
             "INSERT INTO saved_memories(content, created_at, updated_at) VALUES(?1, ?2, ?2)",
@@ -2212,6 +2209,18 @@ mod tests {
         assert!(loaded.learn_conversations);
         assert!(!loaded.use_in_chat);
         assert!(loaded.excluded_categories.is_empty());
+    }
+
+    #[test]
+    fn saved_memories_are_not_limited_to_one_hundred_entries() {
+        let store = store();
+        for index in 0..125 {
+            let content = format!("User-approved memory number {index}.");
+            store.create_memory(&content).unwrap();
+        }
+        let memories = store.list_memories().unwrap();
+        assert_eq!(memories.len(), 125);
+        assert!(memories.iter().any(|memory| memory.content == "User-approved memory number 124."));
     }
 
 }
