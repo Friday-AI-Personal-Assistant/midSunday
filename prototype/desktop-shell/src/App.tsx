@@ -6,6 +6,13 @@ type BackendState = "checking" | "connected" | "error";
 type Section = "chat" | "characters" | "settings";
 type Message = { id: number; role: "user" | "assistant" | "system"; text: string };
 type RuntimeStatusSnapshot = { status: string; detail: string | null };
+type HardwareDisk = { mountPoint: string; totalBytes: number; availableBytes: number };
+type HardwareSnapshot = {
+  osName: string | null; osVersion: string | null; architecture: string;
+  cpuModel: string | null; logicalCoreCount: number; physicalCoreCount: number | null;
+  totalMemoryBytes: number; availableMemoryBytes: number; disks: HardwareDisk[];
+  gpuStatus: string;
+};
 type EngineSettings = { executablePath: string; modelPath: string; contextTokens: number; cpuThreads: number | null };
 type LocalModel = { id: string; displayName: string; filePath: string; sizeBytes: number; sha256: string; source: string; license: string; addedAt: number };
 type ModelVerification = { valid: boolean; status: string; detail: string };
@@ -146,6 +153,9 @@ export default function App() {
   const [runtimeStatus, setRuntimeStatus] = useState<RuntimeStatusSnapshot>({ status: "notInstalled", detail: null });
   const [runtimeBusy, setRuntimeBusy] = useState(false);
   const [runtimeError, setRuntimeError] = useState("");
+  const [hardwareSnapshot, setHardwareSnapshot] = useState<HardwareSnapshot | null>(null);
+  const [hardwareBusy, setHardwareBusy] = useState(false);
+  const [hardwareError, setHardwareError] = useState("");
   const [executablePath, setExecutablePath] = useState("");
   const [modelPath, setModelPath] = useState("");
   const [contextTokens, setContextTokens] = useState("2048");
@@ -232,6 +242,9 @@ export default function App() {
         setCpuThreads(settings.cpuThreads === null ? "" : String(settings.cpuThreads));
       })
       .catch(() => { if (active) setRuntimeError("Could not load saved local engine settings."); });
+    invoke<HardwareSnapshot>("get_hardware_snapshot")
+      .then((snapshot) => { if (active) { setHardwareSnapshot(snapshot); setHardwareError(""); } })
+      .catch((error) => { if (active) setHardwareError("Hardware information is unavailable: " + String(error)); });
     refreshRuntimeStatus();
     const statusTimer = window.setInterval(refreshRuntimeStatus, 1500);
     return () => { active = false; window.clearInterval(statusTimer); };
@@ -982,6 +995,19 @@ export default function App() {
     return `${bytes.toLocaleString()} bytes`;
   }
 
+  async function refreshHardwareSnapshot() {
+    setHardwareBusy(true);
+    setHardwareError("");
+    try {
+      const snapshot = await invoke<HardwareSnapshot>("get_hardware_snapshot");
+      setHardwareSnapshot(snapshot);
+    } catch (error) {
+      setHardwareError("Hardware information is unavailable: " + String(error));
+    } finally {
+      setHardwareBusy(false);
+    }
+  }
+
   async function startLocalRuntime() {
     if (!executablePath.trim() || !modelPath.trim()) {
       setRuntimeError("Enter both the llama-server executable path and the GGUF model path.");
@@ -1226,8 +1252,21 @@ export default function App() {
               </div>
               <div className="setting-row"><div><strong>Cloud connection</strong><p>Cloud features are not connected or enabled. Memories stay on this device and are sent only to the configured local model when enabled.</p></div><span className="locked-label">OFF</span></div>
             </section>
-            <section className="settings-section"><div className="settings-section-title"><div><h2>System</h2><p>Hardware detection and resource controls are planned.</p></div><span className="settings-symbol">⌘</span></div>
-              <div className="setting-row"><div><strong>Hardware profile</strong><p>CPU, RAM, GPU and storage information will appear here.</p></div><span className="pending-label">Not detected</span></div>
+            <section className="settings-section">
+              <div className="settings-section-title"><div><h2>System & hardware</h2><p>A local snapshot helps midSunday understand this computer. It is collected only on this device.</p></div><span className="settings-symbol">⌘</span></div>
+              <div className="hardware-actions"><button className="secondary-action" type="button" onClick={() => void refreshHardwareSnapshot()} disabled={hardwareBusy}>{hardwareBusy ? "Checking…" : "Refresh hardware information"}</button><span>{hardwareSnapshot ? "Last checked during this session" : "Not checked yet"}</span></div>
+              {hardwareError && <p className="hardware-error">{hardwareError}</p>}
+              {hardwareSnapshot && <>
+                <div className="hardware-grid">
+                  <div className="hardware-card"><small>Operating system</small><strong>{hardwareSnapshot.osName ?? "Unknown OS"}</strong><span>{hardwareSnapshot.osVersion ?? "Version unavailable"} · {hardwareSnapshot.architecture}</span></div>
+                  <div className="hardware-card"><small>Processor</small><strong>{hardwareSnapshot.cpuModel ?? "CPU model unavailable"}</strong><span>{hardwareSnapshot.physicalCoreCount === null ? "Physical cores unavailable" : hardwareSnapshot.physicalCoreCount + " physical cores"} · {hardwareSnapshot.logicalCoreCount} logical processors</span></div>
+                  <div className="hardware-card"><small>Installed memory</small><strong>{formatModelSize(hardwareSnapshot.totalMemoryBytes)}</strong><span>{formatModelSize(hardwareSnapshot.availableMemoryBytes)} currently available</span></div>
+                </div>
+                <div className="hardware-subsection"><strong>Storage volumes</strong>
+                  {hardwareSnapshot.disks.length === 0 ? <p className="settings-footnote">No storage-volume information was available.</p> : hardwareSnapshot.disks.map((disk) => <div className="hardware-disk" key={disk.mountPoint}><span>{disk.mountPoint}</span><span>{formatModelSize(disk.availableBytes)} free of {formatModelSize(disk.totalBytes)}</span></div>)}
+                </div>
+                <div className="hardware-note"><strong>GPU detection:</strong> Not included in this first hardware snapshot. Dedicated GPU/VRAM and Windows DXGI memory-budget detection are planned as the next HIARM step. Hardware detection does not yet recommend a model or change performance settings.</div>
+              </>}
               <div className="setting-row"><div><strong>Start with Windows</strong><p>Launch midSunday when you sign in. Not implemented yet.</p></div><button className={startWithWindows ? "toggle on" : "toggle"} role="switch" aria-checked={startWithWindows} onClick={() => setStartWithWindows(!startWithWindows)}><i /></button></div>
             </section>
             <div className="settings-footnote">Local memory is stored separately from conversation history. Clearing chats does not delete memories; use the memory controls above to manage them.</div>
@@ -1236,7 +1275,7 @@ export default function App() {
 
         <footer className="statusbar">
           <div className="core-status"><span className={backendState === "connected" ? "core-dot good" : backendState === "error" ? "core-dot bad" : "core-dot"} />{statusLabel}</div>
-          <div className="statusbar-right"><span>AI engine <b>{runtimeStatus.status === "ready" ? "Ready" : runtimeStatus.status}</b></span><span>Hardware <b>Not detected</b></span><span className="status-detail" title={backendMessage}>Rust foundation</span></div>
+          <div className="statusbar-right"><span>AI engine <b>{runtimeStatus.status === "ready" ? "Ready" : runtimeStatus.status}</b></span><span>Hardware <b>{hardwareSnapshot ? "Detected" : "Unavailable"}</b></span><span className="status-detail" title={backendMessage}>Rust foundation</span></div>
         </footer>
       </section>
     </main>

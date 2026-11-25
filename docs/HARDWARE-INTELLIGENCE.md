@@ -1,6 +1,6 @@
 # midSunday — Hardware Intelligence & Adaptive Resource Manager
 
-**Status:** Proposed architecture requirement; not implemented or benchmarked.  
+**Status:** First cross-platform CPU/RAM/storage inventory prototype implemented; GPU/DXGI detection and adaptive recommendations remain unimplemented and unbenchmarked.  
 **Priority:** Phase 1 research and architecture design.  
 **Reference project:** OpenJarvis (studied 2026-11-23).
 
@@ -252,7 +252,15 @@ Rust libraries:
 
 **Conclusion:** A credible Windows-first detector appears feasible with standard OS APIs and a small number of Rust bindings. The strongest initial direction is `sysinfo` for the cross-platform baseline plus Microsoft's `windows` crate for precise Windows-specific functions. This remains a research recommendation, not a final dependency approval.
 
-## 13. Model catalogue connection
+## 13. First inventory prototype (2026-11-25)
+
+The first HIARM code slice uses the cross-platform `sysinfo` 0.37 crate to collect a one-time local snapshot of OS name/version, process architecture, CPU brand, logical and physical core counts where available, total/available RAM, and storage-volume total/free capacity.
+
+The detector deliberately avoids process enumeration, host names, network interfaces, device serial numbers, and user-file inspection. It runs on demand and in a blocking worker so hardware enumeration does not block the UI. The Settings → System & hardware panel shows the result and allows manual refresh.
+
+GPU adapter/VRAM enumeration, DXGI memory budgets, instruction-set feature validation, live resource monitoring, model recommendations, and workload scheduling are not implemented in this slice. An unavailable field must remain explicitly unavailable; it must never be guessed from RAM or CPU marketing names.
+
+## 14. Model catalogue connection
 
 Hardware detection must not hard-code one model per RAM tier. It should query a versioned model catalogue containing exact model revision, architecture, quantisation, file size, runtime compatibility, context profile, measured peak system RAM, GPU memory behaviour, quality scores, and licence/provenance records. Recommendations should use measured resource estimates for the selected runtime and context, then compare those estimates with live available RAM and DXGI process budgets.
 

@@ -7,8 +7,10 @@ mod llama_process;
 mod llama_runtime;
 mod runtime;
 mod runtime_manager;
+mod system_info;
 
 use tauri::{ipc::Channel, State};
+use system_info::HardwareSnapshot;
 use serde::Deserialize;
 use runtime::{ConversationMessage, GenerationRequest, RuntimeConfig};
 use runtime_manager::{RuntimeManager, RuntimeStatusSnapshot};
@@ -276,6 +278,13 @@ fn get_app_status() -> &'static str {
 }
 
 #[tauri::command]
+async fn get_hardware_snapshot() -> Result<HardwareSnapshot, String> {
+    tauri::async_runtime::spawn_blocking(system_info::collect_hardware_snapshot)
+        .await
+        .map_err(|_| "The local hardware detection worker could not complete.".to_owned())
+}
+
+#[tauri::command]
 fn get_engine_settings(settings: State<'_, EngineSettingsStore>) -> Result<EngineSettings, String> {
     settings.get()
 }
@@ -470,6 +479,7 @@ pub fn run() {
         .manage(RuntimeManager::default())
         .invoke_handler(tauri::generate_handler![
             get_app_status,
+            get_hardware_snapshot,
             list_local_models,
             register_local_model,
             remove_local_model,

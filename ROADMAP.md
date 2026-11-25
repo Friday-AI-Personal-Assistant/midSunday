@@ -138,7 +138,8 @@ Release numbers are planning labels, not promises or dates. A stage is not compl
 - [ ] Define supported Windows versions and CPU architecture.
 - [ ] Identify any GPU requirements and ensure a CPU fallback where possible.
 - [x] Complete initial desk research mapping Windows hardware APIs and Rust-library candidates for the Hardware Intelligence & Adaptive Resource Manager.
-- [ ] Prototype and validate Windows detection for CPU topology, installed/available RAM, all GPU adapters, DXGI memory budgets, and model-library disk space.
+- [x] Implement the first cross-platform local inventory snapshot for OS/version/architecture, CPU brand and core counts, installed/available RAM, and storage-volume capacity; expose manual refresh in Settings.
+- [ ] Add Windows-specific GPU adapter/VRAM and DXGI memory-budget detection, instruction-set validation, and real-device validation of the baseline detector.
 - [ ] Research and design the adaptive resource manager's model recommendations and safe workload scheduling.
 - [x] Compare OpenJarvis hardware auto-detection/recommendation with the proposed midSunday design; do not assume its setup-time heuristic is sufficient for runtime adaptation.
 - [ ] Review all candidate licences, model cards, voice licences, and redistribution terms.
@@ -147,6 +148,13 @@ Release numbers are planning labels, not promises or dates. A stage is not compl
 **Exit gate:** The stack and default model/voice choices are selected based on repeatable tests, documented licences, and realistic hardware profiles. Unverified claims remain clearly labelled as targets.
 
 **Benchmark protocol status (2026-11-24):** The repeatable protocol is documented in [BENCHMARK-PROTOCOL.md](docs/BENCHMARK-PROTOCOL.md), and a synthetic text seed set is drafted in [BENCHMARK-DATASET-V1.md](docs/BENCHMARK-DATASET-V1.md). Fluent Urdu review, speech audio sets, holdout cases, and dataset freeze remain pending; no benchmark has been executed.
+
+### 2026-11-25 — First local hardware inventory prototype
+
+- Added a read-only, on-demand hardware snapshot for OS/version/architecture, CPU model and core counts, installed/available RAM, and storage-volume total/free capacity.
+- Added a Settings → System & hardware panel with manual refresh and clear disclosure that GPU detection and adaptive recommendations are not included yet.
+- Kept hardware inspection local; the snapshot excludes process lists, host names, network interfaces, serial numbers, and user-file contents.
+- Added Rust serialization/privacy regression tests and moved hardware enumeration to a blocking worker so it does not freeze the interface.
 
 ## Phase 2 — UX, visual identity, and interaction design
 
