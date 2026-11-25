@@ -155,6 +155,8 @@ export default function App() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [importBusy, setImportBusy] = useState(false);
   const importFileRef = useRef<HTMLInputElement>(null);
+  const [memoryImportBusy, setMemoryImportBusy] = useState(false);
+  const memoryImportFileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     let active = true;
@@ -642,9 +644,33 @@ export default function App() {
       anchor.click();
       anchor.remove();
       URL.revokeObjectURL(url);
-      setMemoryNotice("Memory backup exported.");
+      setMemoryNotice("Memory export saved. This JSON file is not password-encrypted.");
     } catch (error) {
       setMemoryNotice("Could not export memories: " + String(error));
+    }
+  }
+
+  async function importSavedMemories(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file || memoryImportBusy) return;
+    if (file.size > 20 * 1024 * 1024) {
+      setMemoryNotice("That memory file is larger than the 20 MB import limit.");
+      return;
+    }
+    if (!window.confirm("Import these saved memories into this device? Existing memories will never be overwritten. Exact duplicates will be skipped. This JSON import is not encrypted; only open files you trust.")) return;
+    setMemoryImportBusy(true);
+    setMemoryNotice("");
+    try {
+      const json = await file.text();
+      const result = await invoke<{ imported: number; skippedDuplicates: number }>("import_saved_memories", { json });
+      setMemories(await invoke<SavedMemory[]>("list_saved_memories"));
+      setEditingMemoryId(null);
+      setMemoryNotice(`Import complete: ${result.imported} added, ${result.skippedDuplicates} exact duplicates skipped. Existing memories were not overwritten.`);
+    } catch (error) {
+      setMemoryNotice("Could not import memories: " + String(error));
+    } finally {
+      setMemoryImportBusy(false);
     }
   }
 
@@ -1157,7 +1183,8 @@ export default function App() {
                 <button className="primary-action" type="button" onClick={() => void addMemory()} disabled={memoryBusy || !memoryDraft.trim()}>{memoryBusy ? "Saving…" : "Save memory"}</button>
                 <p className="settings-footnote">There is no arbitrary 100-entry cap. Saved memories remain on this device until you edit or delete them. Available disk space still limits how much can be stored; midSunday will not silently discard older entries.</p>
                 <p className="settings-footnote">The separate 20-entry / 4 KiB limit controls how much saved memory can be included in one local model prompt when memory is enabled. Other entries remain saved locally and are not automatically erased.</p>
-                <div className="memory-list-heading"><strong>Saved memory entries ({memories.length})</strong><div><button className="secondary-action" type="button" onClick={() => void exportSavedMemories()} disabled={memories.length === 0}>Export JSON</button><button className="danger-action" type="button" onClick={() => void clearSavedMemories()} disabled={memoryBusy || memories.length === 0}>Clear all</button></div></div>
+                <div className="memory-list-heading"><strong>Saved memory entries ({memories.length})</strong><div><input ref={memoryImportFileRef} className="visually-hidden-file" type="file" accept=".json,application/json" onChange={(event) => void importSavedMemories(event)} /><button className="secondary-action" type="button" onClick={() => memoryImportFileRef.current?.click()} disabled={memoryImportBusy}>{memoryImportBusy ? "Importing…" : "Import JSON"}</button><button className="secondary-action" type="button" onClick={() => void exportSavedMemories()} disabled={memories.length === 0}>Export JSON</button><button className="danger-action" type="button" onClick={() => void clearSavedMemories()} disabled={memoryBusy || memories.length === 0}>Clear all</button></div></div>
+                <p className="settings-footnote">Memory JSON import/export is a portable convenience format, not the planned password-protected encrypted Backup & Restore system. Keep exported files somewhere secure.</p>
                 {memories.length === 0 ? <p className="settings-footnote">No saved memories yet. Add only details you want midSunday to remember. You can edit or delete each entry later.</p> : memories.map((memory) => <div className="memory-item" key={memory.id}>{editingMemoryId === memory.id ? <div className="memory-edit"><textarea value={editingMemoryDraft} onChange={(event) => setEditingMemoryDraft(event.target.value)} maxLength={2000} rows={3} /><div><button className="primary-action" type="button" onClick={() => void saveMemoryEdit()} disabled={memoryBusy || !editingMemoryDraft.trim()}>Save changes</button><button className="secondary-action" type="button" onClick={() => setEditingMemoryId(null)}>Cancel</button></div></div> : <><p>{memory.content}</p><div><button className="secondary-action" type="button" onClick={() => { setEditingMemoryId(memory.id); setEditingMemoryDraft(memory.content); }}>Edit</button><button className="danger-action" type="button" onClick={() => void deleteMemory(memory)} disabled={memoryBusy}>Delete</button></div></>}</div>)}
                 {memoryNotice && <p className="memory-notice" role="status">{memoryNotice}</p>}
               </div>

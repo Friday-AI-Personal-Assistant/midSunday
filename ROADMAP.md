@@ -223,13 +223,13 @@ Release numbers are planning labels, not promises or dates. A stage is not compl
 - [x] Define the distinction between chat history, explicit saved facts, and inferred memory: this milestone stores only facts the user explicitly enters; automatic inference is not implemented.
 - [x] Design and migrate the local SQLite memory schema (database schema version 2).
 - [x] Implement SQLite storage for saved memories and the persisted memory-enabled preference.
-- [x] Implement explicit user-approved memory creation and editing rules with 2,000-character / 4 KiB per-item limits and a 100-item cap.
+- [x] Implement explicit user-approved memory creation and editing rules with 2,000-character / 4 KiB per-item limits. A temporary 100-item cap was later removed.
 - [x] Let users inspect, correct, and delete individual memories, or clear all memories separately.
 - [x] Let users disable memory; it is disabled by default and remains stored but is excluded from prompts while disabled.
 - [x] Keep conversation-history deletion independent from saved memory deletion.
 - [x] Export saved memories as a separate versioned JSON file.
 - [x] Add conversation-history export (versioned JSON); full database backup and restore remain pending.
-- [ ] Add restore/import for memory backups and full database restore tests.
+- [x] Add validated, version-1 saved-memory JSON import with transactional merge, exact-duplicate skipping, no overwrites, and regression tests. This is a convenience import, not encrypted Backup & Restore; full database restore tests remain pending.
 - [ ] Define retention and cleanup behaviour.
 - [ ] Keep memory local by default.
 - [ ] Require explicit consent before any cloud provider receives memory or chat context.
@@ -255,7 +255,7 @@ Release numbers are planning labels, not promises or dates. A stage is not compl
 - [x] Add independently switchable Awareness category exclusions, enforced in Rust at the guarded automatic-ingestion boundary; manual user-entered items remain an explicit user action.
 - [ ] Avoid automatically inferring or retaining sensitive personal attributes beyond user-approved, non-excluded categories; when in doubt, do not learn it.
 - [ ] Keep all Awareness data on-device by default. No background upload, telemetry of personal content, cloud memory, or external model transfer; any future cloud use requires separate informed consent and a clear data-transfer explanation.
-- [ ] Provide user-controlled export, backup/restore, deletion, and retention settings. Deletion must cover source evidence and derived awareness where applicable, including safeguards against accidental re-learning.
+- [ ] Provide user-controlled export, backup/restore, deletion, and retention settings. Saved-memory JSON export/import is implemented as a convenience merge; the unified encrypted Backup & Restore remains planned. Deletion must cover source evidence and derived awareness where applicable, including safeguards against accidental re-learning.
 - [ ] Build a unified **Backup & Restore** feature for user-selected personal data, while keeping all data local by default and making cloud backup entirely optional.
 - [ ] Support two clearly labelled backup formats: (a) a simple, portable local backup with a prominent warning that it is not protected by a separate backup password and should be stored securely; (b) a password-protected, authenticated-encryption backup that is encrypted on-device before it is written or uploaded.
 - [ ] Make password-protected encrypted backup the recommended/default choice in the Backup & Restore experience, while keeping simple unencrypted backup available as an explicitly chosen convenience option with a clear security warning.

@@ -97,6 +97,30 @@ struct MemoryExportFile {
     memories: Vec<SavedMemory>,
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct MemoryImportFile {
+    format: String,
+    format_version: u32,
+    memories: Vec<MemoryImportEntry>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct MemoryImportEntry {
+    id: i64,
+    content: String,
+    created_at: i64,
+    updated_at: i64,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct MemoryImportResult {
+    pub imported: usize,
+    pub skipped_duplicates: usize,
+}
+
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct ConversationSummary {
@@ -967,6 +991,60 @@ impl ConversationStore {
             .map_err(|error| format!("Could not create memory export: {error}"))
     }
 
+    pub fn import_memories(&self, json: &str) -> Result<MemoryImportResult, String> {
+        const MAX_IMPORT_BYTES: usize = 20 * 1024 * 1024;
+        const MAX_MEMORIES: usize = 100_000;
+        if json.len() > MAX_IMPORT_BYTES {
+            return Err("The memory file is larger than the 20 MB import limit.".to_owned());
+        }
+        let parsed: MemoryImportFile = serde_json::from_str(json)
+            .map_err(|error| format!("This is not a valid midSunday memory export: {error}"))?;
+        if parsed.format != "midSunday-memory-export" || parsed.format_version != 1 {
+            return Err("This memory export format or version is not supported. Nothing was imported.".to_owned());
+        }
+        if parsed.memories.len() > MAX_MEMORIES {
+            return Err("This file contains too many memories (maximum 100,000).".to_owned());
+        }
+
+        let mut seen_ids = std::collections::HashSet::new();
+        let mut seen_content = std::collections::HashSet::new();
+        let mut validated = Vec::with_capacity(parsed.memories.len());
+        for item in parsed.memories {
+            if item.id <= 0 || !seen_ids.insert(item.id)
+                || item.created_at < 0 || item.updated_at < item.created_at
+            {
+                return Err("The memory file contains an invalid or repeated identifier or timestamp. Nothing was imported.".to_owned());
+            }
+            let content = clean_memory(&item.content)?;
+            if !seen_content.insert(content.clone()) {
+                continue;
+            }
+            validated.push((content, item.created_at, item.updated_at));
+        }
+
+        let mut connection = self.lock()?;
+        let transaction = connection.transaction()
+            .map_err(|error| format!("Could not begin memory import: {error}"))?;
+        let mut result = MemoryImportResult { imported: 0, skipped_duplicates: 0 };
+        for (content, created_at, updated_at) in validated {
+            let exists: bool = transaction.query_row(
+                "SELECT EXISTS(SELECT 1 FROM saved_memories WHERE content = ?1)",
+                params![content], |row| row.get(0),
+            ).map_err(|error| format!("Could not check for an existing memory: {error}"))?;
+            if exists {
+                result.skipped_duplicates += 1;
+                continue;
+            }
+            transaction.execute(
+                "INSERT INTO saved_memories(content, created_at, updated_at) VALUES(?1, ?2, ?3)",
+                params![content, created_at, updated_at],
+            ).map_err(|error| format!("Could not import saved memory: {error}"))?;
+            result.imported += 1;
+        }
+        transaction.commit().map_err(|error| format!("Could not finish memory import: {error}"))?;
+        Ok(result)
+    }
+
     pub fn create(&self, title: &str) -> Result<ConversationSummary, String> {
         let title = clean_title(title)?;
         let now = unix_time();
@@ -1683,6 +1761,61 @@ mod tests {
         assert!(store.memory_enabled().unwrap());
         assert!(!store.set_memory_enabled(false).unwrap());
         assert!(!store.memory_enabled().unwrap());
+    }
+
+    #[test]
+    fn imports_memory_export_without_overwriting_and_skips_exact_duplicates() {
+        let source = store();
+        source.create_memory("Remember my preferred language").unwrap();
+        source.create_memory("I enjoy science fiction").unwrap();
+        let backup = source.export_memories().unwrap();
+
+        let destination = store();
+        destination.create_memory("Existing local fact").unwrap();
+        let first = destination.import_memories(&backup).unwrap();
+        assert_eq!(first.imported, 2);
+        assert_eq!(first.skipped_duplicates, 0);
+        let second = destination.import_memories(&backup).unwrap();
+        assert_eq!(second.imported, 0);
+        assert_eq!(second.skipped_duplicates, 2);
+        let memories = destination.list_memories().unwrap();
+        assert_eq!(memories.len(), 3);
+        assert!(memories.iter().any(|item| item.content == "Existing local fact"));
+    }
+
+    #[test]
+    fn rejects_invalid_memory_export_without_partial_import() {
+        let destination = store();
+        let backup = serde_json::json!({
+            "format": "midSunday-memory-export",
+            "formatVersion": 1,
+            "exportedAt": 1,
+            "memories": [
+                {"id": 1, "content": "A valid fact", "createdAt": 1, "updatedAt": 1},
+                {"id": 2, "content": "   ", "createdAt": 1, "updatedAt": 1}
+            ]
+        }).to_string();
+        assert!(destination.import_memories(&backup).is_err());
+        assert!(destination.list_memories().unwrap().is_empty());
+    }
+
+    #[test]
+    fn rejects_unsupported_memory_export_versions_and_repeated_ids() {
+        let destination = store();
+        let unsupported = serde_json::json!({
+            "format": "midSunday-memory-export", "formatVersion": 2,
+            "memories": []
+        }).to_string();
+        assert!(destination.import_memories(&unsupported).is_err());
+        let repeated = serde_json::json!({
+            "format": "midSunday-memory-export", "formatVersion": 1,
+            "memories": [
+                {"id": 1, "content": "One", "createdAt": 1, "updatedAt": 1},
+                {"id": 1, "content": "Two", "createdAt": 2, "updatedAt": 2}
+            ]
+        }).to_string();
+        assert!(destination.import_memories(&repeated).is_err());
+        assert!(destination.list_memories().unwrap().is_empty());
     }
 
     #[test]
