@@ -921,6 +921,11 @@ fn clean_awareness_content(content: &str) -> Result<String, String> {
         return Err("This looks like an authentication token or secret. It was not saved.".to_owned());
     }
 
+    let total_digits = content.chars().filter(|ch| ch.is_ascii_digit()).count();
+    if (13..=19).contains(&total_digits) {
+        return Err("This may contain a payment-card or other long numeric identifier. It was not saved.".to_owned());
+    }
+
     for part in content.split_whitespace() {
         let candidate = part.trim_matches(|ch: char| !ch.is_alphanumeric() && ch != '@' && ch != '.' && ch != '_' && ch != '-');
         if let Some((local, domain)) = candidate.split_once('@') {
