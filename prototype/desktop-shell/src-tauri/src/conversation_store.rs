@@ -2100,7 +2100,7 @@ mod tests {
         assert_eq!(store.messages(1).unwrap()[0].content, "Keep this");
         let version: i64 = store.lock().unwrap()
             .pragma_query_value(None, "user_version", |row| row.get(0)).unwrap();
-        assert_eq!(version, 7);
+        assert_eq!(version, 8);
         assert!(!store.memory_enabled().unwrap());
         assert_eq!(store.get_awareness_settings().unwrap(), AwarenessSettings::default());
         assert!(store.list_memories().unwrap().is_empty());
