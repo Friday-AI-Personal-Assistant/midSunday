@@ -953,3 +953,12 @@ This is a storage/settings foundation only. No password, credential, private mes
 - [ ] Add equivalent source lifecycle handling for in-app search evidence when a local search-history store is implemented.
 
 Conversation-derived Awareness must not outlive the conversation messages that support it. Deleting a source conversation now removes its linked learned items and pending suggestions atomically, while preserving unrelated manually entered Awareness items, saved memories, and other conversations. This is a lifecycle safeguard, not an active learning feature; automatic extraction remains disabled and unimplemented.
+
+
+## Awareness learning safety and review integrity
+- Conversation-derived Awareness candidates and learned items must reference a real, existing local message ID; reject missing, stale, or fabricated source references.
+- Suggestion approval must be one atomic SQLite transaction: recheck source existence, master/source/category settings, sensitive-data screening and suppression; insert the permanent item and metadata history; remove the pending suggestion only when every step succeeds.
+- Suggestion rejection must atomically record a one-way suppression fingerprint and remove the pending suggestion.
+- Failed review actions must leave the pending queue and permanent Awareness state consistent.
+- Manual user-entered Awareness remains independent of conversation source references and automatic-learning switches.
+- Automatic extraction remains inactive until separately implemented and explicitly opted in.

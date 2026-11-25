@@ -3,6 +3,7 @@
 All notable project changes are recorded here. The project is in foundation/prototype development; no application release has been made.
 
 ## 2026-11-25
+- Hardened Awareness provenance and review actions: conversation-derived entries require an existing source message; approval and rejection use atomic transactions; settings and suppression are rechecked at approval. Added regression coverage for missing/deleted sources and failed approvals.
 - Corrected the legacy unversioned-database migration test to expect schema version 7 after the source-lifecycle migration; the migration itself and data-preservation assertions were already passing.
 - Added Awareness source-lifecycle integrity: deleting one conversation or clearing all conversations now atomically removes its linked learned Awareness items and pending suggestions, records metadata-only deletion history, and preserves unrelated manual Awareness, saved memories, and other chats. Added schema-v7 provenance indexes and regression tests.
 - Corrected the legacy unversioned-database migration test to expect schema version 6 after the new Awareness review-queue migration; all original conversation data assertions remain unchanged.
