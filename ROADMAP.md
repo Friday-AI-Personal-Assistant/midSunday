@@ -256,6 +256,19 @@ Release numbers are planning labels, not promises or dates. A stage is not compl
 - [ ] Avoid automatically inferring or retaining sensitive personal attributes beyond user-approved, non-excluded categories; when in doubt, do not learn it.
 - [ ] Keep all Awareness data on-device by default. No background upload, telemetry of personal content, cloud memory, or external model transfer; any future cloud use requires separate informed consent and a clear data-transfer explanation.
 - [ ] Provide user-controlled export, backup/restore, deletion, and retention settings. Deletion must cover source evidence and derived awareness where applicable, including safeguards against accidental re-learning.
+- [ ] Build a unified **Backup & Restore** feature for user-selected personal data, while keeping all data local by default and making cloud backup entirely optional.
+- [ ] Support two clearly labelled backup formats: (a) a simple, portable local backup with a prominent warning that it is not protected by a separate backup password and should be stored securely; (b) a password-protected, authenticated-encryption backup that is encrypted on-device before it is written or uploaded.
+- [ ] Require encryption for every backup sent to a cloud provider. Never upload the simple unencrypted backup format to Google Drive or another cloud destination.
+- [ ] Let users choose backup contents independently: saved memories, Awareness items and provenance, pending Learning Review suggestions, user profile, companion/personality preferences, application settings, and optionally conversation history. Exclude passwords, API keys, tokens, credentials, model binaries, caches, and diagnostic logs by default; never include secrets in a backup.
+- [ ] Provide manual backup plus optional automatic daily and weekly schedules. Scheduling is OFF by default, user-configurable, visible, pausable, and must not run before the user chooses a destination and backup protection mode.
+- [ ] Add optional Google Drive as a storage destination, not as an application account or runtime dependency. Google must receive no access to midSunday's local application, conversations, model runtime, filesystem, or controls; the Google integration may only perform the narrowly authorised Drive file operations explicitly requested by the user.
+- [ ] Use the narrowest feasible Google OAuth/Drive scope (prefer app-created or user-selected backup files only); do not request broad access to the user's entire Drive, Gmail, Contacts, Photos, or other Google services. Do not require Google sign-in to install, launch, or use midSunday.
+- [ ] Keep Google integration isolated in an optional adapter. Google receives only the encrypted backup archive and unavoidable file metadata (such as filename, size, timestamps, and account/storage metadata); it never receives the backup password or encryption key. Explain that Google is a third-party provider and that cloud storage is not risk-free.
+- [ ] Use a documented, versioned backup archive with a manifest, included-data inventory, schema/app compatibility information, integrity checks, and migration support so future midSunday versions can restore older backups safely.
+- [ ] Implement restore preview, integrity/authentication verification, compatibility checks, and a safe merge/replace choice. Never silently overwrite newer local data; preserve rollback/recovery if restore fails.
+- [ ] Provide backup history/status, last-success timestamp, failure notices, retention controls, delete-backup and disconnect-provider controls, and a way to verify a backup before relying on it.
+- [ ] Explain password/recovery-key loss clearly: password-protected backups cannot be recovered by midSunday or Google if the user loses the only decryption secret. Never transmit or store the backup password/recovery key with Google.
+- [ ] Test interrupted backups, corrupted/tampered archives, wrong passwords, disk-full conditions, offline operation, duplicate restores, schema upgrades, and restore across Windows, Linux, and macOS.
 - [ ] Investigate encryption at rest using operating-system-protected keys; do not claim local data is encrypted until implemented and tested.
 - [ ] Add pagination/indexing and scalable local retrieval (SQLite FTS5 is an initial candidate; embeddings remain optional and must be locally processed by default).
 
@@ -267,6 +280,9 @@ Release numbers are planning labels, not promises or dates. A stage is not compl
 5. Awareness remains local by default, with no hidden cloud transfer or covert monitoring.
 6. "No fixed item-count limit" does not mean infinite storage; actual capacity is bounded by the user's device. midSunday must explain storage use and must not silently delete records.
 7. The system must distinguish observed facts from inferences, show provenance, and avoid treating learned text as trusted instructions.
+8. Backups are opt-in; local storage remains the default. Simple unencrypted backups are local-only and clearly warned; cloud backups must always be encrypted on-device before upload.
+9. Google Drive is only an optional backup-file destination. Google must not receive access to midSunday itself, its local runtime, conversations, files, or controls; use the narrowest feasible Drive-only authorisation and disclose unavoidable backup-file metadata.
+10. Backup passwords and recovery keys never leave the device. Users control backup contents, schedules, destinations, retention, deletion, and restoration.
 
 **Exit gate:** Users understand what is stored, can control every learning source and setting, and can inspect/export/delete learned knowledge and relevant source evidence without hidden copies or unexpected cloud transfer. The initial Awareness schema, opt-in preferences, category exclusions, Rust-enforced guarded ingestion boundary, pending-review queue, and explicitly user-triggered local conversation analysis are implemented. No background extraction, automatic activity collection, in-app-search extraction, or cloud transfer is active. Scalable retrieval, import/restore, retention controls, and real desktop crash/restart verification remain open.
 
@@ -497,6 +513,10 @@ The interface must make the online/offline boundary visible. Offline must not be
 - No hidden recording or background microphone activation.
 - Microphone use must be visible and controllable.
 - No conversation, audio, file, or memory data leaves the device without clear disclosure and consent.
+- Backup & Restore is optional; no Google account or cloud service is required for core midSunday use.
+- Google Drive integration must be isolated from the midSunday application/runtime and limited to the narrowest feasible Drive backup-file permissions; no broad Google-account scopes or access to Gmail, Contacts, Photos, or other services.
+- Cloud backups must be encrypted locally before upload; never send backup passwords/recovery keys to Google. Disclose that the provider can still observe necessary file metadata and that third-party storage carries residual risk.
+- Simple unencrypted backup files are local-only, clearly labelled, and accompanied by a storage-security warning.
 - API keys must be stored securely and never committed to Git.
 - Memory must be inspectable, editable, deletable, exportable, and disableable.
 - Users must be able to delete local data and understand what deletion covers.
