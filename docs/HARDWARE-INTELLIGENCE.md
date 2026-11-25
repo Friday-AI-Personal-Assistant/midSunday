@@ -339,3 +339,14 @@ The current Windows snapshot calls `IDXGIAdapter3::QueryVideoMemoryInfo` for **n
 ### Snapshot freshness and timestamps
 
 Every hardware snapshot includes `capturedAtUnixSeconds`, a Unix timestamp in seconds recorded when collection completes. The Settings panel renders this localised timestamp so users can distinguish a fresh manual refresh from an older snapshot. It is diagnostic metadata only; it is not persisted as a device history, uploaded, or used to infer hardware changes. A failed collection leaves the previous successful snapshot visible with its original timestamp and shows the separate error message.
+
+
+## 19. Storage free-space health indicators (2026-11-25)
+
+Each locally enumerated storage volume now includes a conservative free-space percentage and a simple status:
+- **Critical:** less than 2 GiB free or less than 5% free.
+- **Low:** less than 10 GiB free or less than 10% free, unless already critical.
+- **Healthy:** at least 10 GiB and at least 10% free.
+- **Unknown:** capacity is zero or unavailable.
+
+Available bytes are clamped to the reported total before percentages are calculated, and zero-capacity volumes never cause division by zero. Settings shows used-space bars and the corresponding status. This is a general volume warning only: it does not identify the volume containing a configured model, estimate a model's full runtime footprint, predict download/install success, or guarantee adequate space for future models. Values are local, on-demand snapshot data and are not uploaded or stored as a history.

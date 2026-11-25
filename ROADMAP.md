@@ -1222,3 +1222,15 @@ The node-zero query is diagnostic inventory only. It does not establish which ad
 - [x] Keep the timestamp as in-memory snapshot metadata; do not create a hardware activity history or transmit it.
 - [ ] Add explicit stale-data messaging only if future background refresh or long-lived snapshots are introduced.
 
+
+
+### 2026-11-25 — HIARM storage headroom indicators
+
+- [x] Calculate free-space percentage for each enumerated volume with safe handling for zero capacity and inconsistent values.
+- [x] Classify volumes as Healthy, Low, Critical, or Unknown using conservative absolute and percentage thresholds.
+- [x] Display used-space bars and plain-language free-space status in Settings → System & hardware.
+- [x] Add Rust regression tests for threshold boundaries, zero capacity, and free-space clamping.
+- [ ] Identify the actual configured model storage volume and compare its free space with a model-specific download/install/runtime estimate.
+- [ ] Validate volume enumeration and threshold usefulness on real Windows, Linux, and macOS devices.
+
+These indicators describe general volume headroom only. They do not guarantee that a model can be downloaded, installed, loaded, or run.

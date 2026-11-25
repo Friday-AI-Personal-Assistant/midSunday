@@ -110,3 +110,6 @@ All notable project changes are recorded here. The project is in foundation/prot
 - Improved Windows GPU memory-budget diagnostics: label the sampled DXGI node (currently node 0), preserve independent HRESULT failure codes for local/non-local segments, and display these details in System & hardware. Multi-node enumeration and real-device validation remain pending.
 
 - Added a collection timestamp to hardware snapshots and show the actual localised last-checked time in Settings → System & hardware; the timestamp is diagnostic metadata only and is not uploaded or persisted as device history.
+
+
+- Added local HIARM storage headroom indicators with safe free-space percentages, Healthy/Low/Critical/Unknown classifications, accessible used-space meters, and regression tests. Model-specific storage fit remains future work.

@@ -51,6 +51,26 @@ pub struct HardwareDisk {
     pub mount_point: String,
     pub total_bytes: u64,
     pub available_bytes: u64,
+    pub free_percent: u8,
+    pub status: String,
+}
+
+/// Classifies a volume's general free-space headroom. This is not a model-fit guarantee.
+pub fn assess_storage_status(total_bytes: u64, available_bytes: u64) -> (u8, String) {
+    const GIB: u64 = 1024 * 1024 * 1024;
+    if total_bytes == 0 {
+        return (0, "unknown".to_owned());
+    }
+    let available = available_bytes.min(total_bytes);
+    let free_percent = ((available as u128 * 100) / total_bytes as u128) as u8;
+    let status = if available < 2 * GIB || free_percent < 5 {
+        "critical"
+    } else if available < 10 * GIB || free_percent < 10 {
+        "low"
+    } else {
+        "healthy"
+    };
+    (free_percent, status.to_owned())
 }
 
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
@@ -296,10 +316,17 @@ pub fn collect_hardware_snapshot() -> HardwareSnapshot {
 
     let mut disks = Disks::new_with_refreshed_list()
         .iter()
-        .map(|disk| HardwareDisk {
-            mount_point: disk.mount_point().display().to_string(),
-            total_bytes: disk.total_space(),
-            available_bytes: disk.available_space(),
+        .map(|disk| {
+            let total_bytes = disk.total_space();
+            let available_bytes = disk.available_space().min(total_bytes);
+            let (free_percent, status) = assess_storage_status(total_bytes, available_bytes);
+            HardwareDisk {
+                mount_point: disk.mount_point().display().to_string(),
+                total_bytes,
+                available_bytes,
+                free_percent,
+                status,
+            }
         })
         .collect::<Vec<_>>();
     disks.sort_by(|left, right| left.mount_point.cmp(&right.mount_point));
@@ -349,6 +376,8 @@ mod tests {
                 mount_point: "C:\\".to_owned(),
                 total_bytes: 512 * 1024 * 1024 * 1024,
                 available_bytes: 256 * 1024 * 1024 * 1024,
+                free_percent: 50,
+                status: "healthy".to_owned(),
             }],
             gpu: GpuDetection { status: "unsupported_platform".to_owned(), adapters: Vec::new() },
             assessment: assess_capability(16 * 1024 * 1024 * 1024, 8 * 1024 * 1024 * 1024, 8),
@@ -358,6 +387,8 @@ mod tests {
         assert_eq!(value["logicalCoreCount"], 8);
         assert_eq!(value["physicalCoreCount"], 4);
         assert_eq!(value["disks"][0]["availableBytes"], 256_u64 * 1024 * 1024 * 1024);
+        assert_eq!(value["disks"][0]["freePercent"], 50);
+        assert_eq!(value["disks"][0]["status"], "healthy");
         assert!(value.get("hostName").is_none());
         assert!(value.get("processes").is_none());
         assert!(value.get("networkInterfaces").is_none());
@@ -393,6 +424,23 @@ mod tests {
         assert!(detected.features.iter().all(|feature| allowed.contains(&feature.as_str())));
         assert!(detected.features.windows(2).all(|pair| pair[0] < pair[1]));
         if detected.status == "unsupported_architecture" { assert!(detected.features.is_empty()); }
+    }
+
+
+    #[test]
+    fn storage_assessment_handles_zero_capacity_and_clamps_free_space() {
+        assert_eq!(assess_storage_status(0, 0), (0, "unknown".to_owned()));
+        assert_eq!(assess_storage_status(10 * 1024 * 1024 * 1024, 20 * 1024 * 1024 * 1024), (100, "healthy".to_owned()));
+    }
+
+    #[test]
+    fn storage_assessment_uses_conservative_free_space_thresholds() {
+        let gib = 1024_u64 * 1024 * 1024;
+        assert_eq!(assess_storage_status(100 * gib, 4 * gib).1, "critical");
+        assert_eq!(assess_storage_status(100 * gib, 4 * gib).0, 4);
+        assert_eq!(assess_storage_status(100 * gib, 8 * gib).1, "low");
+        assert_eq!(assess_storage_status(100 * gib, 20 * gib).1, "healthy");
+        assert_eq!(assess_storage_status(100 * gib, gib).1, "critical");
     }
 
     #[test]

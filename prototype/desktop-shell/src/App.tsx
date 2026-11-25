@@ -6,7 +6,7 @@ type BackendState = "checking" | "connected" | "error";
 type Section = "chat" | "characters" | "settings";
 type Message = { id: number; role: "user" | "assistant" | "system"; text: string };
 type RuntimeStatusSnapshot = { status: string; detail: string | null };
-type HardwareDisk = { mountPoint: string; totalBytes: number; availableBytes: number };
+type HardwareDisk = { mountPoint: string; totalBytes: number; availableBytes: number; freePercent: number; status: "healthy" | "low" | "critical" | "unknown" };
 type GpuMemorySegment = { budgetBytes: number; currentUsageBytes: number; availableForReservationBytes: number; currentReservationBytes: number };
 type GpuMemoryBudget = { status: string; nodeIndex: number; local: GpuMemorySegment | null; localErrorCode: number | null; nonLocal: GpuMemorySegment | null; nonLocalErrorCode: number | null };
 type GpuAdapter = { name: string; vendorId: number; deviceId: number; dedicatedVideoMemoryBytes: number; dedicatedSystemMemoryBytes: number; sharedSystemMemoryBytes: number; isSoftware: boolean; memoryBudget: GpuMemoryBudget };
@@ -1280,7 +1280,7 @@ export default function App() {
                   <small className="hardware-assessment-limit">{hardwareSnapshot.assessment.limitations}</small>
                 </div>
                 <div className="hardware-subsection"><strong>Storage volumes</strong>
-                  {hardwareSnapshot.disks.length === 0 ? <p className="settings-footnote">No storage-volume information was available.</p> : hardwareSnapshot.disks.map((disk) => <div className="hardware-disk" key={disk.mountPoint}><span>{disk.mountPoint}</span><span>{formatModelSize(disk.availableBytes)} free of {formatModelSize(disk.totalBytes)}</span></div>)}
+                  {hardwareSnapshot.disks.length === 0 ? <p className="settings-footnote">No storage-volume information was available.</p> : hardwareSnapshot.disks.map((disk) => <div className={"hardware-disk hardware-disk-" + disk.status} key={disk.mountPoint}><div className="hardware-disk-heading"><strong>{disk.mountPoint}</strong><span>{formatModelSize(disk.availableBytes)} free of {formatModelSize(disk.totalBytes)} · {disk.freePercent}% free</span></div><div className="hardware-disk-track" role="meter" aria-label={"Used storage on " + disk.mountPoint} aria-valuemin={0} aria-valuemax={100} aria-valuenow={100 - disk.freePercent}><div className="hardware-disk-fill" style={{ width: (100 - disk.freePercent) + "%" }} /></div><span className="hardware-disk-status">{disk.status === "critical" ? "Very low free space" : disk.status === "low" ? "Low free space" : disk.status === "healthy" ? "Free-space headroom looks adequate" : "Capacity information unavailable"}</span></div>)}
                 </div>
                 <div className="hardware-subsection"><strong>Graphics adapters (DXGI on Windows)</strong>
                   <p className="settings-footnote">{hardwareSnapshot.gpu.status === "detected" ? "Display adapters reported by Windows:" : hardwareSnapshot.gpu.status === "unsupported_platform" ? "DXGI adapter inventory is currently implemented for Windows only." : hardwareSnapshot.gpu.status === "no_adapters" ? "Windows did not report a display adapter." : "GPU adapter information is unavailable on this system."}</p>
