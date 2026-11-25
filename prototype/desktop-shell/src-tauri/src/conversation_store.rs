@@ -472,6 +472,12 @@ impl ConversationStore {
             params![fingerprint], |row| row.get(0),
         ).map_err(|error| format!("Could not check Awareness exclusion: {error}"))?;
         if suppressed { return Ok(None); }
+        let already_present: bool = connection.query_row(
+            "SELECT EXISTS(SELECT 1 FROM awareness_suggestions WHERE content = ?1 AND category = ?2)
+                OR EXISTS(SELECT 1 FROM awareness_items WHERE content = ?1 AND category = ?2)",
+            params![content, category], |row| row.get(0),
+        ).map_err(|error| format!("Could not check for duplicate Awareness suggestions: {error}"))?;
+        if already_present { return Ok(None); }
         let now = unix_time();
         connection.execute(
             "INSERT INTO awareness_suggestions(content, category, source_type, knowledge_type, confidence, source_record_id, created_at)
@@ -1947,6 +1953,21 @@ mod tests {
         ).unwrap().is_none());
     }
 
+    #[test]
+    fn awareness_suggestions_do_not_duplicate_pending_or_saved_items() {
+        let store = store();
+        let conversation = store.create("Duplicate review source").unwrap();
+        store.append(conversation.id, "user", "I enjoy astronomy.").unwrap();
+        let message = store.messages(conversation.id).unwrap().remove(0);
+        store.save_awareness_settings(AwarenessSettings { enabled: true, learn_conversations: true, ..AwarenessSettings::default() }).unwrap();
+        let first = store.create_awareness_suggestion("I enjoy astronomy.", "interests", "conversation", Some(message.id), "observed", 0.9).unwrap().unwrap();
+        assert!(store.create_awareness_suggestion("I enjoy astronomy.", "interests", "conversation", Some(message.id), "observed", 0.9).unwrap().is_none());
+        assert_eq!(store.list_awareness_suggestions().unwrap().len(), 1);
+        store.approve_awareness_suggestion(first.id).unwrap();
+        assert!(store.create_awareness_suggestion("I enjoy astronomy.", "interests", "conversation", Some(message.id), "observed", 0.9).unwrap().is_none());
+        assert!(store.list_awareness_suggestions().unwrap().is_empty());
+        assert_eq!(store.list_awareness_items().unwrap().len(), 1);
+    }
     #[test]
     fn awareness_settings_validate_and_normalize_excluded_categories() {
         let store = store();

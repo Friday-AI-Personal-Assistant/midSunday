@@ -411,6 +411,22 @@ export default function App() {
     setAwarenessSuggestions(suggestions);
   }
 
+  async function analyzeCurrentConversation() {
+    if (awarenessBusy || activeConversationId === null || isGenerating) return;
+    if (!window.confirm("Analyse the currently open conversation with the active local model? The conversation stays on this device. Only screened suggestions will be added to Learning Review; nothing becomes permanent unless you approve it.")) return;
+    setAwarenessBusy(true);
+    setAwarenessNotice("");
+    try {
+      const created = await invoke<number>("analyze_conversation_for_awareness", { conversationId: activeConversationId });
+      await refreshAwarenessItems();
+      setAwarenessNotice(created > 0 ? created + " new suggestion" + (created === 1 ? "" : "s") + " added to Learning Review. Review each before approval." : "Analysis finished. No new safe suggestions were found (or matching suggestions already exist).");
+    } catch (error) {
+      setAwarenessNotice(String(error));
+    } finally {
+      setAwarenessBusy(false);
+    }
+  }
+
   async function approveAwarenessSuggestion(suggestion: AwarenessSuggestion) {
     if (awarenessBusy) return;
     setAwarenessBusy(true);
@@ -1044,10 +1060,11 @@ export default function App() {
                   return <div className="setting-row" key={category}><div><strong>{category[0].toUpperCase() + category.slice(1)}</strong><p>{excluded ? "Excluded from automatic learning." : "Eligible only when Awareness and an approved source are enabled."}</p></div><button className={excluded ? "toggle on" : "toggle"} type="button" role="switch" aria-checked={excluded} disabled={awarenessBusy} onClick={() => void toggleAwarenessCategoryExclusion(category)}><i /></button></div>;
                 })}
               </div>
-              <p className="settings-footnote">Important: all learning switches start OFF. Category exclusions are saved locally. Automatic extraction is not active yet. Passwords, authentication secrets, payment credentials, private messages, and other private data must never be stored here.</p>
+              <p className="settings-footnote">Important: all learning switches start OFF. Analysis happens only after you press the button for an open conversation and uses the active local model. Passwords, authentication secrets, payment credentials, private identifiers, private messages, and other sensitive data must never be stored here.</p>
               <div className="awareness-history">
                 <div className="memory-list-heading"><strong>Learning review ({awarenessSuggestions.length})</strong></div>
-                <p className="settings-footnote">Suggestions are not permanent memories. Review each one before approval. Rejecting a suggestion also blocks matching information from future automatic learning. The local extraction step is being connected separately; no suggestions are generated in this build yet.</p>
+                <p className="settings-footnote">Suggestions are not permanent memories. Analyse only the conversation you choose, using the active local model. No background analysis or cloud transfer occurs. Review every suggestion before approval; rejecting one blocks matching information from future learning.</p>
+                <div className="awareness-create-row"><button className="primary-action" type="button" onClick={() => void analyzeCurrentConversation()} disabled={awarenessBusy || isGenerating || activeConversationId === null || runtimeStatus.status !== "ready" || !awarenessSettings.enabled || !awarenessSettings.learnConversations}>{awarenessBusy ? "Working…" : "Analyse current conversation locally"}</button><small>{activeConversationId === null ? "Open a conversation first." : runtimeStatus.status !== "ready" ? "Start the local model first." : !awarenessSettings.enabled || !awarenessSettings.learnConversations ? "Enable Awareness and conversation learning first." : "Uses only the currently open conversation."}</small></div>
                 {awarenessSuggestions.length === 0 ? <p className="settings-footnote">No suggestions waiting for review.</p> : awarenessSuggestions.map((suggestion) => <div className="memory-item" key={suggestion.id}><div className="awareness-item-copy"><p>{suggestion.content}</p><small>{suggestion.category} · {suggestion.sourceType} · {suggestion.knowledgeType} · Confidence {Math.round(suggestion.confidence * 100)}%</small></div><div><button className="primary-action" type="button" onClick={() => void approveAwarenessSuggestion(suggestion)} disabled={awarenessBusy || !awarenessSettings.enabled}>Approve</button><button className="danger-action" type="button" onClick={() => void rejectAwarenessSuggestion(suggestion)} disabled={awarenessBusy}>Reject</button></div></div>)}
               </div>
               <div className="awareness-manager">

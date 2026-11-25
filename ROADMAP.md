@@ -240,7 +240,7 @@ Release numbers are planning labels, not promises or dates. A stage is not compl
 - [ ] Evolve explicit saved memory into a dedicated **Awareness** system; preserve existing user-created memories during migration.
 - [ ] Remove the temporary fixed 100-item memory cap as part of the scalable Awareness design; use available local storage responsibly, show storage usage/warnings, and never silently discard knowledge.
 - [x] Add a local Awareness suggestion review queue: screened candidates remain pending until the user approves them; rejection stores only a one-way fingerprint and metadata to prevent relearning.
-- [ ] Connect a privacy-reviewed local extraction pipeline to the guarded suggestion queue for opt-in conversations and, separately, in-app searches. The queue is implemented, but no automatic extraction or activity collection is active yet.
+- [x] Connect a user-triggered, local-model-only conversation analysis pipeline to the guarded suggestion queue. The user chooses the open conversation and explicitly starts analysis; candidates are source-linked, screened, deduplicated, and remain pending until approval. No background analysis, automatic collection, in-app-search extraction, or cloud transfer is active.
 - [ ] Make every learning source, feature, category, and optional capability independently controllable with clear on/off settings; provide pause/resume controls without forcing deletion.
 - [ ] Keep Awareness disabled until the user explicitly enables it; do not silently enable new learning sources after an update.
 - [ ] Store learned knowledge and its provenance locally, including when it was learned, its source, whether it is observed or inferred, and an appropriate confidence indicator.
@@ -268,7 +268,7 @@ Release numbers are planning labels, not promises or dates. A stage is not compl
 6. "No fixed item-count limit" does not mean infinite storage; actual capacity is bounded by the user's device. midSunday must explain storage use and must not silently delete records.
 7. The system must distinguish observed facts from inferences, show provenance, and avoid treating learned text as trusted instructions.
 
-**Exit gate:** Users understand what is stored, can control every learning source and setting, and can inspect/export/delete learned knowledge and relevant source evidence without hidden copies or unexpected cloud transfer. The initial Awareness schema, opt-in preferences, category exclusions, Rust-enforced guarded ingestion boundary, and pending-review queue are implemented. No automatic extraction or activity collection is active yet. Connecting the local extraction pipeline, scalable retrieval, import/restore, retention controls, and real desktop crash/restart verification remain open.
+**Exit gate:** Users understand what is stored, can control every learning source and setting, and can inspect/export/delete learned knowledge and relevant source evidence without hidden copies or unexpected cloud transfer. The initial Awareness schema, opt-in preferences, category exclusions, Rust-enforced guarded ingestion boundary, pending-review queue, and explicitly user-triggered local conversation analysis are implemented. No background extraction, automatic activity collection, in-app-search extraction, or cloud transfer is active. Scalable retrieval, import/restore, retention controls, and real desktop crash/restart verification remain open.
 
 ## Phase 6 — Voice and multilingual experience
 

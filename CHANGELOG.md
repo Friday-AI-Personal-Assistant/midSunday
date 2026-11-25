@@ -3,6 +3,7 @@
 All notable project changes are recorded here. The project is in foundation/prototype development; no application release has been made.
 
 ## 2026-11-25
+- Added an explicitly user-triggered local conversation analysis action: only the currently open conversation is sent to the already-running loopback model, source-linked screened candidates enter Learning Review, and nothing becomes permanent without approval. Added strict JSON parsing, source-message validation, duplicate suppression for pending/saved facts, UI consent/status messaging, and regression tests. No background analysis, in-app-search extraction, or cloud transfer was added.
 - Corrected the remaining Awareness ingestion fixture to assert the actual database-generated source-message ID instead of a hard-coded ID; source provenance validation remains unchanged.
 - Fixed four legacy Awareness tests to create real conversation messages and use their persisted IDs, preserving strict source-provenance validation.
 - Hardened Awareness provenance and review actions: conversation-derived entries require an existing source message; approval and rejection use atomic transactions; settings and suppression are rechecked at approval. Added regression coverage for missing/deleted sources and failed approvals.
