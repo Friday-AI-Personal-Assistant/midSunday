@@ -190,8 +190,9 @@ fn query_gpu_memory_segment(
 /// local/non-local video-memory budgets where IDXGIAdapter3 is available.
 #[cfg(target_os = "windows")]
 pub fn detect_gpu_adapters() -> GpuDetection {
+    use windows::core::Interface;
     use windows::Win32::Graphics::Dxgi::{
-        CreateDXGIFactory1, IDXGIAdapter1, IDXGIAdapter3, IDXGIFactory1,
+        CreateDXGIFactory1, IDXGIAdapter3, IDXGIFactory1,
         DXGI_ADAPTER_FLAG_SOFTWARE, DXGI_MEMORY_SEGMENT_GROUP_LOCAL,
         DXGI_MEMORY_SEGMENT_GROUP_NON_LOCAL,
     };
