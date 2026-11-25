@@ -498,6 +498,7 @@ mod tests {
             total_memory_bytes: 0,
             available_memory_bytes: 0,
             process_memory: ProcessMemorySnapshot { status: "unavailable".to_owned(), resident_bytes: None, virtual_bytes: None },
+            model_storage: ModelStorageAssessment { status: "not_configured".to_owned(), mount_point: None, available_bytes: None, free_percent: None, volume_status: None },
             disks: Vec::new(),
             gpu: GpuDetection { status: "unsupported_platform".to_owned(), adapters: Vec::new() },
             assessment: assess_capability(0, 0, 0),
