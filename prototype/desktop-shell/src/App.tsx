@@ -12,6 +12,7 @@ type GpuMemoryBudget = { status: string; nodeIndex: number; local: GpuMemorySegm
 type GpuAdapter = { name: string; vendorId: number; deviceId: number; dedicatedVideoMemoryBytes: number; dedicatedSystemMemoryBytes: number; sharedSystemMemoryBytes: number; isSoftware: boolean; memoryBudget: GpuMemoryBudget };
 type GpuDetection = { status: string; adapters: GpuAdapter[] };
 type HardwareSnapshot = {
+  capturedAtUnixSeconds: number;
   osName: string | null; osVersion: string | null; architecture: string;
   cpuModel: string | null; cpuInstructionSets: { status: string; features: string[] }; logicalCoreCount: number; physicalCoreCount: number | null;
   totalMemoryBytes: number; availableMemoryBytes: number; disks: HardwareDisk[];
@@ -1259,7 +1260,7 @@ export default function App() {
             </section>
             <section className="settings-section">
               <div className="settings-section-title"><div><h2>System & hardware</h2><p>A local snapshot helps midSunday understand this computer. It is collected only on this device.</p></div><span className="settings-symbol">⌘</span></div>
-              <div className="hardware-actions"><button className="secondary-action" type="button" onClick={() => void refreshHardwareSnapshot()} disabled={hardwareBusy}>{hardwareBusy ? "Checking…" : "Refresh hardware information"}</button><span>{hardwareSnapshot ? "Last checked during this session" : "Not checked yet"}</span></div>
+              <div className="hardware-actions"><button className="secondary-action" type="button" onClick={() => void refreshHardwareSnapshot()} disabled={hardwareBusy}>{hardwareBusy ? "Checking…" : "Refresh hardware information"}</button><span>{hardwareSnapshot ? "Last checked " + new Date(hardwareSnapshot.capturedAtUnixSeconds * 1000).toLocaleString() : "Not checked yet"}</span></div>
               {hardwareError && <p className="hardware-error">{hardwareError}</p>}
               {hardwareSnapshot && <>
                 <div className="hardware-grid">

@@ -334,3 +334,8 @@ Real-device comparison against Windows Task Manager / GPU engine telemetry and m
 ### Process-specific DXGI query diagnostics (2026-11-25)
 
 The current Windows snapshot calls `IDXGIAdapter3::QueryVideoMemoryInfo` for **node index 0** on each enumerated adapter, separately for local and non-local segments. This is deliberately labelled as node zero; it does not enumerate or claim to cover every node in a multi-node adapter. Each segment query preserves its own result and, when it fails, the signed HRESULT is retained for diagnostics and rendered as an eight-digit hexadecimal code. An unsupported adapter interface is distinct from an attempted query that failed. The snapshot remains on-demand and read-only. Node enumeration, runtime-to-adapter mapping, and real-device comparison with Windows Task Manager remain open validation work.
+
+
+### Snapshot freshness and timestamps
+
+Every hardware snapshot includes `capturedAtUnixSeconds`, a Unix timestamp in seconds recorded when collection completes. The Settings panel renders this localised timestamp so users can distinguish a fresh manual refresh from an older snapshot. It is diagnostic metadata only; it is not persisted as a device history, uploaded, or used to infer hardware changes. A failed collection leaves the previous successful snapshot visible with its original timestamp and shows the separate error message.

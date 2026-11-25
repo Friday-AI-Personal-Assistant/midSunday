@@ -73,6 +73,8 @@ pub struct CpuInstructionSets {
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct HardwareSnapshot {
+    /// Unix timestamp in seconds captured when this snapshot was collected.
+    pub captured_at_unix_seconds: u64,
     pub os_name: Option<String>,
     pub os_version: Option<String>,
     pub architecture: String,
@@ -307,6 +309,10 @@ pub fn collect_hardware_snapshot() -> HardwareSnapshot {
     let logical_core_count = system.cpus().len();
 
     HardwareSnapshot {
+        captured_at_unix_seconds: std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs(),
         os_name: System::name(),
         os_version: System::long_os_version().or_else(System::os_version),
         architecture: std::env::consts::ARCH.to_owned(),
@@ -329,6 +335,7 @@ mod tests {
     #[test]
     fn hardware_snapshot_is_serializable_and_contains_only_inventory_fields() {
         let snapshot = HardwareSnapshot {
+            captured_at_unix_seconds: 1_795_600_000,
             os_name: Some("Windows".to_owned()),
             os_version: Some("Windows 10".to_owned()),
             architecture: "x86_64".to_owned(),
@@ -347,6 +354,7 @@ mod tests {
             assessment: assess_capability(16 * 1024 * 1024 * 1024, 8 * 1024 * 1024 * 1024, 8),
         };
         let value = serde_json::to_value(&snapshot).unwrap();
+        assert_eq!(value["capturedAtUnixSeconds"], 1_795_600_000);
         assert_eq!(value["logicalCoreCount"], 8);
         assert_eq!(value["physicalCoreCount"], 4);
         assert_eq!(value["disks"][0]["availableBytes"], 256_u64 * 1024 * 1024 * 1024);
@@ -358,6 +366,7 @@ mod tests {
     #[test]
     fn hardware_snapshot_does_not_claim_gpu_detection() {
         let snapshot = HardwareSnapshot {
+            captured_at_unix_seconds: 0,
             os_name: None,
             os_version: None,
             architecture: "unknown".to_owned(),

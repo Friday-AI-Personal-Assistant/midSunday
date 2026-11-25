@@ -108,3 +108,5 @@ All notable project changes are recorded here. The project is in foundation/prot
 - Added serialization regression coverage for the GPU memory-budget payload. Real-device validation against Windows telemetry remains pending.
 
 - Improved Windows GPU memory-budget diagnostics: label the sampled DXGI node (currently node 0), preserve independent HRESULT failure codes for local/non-local segments, and display these details in System & hardware. Multi-node enumeration and real-device validation remain pending.
+
+- Added a collection timestamp to hardware snapshots and show the actual localised last-checked time in Settings → System & hardware; the timestamp is diagnostic metadata only and is not uploaded or persisted as device history.

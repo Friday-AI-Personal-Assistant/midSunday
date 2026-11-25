@@ -1213,3 +1213,12 @@ This is not total free VRAM and does not prove that the AI inference runtime is 
 - [ ] Compare live readings with Windows Task Manager on physical integrated/discrete and multi-GPU systems.
 
 The node-zero query is diagnostic inventory only. It does not establish which adapter or node an AI runtime uses, and does not reserve GPU memory.
+
+
+### 2026-11-25 — HIARM snapshot freshness
+
+- [x] Include a collection timestamp in every hardware snapshot.
+- [x] Display the actual localised last-checked time instead of a generic session label.
+- [x] Keep the timestamp as in-memory snapshot metadata; do not create a hardware activity history or transmit it.
+- [ ] Add explicit stale-data messaging only if future background refresh or long-lived snapshots are introduced.
+
