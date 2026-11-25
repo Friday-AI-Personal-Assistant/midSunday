@@ -363,3 +363,10 @@ h1 { margin: 0; color: #eef5ef; font-size: clamp(25px, 3vw, 34px); font-weight: 
 .model-metadata-grid span { display: flex; flex-direction: column; gap: 4px; color: var(--text-muted, #777); font-size: 12px; }
 .model-metadata-grid span strong { color: var(--text-primary, inherit); font-size: 13px; overflow-wrap: anywhere; }
 .model-metadata-panel > p { margin: 10px 0 0; overflow-wrap: anywhere; }
+
+.model-kv-estimate { margin-top: 10px; padding: 12px; border: 1px solid rgba(169,230,183,.16); border-radius: 10px; background: rgba(169,230,183,.045); }
+.model-kv-estimate > strong { display: block; margin-bottom: 9px; color: #dcefe0; font-size: 11px; }
+.model-kv-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.model-kv-grid span { display: grid; gap: 4px; color: var(--muted); font-size: 10px; }
+.model-kv-grid strong { color: #e4f2e7; font-size: 12px; }
+@media (max-width: 620px) { .model-kv-grid { grid-template-columns: 1fr; } }

@@ -17,7 +17,7 @@ use runtime::{ConversationMessage, GenerationRequest, RuntimeConfig};
 use runtime_manager::{RuntimeManager, RuntimeStatusSnapshot};
 use conversation_store::{AwarenessHistoryEntry, AwarenessItem, AwarenessSettings, AwarenessSuggestion, AwarenessSuppression, ConversationStore, ConversationSummary, ImportResult, MemoryImportResult, MemorySearchPage, SavedMemory, StoredMessage, UserProfile};
 use engine_settings::{EngineSettings, EngineSettingsStore};
-use gguf_metadata::GgufMetadata;
+use gguf_metadata::{GgufMetadata, KvCacheEstimate};
 use companion_settings::{CompanionSettings, CompanionSettingsStore};
 use model_catalog::{LocalModel, ModelCatalog, ModelVerification};
 use tauri::Manager;
@@ -265,6 +265,14 @@ async fn inspect_gguf_metadata(file_path: String) -> Result<GgufMetadata, String
 }
 
 #[tauri::command]
+async fn estimate_gguf_kv_cache(file_path: String, context_tokens: u64) -> Result<KvCacheEstimate, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let metadata = gguf_metadata::inspect(&file_path)?;
+        gguf_metadata::estimate_kv_cache(&metadata, context_tokens)
+    }).await.map_err(|error| format!("KV-cache estimation worker failed: {error}"))?
+}
+
+#[tauri::command]
 fn list_local_models(catalog: State<'_, ModelCatalog>) -> Result<Vec<LocalModel>, String> { catalog.list() }
 
 #[tauri::command]
@@ -490,6 +498,7 @@ pub fn run() {
             get_hardware_snapshot,
             list_local_models,
             inspect_gguf_metadata,
+            estimate_gguf_kv_cache,
             register_local_model,
             remove_local_model,
             verify_local_model,

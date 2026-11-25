@@ -386,3 +386,14 @@ The metadata inspector additionally reads selected standard GGUF integer fields 
 The UI reports absent values as unavailable. It preserves the distinction between attention heads and KV heads. Expert counts are descriptive metadata and do not imply runtime support for a particular MoE implementation. Quantisation version is distinct from the GGML file-type/quantisation label. If alignment is absent, the UI does not claim a file-specific value.
 
 These additions are groundwork for later context/KV-cache estimates and architecture-aware model checks. They do not calculate memory use, choose a model, infer runtime support, or change launch settings. Metadata remains untrusted file-supplied information. Tests use a synthetic GGUF fixture with representative LLaMA-style architecture keys; real-world multi-architecture corpus validation remains open.
+
+
+## 24. Conservative GGUF-derived KV-cache estimate (2026-11-25)
+
+The local model library now offers an explicit per-model KV-cache estimate for the context length currently entered in Local AI engine settings. The calculation uses GGUF-reported layer count, KV-head count, and key/value head lengths. It calculates key and value cache separately using: layers × KV heads × head dimension × configured context tokens × 2 bytes per element, then sums both sides.
+
+The estimate assumes one sequence and FP16 K/V values (2 bytes per element). It is calculated on a blocking Rust worker with checked integer arithmetic. Invalid context ranges, zero-valued dimensions, and overflow are rejected. If any required metadata is absent, the result is explicitly unavailable; missing dimensions are never guessed. The user triggers the estimate for each model, and changing the context setting requires a fresh estimate.
+
+**Important limitations:** this is only a theoretical KV-cache estimate, not total model RAM or VRAM. It excludes model weights, runtime/allocator overhead, compute buffers, graph/workspace memory, batching or parallel sequences, padding, and backend-specific behaviour. Actual cache precision may differ from FP16. It does not determine CPU/GPU placement, prove backend support, guarantee that a model fits, select a model, or change settings. GGUF metadata remains untrusted and real-world multi-architecture/runtime validation is still required.
+
+Regression tests cover the arithmetic with a synthetic fixture, missing metadata, invalid context, zero dimensions, and overflow.

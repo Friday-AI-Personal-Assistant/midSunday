@@ -114,6 +114,39 @@ pub fn inspect(input:&str)->Result<GgufMetadata,String>{
     }
     Ok(GgufMetadata{format_version:version,file_size_bytes:metadata.len(),tensor_count:tensors,metadata_entry_count:entries,architecture,model_name,file_type_code,file_type_description:file_type_code.and_then(file_type_description),parameter_count,context_length,block_count,embedding_length,attention_head_count,attention_kv_head_count,attention_key_length,attention_value_length,rope_dimension_count,expert_count,expert_used_count,quantization_version,alignment})
 }
+/// Conservative KV-cache estimate for the configured context, assuming FP16 (2-byte) K/V values.
+/// This excludes model weights, allocator overhead, compute buffers, graph/workspace memory, and runtime-specific padding.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct KvCacheEstimate {
+    pub status: String, pub context_tokens: u64, pub bytes_per_element: u64,
+    pub key_cache_bytes: Option<u64>, pub value_cache_bytes: Option<u64>, pub total_bytes: Option<u64>,
+    pub assumptions: String,
+}
+
+pub fn estimate_kv_cache(metadata: &GgufMetadata, context_tokens: u64) -> Result<KvCacheEstimate, String> {
+    if !(512..=32_768).contains(&context_tokens) { return Err("Context length must be between 512 and 32,768 tokens.".to_owned()); }
+    const BYTES_PER_ELEMENT: u64 = 2;
+    let (Some(layers), Some(kv_heads), Some(key_length), Some(value_length)) = (
+        metadata.block_count, metadata.attention_kv_head_count, metadata.attention_key_length, metadata.attention_value_length,
+    ) else {
+        return Ok(KvCacheEstimate { status: "insufficient_metadata".to_owned(), context_tokens, bytes_per_element: BYTES_PER_ELEMENT,
+            key_cache_bytes: None, value_cache_bytes: None, total_bytes: None,
+            assumptions: "Requires layer count, KV-head count, and key/value head lengths from GGUF metadata.".to_owned() });
+    };
+    if layers == 0 || kv_heads == 0 || key_length == 0 || value_length == 0 {
+        return Err("GGUF metadata contains a zero-valued KV-cache dimension; no estimate was produced.".to_owned());
+    }
+    let key_bytes = layers.checked_mul(kv_heads).and_then(|v| v.checked_mul(key_length)).and_then(|v| v.checked_mul(context_tokens)).and_then(|v| v.checked_mul(BYTES_PER_ELEMENT))
+        .ok_or_else(|| "KV-cache estimate exceeded the safe numeric range.".to_owned())?;
+    let value_bytes = layers.checked_mul(kv_heads).and_then(|v| v.checked_mul(value_length)).and_then(|v| v.checked_mul(context_tokens)).and_then(|v| v.checked_mul(BYTES_PER_ELEMENT))
+        .ok_or_else(|| "KV-cache estimate exceeded the safe numeric range.".to_owned())?;
+    let total_bytes = key_bytes.checked_add(value_bytes).ok_or_else(|| "Total KV-cache estimate exceeded the safe numeric range.".to_owned())?;
+    Ok(KvCacheEstimate { status: "estimated".to_owned(), context_tokens, bytes_per_element: BYTES_PER_ELEMENT,
+        key_cache_bytes: Some(key_bytes), value_cache_bytes: Some(value_bytes), total_bytes: Some(total_bytes),
+        assumptions: "FP16 K/V cache (2 bytes per element), one sequence, using the configured context length and GGUF-reported dimensions. Actual runtime cache type, batching, parallel sequences, padding, and implementation overhead can change memory use.".to_owned() })
+}
+
 #[cfg(test)]
 mod tests{
     use super::*;use std::{io::Write,sync::atomic::{AtomicUsize,Ordering}};
@@ -140,5 +173,27 @@ mod tests{
     #[test]fn rejects_invalid_magic_and_versions(){let p=temp(b"NOPE","gguf");assert!(inspect(p.to_str().unwrap()).is_err());let _=std::fs::remove_file(p);let mut b=fixture();b[4..8].copy_from_slice(&99u32.to_le_bytes());let p=temp(&b,"gguf");assert!(inspect(p.to_str().unwrap()).unwrap_err().contains("version 99"));let _=std::fs::remove_file(p);}
     #[test]fn rejects_truncated_metadata_and_unreasonable_counts(){let mut b=fixture();b.truncate(35);let p=temp(&b,"gguf");assert!(inspect(p.to_str().unwrap()).is_err());let _=std::fs::remove_file(p);let mut b=fixture();b[20..28].copy_from_slice(&(MAX_METADATA_ENTRIES+1).to_le_bytes());let p=temp(&b,"gguf");assert!(inspect(p.to_str().unwrap()).unwrap_err().contains("too many metadata"));let _=std::fs::remove_file(p);}
     #[test]fn skips_unknown_string_and_array_metadata(){let mut b=b"GGUF".to_vec();b.extend_from_slice(&3u32.to_le_bytes());b.extend_from_slice(&0u64.to_le_bytes());b.extend_from_slice(&2u64.to_le_bytes());push_string(&mut b,"unknown.string");b.extend_from_slice(&8u32.to_le_bytes());push_string(&mut b,"ignored");push_string(&mut b,"unknown.array");b.extend_from_slice(&9u32.to_le_bytes());b.extend_from_slice(&4u32.to_le_bytes());b.extend_from_slice(&3u64.to_le_bytes());for n in [1u32,2,3]{b.extend_from_slice(&n.to_le_bytes());}let p=temp(&b,"gguf");assert_eq!(inspect(p.to_str().unwrap()).unwrap().tensor_count,0);let _=std::fs::remove_file(p);}
+    #[test]fn estimates_fp16_kv_cache_from_architecture_dimensions(){
+        let p=temp(&fixture(), "gguf"); let metadata=inspect(p.to_str().unwrap()).unwrap();
+        let estimate=estimate_kv_cache(&metadata, 8192).unwrap();
+        assert_eq!(estimate.status, "estimated");
+        assert_eq!(estimate.key_cache_bytes, Some(536_870_912));
+        assert_eq!(estimate.value_cache_bytes, Some(536_870_912));
+        assert_eq!(estimate.total_bytes, Some(1_073_741_824));
+        let _=std::fs::remove_file(p);
+    }
+    #[test]fn reports_missing_dimensions_without_guessing(){
+        let p=temp(&fixture(), "gguf"); let mut metadata=inspect(p.to_str().unwrap()).unwrap(); metadata.attention_value_length=None;
+        let estimate=estimate_kv_cache(&metadata, 2048).unwrap();
+        assert_eq!(estimate.status, "insufficient_metadata"); assert_eq!(estimate.total_bytes, None);
+        let _=std::fs::remove_file(p);
+    }
+    #[test]fn rejects_invalid_context_zero_dimensions_and_overflow(){
+        let p=temp(&fixture(), "gguf"); let mut metadata=inspect(p.to_str().unwrap()).unwrap();
+        assert!(estimate_kv_cache(&metadata, 0).is_err());
+        metadata.block_count=Some(0); assert!(estimate_kv_cache(&metadata, 2048).is_err());
+        metadata.block_count=Some(u64::MAX); assert!(estimate_kv_cache(&metadata, 32768).is_err());
+        let _=std::fs::remove_file(p);
+    }
     #[test]fn rejects_non_gguf_extensions(){let p=temp(&fixture(),"bin");assert!(inspect(p.to_str().unwrap()).unwrap_err().contains(".gguf"));let _=std::fs::remove_file(p);}
 }

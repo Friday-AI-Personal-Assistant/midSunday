@@ -3,6 +3,7 @@
 All notable project changes are recorded here. The project is in foundation/prototype development; no application release has been made.
 
 ## 2026-11-25
+- Added an explicit GGUF-derived KV-cache estimate for the configured context length, with separate key/value figures, FP16 assumptions, checked arithmetic, missing-metadata handling, and regression tests. The estimate is not total model RAM/VRAM or a model-fit guarantee.
 - Added explicit, bounded GGUF v2/v3 metadata inspection to the local model library, reporting architecture, model name, file type/known quantisation, parameter count, context and architecture dimensions where present. Inspection is local, read-only, runs off the UI thread, and never loads tensor weights or claims compatibility.
 - Added HIARM matching of the configured GGUF model file to its containing storage volume, showing free-space headroom and explicit unresolved-path states without reading model contents or transmitting the path.
 - Added an on-demand midSunday process-memory snapshot showing resident physical memory and virtual address space, with explicit unavailable states and a privacy boundary that queries no other processes.

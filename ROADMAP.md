@@ -1308,3 +1308,16 @@ The metadata is supplied by the GGUF file and is descriptive, not authoritative.
 - [ ] Use verified metadata plus runtime-specific measurements to build conservative context/KV-cache and model resource estimates; do not infer full model RAM/VRAM from parameter count or file size alone.
 
 This batch extends descriptive metadata only. It does not claim runtime compatibility or predict memory use, select models, or change context/resource settings.
+
+
+### 2026-11-25 — Conservative GGUF KV-cache estimate (Batch #116)
+
+- [x] Add a user-triggered KV-cache estimate using GGUF layer count, KV-head count, key/value head lengths, and the currently configured context length.
+- [x] Calculate key and value cache separately with an explicit FP16 (2-byte) assumption and checked integer arithmetic.
+- [x] Report insufficient metadata rather than guessing missing dimensions; reject invalid context, zero dimensions, and arithmetic overflow.
+- [x] Display the estimate and its assumptions beside the selected model's library metadata.
+- [x] Add regression coverage for representative arithmetic, missing metadata, invalid context, zero dimensions, and overflow.
+- [ ] Validate estimates against actual llama.cpp runtime measurements across multiple architectures, cache types, and sequence/batch settings.
+- [ ] Extend the resource model to measured model-weight residency, runtime overhead, compute buffers, CPU/GPU offload, and real hardware headroom.
+
+Batch #116 is an informational estimate only. It is not a total RAM/VRAM prediction or model-fit guarantee, does not select a model, and does not change context or runtime settings. See `docs/HARDWARE-INTELLIGENCE.md` section 24.
