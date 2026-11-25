@@ -247,7 +247,7 @@ Release numbers are planning labels, not promises or dates. A stage is not compl
 - [ ] Make every learned Awareness item visible and inspectable in Settings → Awareness, with edit/rewrite, individual delete, category controls, export, and clear-all actions.
 - [ ] Add an inspectable Activity & Learning History so users can understand which permitted interactions contributed to an awareness item.
 - [ ] Ensure deleting or rejecting an item also prevents the same evidence from immediately recreating it; support a user-controlled "do not learn this again" / exclusion mechanism.
-- [ ] Retrieve only relevant local awareness context for a response; do not inject the entire awareness database into every model prompt.
+- [x] Retrieve only relevant local Awareness context for a response; a separate OFF-by-default chat-use switch gates local keyword matching, and the prompt receives at most 12 relevant approved items / 2 KiB. Entries are explicitly framed as untrusted reference data, never instructions or permissions. This is an initial bounded retrieval implementation; indexed semantic retrieval remains future work.
 - [ ] Treat all stored awareness content as untrusted user data, never as system instructions or permission grants.
 - [ ] Initially limit automatic learning to interactions that happen inside midSunday. Any future browser, operating-system, or third-party-app source must be a separately named, explicitly permissioned, independently switchable integration.
 - [ ] Never collect or store passwords, authentication codes, tokens, API keys, private keys, payment-card/banking credentials, or other secrets. Do not capture keystrokes, password fields, or clipboard contents as a background learning source.

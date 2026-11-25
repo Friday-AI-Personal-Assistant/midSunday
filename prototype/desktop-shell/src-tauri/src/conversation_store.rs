@@ -17,12 +17,14 @@ pub struct AwarenessSettings {
     pub learn_conversations: bool,
     pub learn_searches: bool,
     #[serde(default)]
+    pub use_in_chat: bool,
+    #[serde(default)]
     pub excluded_categories: Vec<String>,
 }
 
 impl Default for AwarenessSettings {
     fn default() -> Self {
-        Self { enabled: false, learn_conversations: false, learn_searches: false, excluded_categories: Vec::new() }
+        Self { enabled: false, learn_conversations: false, learn_searches: false, use_in_chat: false, excluded_categories: Vec::new() }
     }
 }
 
@@ -622,6 +624,63 @@ impl ConversationStore {
             source_record_id: row.get(6)?, created_at: row.get(7)?, updated_at: row.get(8)?,
         })).map_err(|error| error.to_string())?;
         rows.collect::<Result<Vec<_>, _>>().map_err(|error| error.to_string())
+    }
+
+    /// Return a small, query-relevant subset of approved Awareness items.
+    /// This local-only feature is disabled unless both switches are enabled.
+    pub fn relevant_awareness_context(&self, query: &str) -> Result<String, String> {
+        let settings = self.get_awareness_settings()?;
+        if !settings.enabled || !settings.use_in_chat {
+            return Ok(String::new());
+        }
+        let terms = awareness_query_terms(query);
+        if terms.is_empty() {
+            return Ok(String::new());
+        }
+
+        let conditions = (1..=terms.len())
+            .map(|index| format!("content LIKE ?{index}"))
+            .collect::<Vec<_>>()
+            .join(" OR ");
+        let sql = format!(
+            "SELECT content, category, knowledge_type, updated_at
+             FROM awareness_items WHERE {conditions}
+             ORDER BY updated_at DESC, id DESC LIMIT 250"
+        );
+        let patterns = terms.iter().map(|term| format!("%{term}%")).collect::<Vec<_>>();
+        let connection = self.lock()?;
+        let mut statement = connection.prepare(&sql)
+            .map_err(|error| format!("Could not prepare relevant Awareness lookup: {error}"))?;
+        let rows = statement.query_map(rusqlite::params_from_iter(patterns.iter()), |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, i64>(3)?,
+            ))
+        }).map_err(|error| format!("Could not search local Awareness: {error}"))?;
+        let candidates = rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|error| format!("Could not read relevant Awareness: {error}"))?;
+
+        let mut ranked = candidates.into_iter().filter_map(|(content, category, knowledge_type, updated_at)| {
+            let content_terms = awareness_query_terms(&content);
+            let score = terms.iter().filter(|term| content_terms.contains(term)).count();
+            (score > 0).then_some((score, updated_at, content, category, knowledge_type))
+        }).collect::<Vec<_>>();
+        ranked.sort_by(|left, right| right.0.cmp(&left.0).then_with(|| right.1.cmp(&left.1)));
+
+        const MAX_CONTEXT_BYTES: usize = 2_048;
+        const MAX_CONTEXT_ITEMS: usize = 12;
+        let mut context = String::new();
+        for (_, _, content, category, knowledge_type) in ranked {
+            if context.lines().count() >= MAX_CONTEXT_ITEMS { break; }
+            let line = format!("- [{}; {}] {}", category, knowledge_type, content);
+            let separator_bytes = if context.is_empty() { 0 } else { 1 };
+            if context.len() + line.len() + separator_bytes > MAX_CONTEXT_BYTES { continue; }
+            if !context.is_empty() { context.push('\n'); }
+            context.push_str(&line);
+        }
+        Ok(context)
     }
 
     pub fn create_awareness_item(&self, content: &str, category: &str) -> Result<AwarenessItem, String> {
@@ -1288,6 +1347,27 @@ fn clean_awareness_content(content: &str) -> Result<String, String> {
     Ok(content.to_owned())
 }
 
+fn awareness_query_terms(text: &str) -> Vec<String> {
+    const STOP_WORDS: &[&str] = &[
+        "the", "and", "for", "with", "that", "this", "you", "your", "are", "was",
+        "were", "have", "has", "had", "from", "into", "about", "what", "when",
+        "where", "who", "how", "why", "can", "could", "would", "should", "will",
+        "just", "want", "need", "please", "tell", "me", "my", "i", "we", "our",
+        "is", "it", "to", "of", "a", "an", "in", "on", "at", "or", "but", "as",
+        "be", "do", "does",
+    ];
+    let mut terms = Vec::new();
+    for part in text.split(|character: char| !character.is_alphanumeric()) {
+        let term = part.to_lowercase();
+        if term.chars().count() < 2 || STOP_WORDS.contains(&term.as_str()) || terms.contains(&term) {
+            continue;
+        }
+        terms.push(term);
+        if terms.len() == 8 { break; }
+    }
+    terms
+}
+
 fn clean_memory(content: &str) -> Result<String, String> {
     let content = content.trim();
     if content.is_empty() { return Err("A saved memory cannot be empty.".to_owned()); }
@@ -1427,11 +1507,11 @@ mod tests {
         let store = store();
         assert_eq!(store.get_awareness_settings().unwrap(), AwarenessSettings::default());
         let saved = store.save_awareness_settings(AwarenessSettings {
-            enabled: true, learn_conversations: true, learn_searches: false, excluded_categories: Vec::new(),
+            enabled: true, learn_conversations: true, learn_searches: false, use_in_chat: false, excluded_categories: Vec::new(),
         }).unwrap();
         assert_eq!(store.get_awareness_settings().unwrap(), saved);
         let paused = store.save_awareness_settings(AwarenessSettings {
-            enabled: false, learn_conversations: true, learn_searches: false, excluded_categories: Vec::new(),
+            enabled: false, learn_conversations: true, learn_searches: false, use_in_chat: false, excluded_categories: Vec::new(),
         }).unwrap();
         assert!(!paused.enabled);
         assert!(paused.learn_conversations);
@@ -1935,7 +2015,7 @@ mod tests {
             "I enjoy astronomy.", "interests", "conversation", Some(source_id), "inferred", 0.8
         ).unwrap().is_none());
         store.save_awareness_settings(AwarenessSettings {
-            enabled: true, learn_conversations: true, learn_searches: false,
+            enabled: true, learn_conversations: true, learn_searches: false, use_in_chat: false,
             excluded_categories: vec!["goals".to_owned()],
         }).unwrap();
         assert!(store.create_awareness_suggestion(
@@ -2001,12 +2081,42 @@ mod tests {
         assert_eq!(store.list_awareness_items().unwrap().len(), 1);
     }
     #[test]
+    fn awareness_context_is_opt_in_and_returns_only_relevant_items() {
+        let store = store();
+        store.create_awareness_item("I enjoy anime, manga, and character theories.", "interests").unwrap();
+        store.create_awareness_item("I prefer concise explanations in English.", "preferences").unwrap();
+        store.create_awareness_item("I enjoy gardening and growing tomatoes.", "interests").unwrap();
+
+        store.save_awareness_settings(AwarenessSettings {
+            enabled: true,
+            use_in_chat: true,
+            ..AwarenessSettings::default()
+        }).unwrap();
+
+        let context = store.relevant_awareness_context("Can you recommend an anime series?").unwrap();
+        assert!(context.contains("anime, manga"));
+        assert!(!context.contains("gardening"));
+        assert!(!context.contains("concise explanations"));
+
+        store.save_awareness_settings(AwarenessSettings {
+            enabled: true,
+            use_in_chat: false,
+            ..AwarenessSettings::default()
+        }).unwrap();
+        assert!(store.relevant_awareness_context("anime").unwrap().is_empty());
+
+        store.save_awareness_settings(AwarenessSettings::default()).unwrap();
+        assert!(store.relevant_awareness_context("anime").unwrap().is_empty());
+    }
+
+    #[test]
     fn awareness_settings_validate_and_normalize_excluded_categories() {
         let store = store();
         let settings = AwarenessSettings {
             enabled: false,
             learn_conversations: false,
             learn_searches: false,
+            use_in_chat: false,
             excluded_categories: vec!["Goals".to_owned(), "goals".to_owned(), "other".to_owned()],
         };
         let saved = store.save_awareness_settings(settings).unwrap();
@@ -2031,6 +2141,7 @@ mod tests {
         let loaded = store.get_awareness_settings().unwrap();
         assert!(loaded.enabled);
         assert!(loaded.learn_conversations);
+        assert!(!loaded.use_in_chat);
         assert!(loaded.excluded_categories.is_empty());
     }
 

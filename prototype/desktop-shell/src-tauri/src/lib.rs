@@ -168,6 +168,11 @@ fn list_awareness_items(store: State<'_, ConversationStore>) -> Result<Vec<Aware
 }
 
 #[tauri::command]
+fn get_relevant_awareness_context(store: State<'_, ConversationStore>, query: String) -> Result<String, String> {
+    store.relevant_awareness_context(&query)
+}
+
+#[tauri::command]
 fn create_awareness_item(store: State<'_, ConversationStore>, content: String, category: String) -> Result<AwarenessItem, String> {
     store.create_awareness_item(&content, &category)
 }
@@ -471,6 +476,7 @@ pub fn run() {
             save_awareness_settings,
             record_learned_awareness_item,
             list_awareness_items,
+            get_relevant_awareness_context,
             list_awareness_suggestions,
             get_awareness_source_message,
             approve_awareness_suggestion,
