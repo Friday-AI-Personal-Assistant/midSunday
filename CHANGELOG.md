@@ -106,3 +106,5 @@ All notable project changes are recorded here. The project is in foundation/prot
 - Added Windows DXGI process-specific local and non-local GPU memory budget snapshots, including current usage, OS budget, reservation headroom, and explicit partial/unavailable states.
 - Displayed GPU memory data in Settings → System & hardware as a user-triggered point-in-time snapshot; the check does not reserve memory or alter GPU settings.
 - Added serialization regression coverage for the GPU memory-budget payload. Real-device validation against Windows telemetry remains pending.
+
+- Improved Windows GPU memory-budget diagnostics: label the sampled DXGI node (currently node 0), preserve independent HRESULT failure codes for local/non-local segments, and display these details in System & hardware. Multi-node enumeration and real-device validation remain pending.

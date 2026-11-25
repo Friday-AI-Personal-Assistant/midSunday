@@ -1202,3 +1202,14 @@ This is hardware inventory only. It does not prove inference-runtime acceleratio
 - [ ] Add event-driven budget-change notifications only when a real runtime consumer needs them and lifecycle handling is designed.
 
 This is not total free VRAM and does not prove that the AI inference runtime is using the adapter. No GPU memory is reserved or model offload enabled.
+
+
+### 2026-11-25 — HIARM GPU query diagnostics
+
+- [x] Label the DXGI memory-budget sample explicitly as node index 0; do not imply it covers every node on multi-node adapters.
+- [x] Preserve the HRESULT independently for failed local and non-local memory-segment queries, while retaining successful results from the other segment.
+- [x] Display the node index and hexadecimal query failure codes in Settings → System & hardware.
+- [ ] Investigate reliable adapter-node enumeration and mapping to the selected inference runtime before using node-specific values for model placement.
+- [ ] Compare live readings with Windows Task Manager on physical integrated/discrete and multi-GPU systems.
+
+The node-zero query is diagnostic inventory only. It does not establish which adapter or node an AI runtime uses, and does not reserve GPU memory.

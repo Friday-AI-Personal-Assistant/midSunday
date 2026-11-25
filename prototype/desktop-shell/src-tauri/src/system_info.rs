@@ -17,8 +17,12 @@ pub struct GpuMemorySegment {
 #[serde(rename_all = "camelCase")]
 pub struct GpuMemoryBudget {
     pub status: String,
+    /// QueryVideoMemoryInfo is sampled for node zero; this is not a count of adapter nodes.
+    pub node_index: u32,
     pub local: Option<GpuMemorySegment>,
+    pub local_error_code: Option<i32>,
     pub non_local: Option<GpuMemorySegment>,
+    pub non_local_error_code: Option<i32>,
 }
 
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
@@ -172,13 +176,12 @@ pub fn assess_capability(
 fn query_gpu_memory_segment(
     adapter: &windows::Win32::Graphics::Dxgi::IDXGIAdapter3,
     group: windows::Win32::Graphics::Dxgi::DXGI_MEMORY_SEGMENT_GROUP,
-) -> Option<GpuMemorySegment> {
+) -> Result<GpuMemorySegment, i32> {
     use windows::Win32::Graphics::Dxgi::DXGI_QUERY_VIDEO_MEMORY_INFO;
     let mut info = DXGI_QUERY_VIDEO_MEMORY_INFO::default();
-    if unsafe { adapter.QueryVideoMemoryInfo(0, group, &mut info) }.is_err() {
-        return None;
-    }
-    Some(GpuMemorySegment {
+    unsafe { adapter.QueryVideoMemoryInfo(0, group, &mut info) }
+        .map_err(|error| error.code().0)?;
+    Ok(GpuMemorySegment {
         budget_bytes: info.Budget,
         current_usage_bytes: info.CurrentUsage,
         available_for_reservation_bytes: info.AvailableForReservation,
@@ -220,19 +223,33 @@ pub fn detect_gpu_adapters() -> GpuDetection {
             .to_owned();
         let memory_budget = match adapter.cast::<IDXGIAdapter3>() {
             Ok(adapter3) => {
-                let local = query_gpu_memory_segment(&adapter3, DXGI_MEMORY_SEGMENT_GROUP_LOCAL);
-                let non_local = query_gpu_memory_segment(&adapter3, DXGI_MEMORY_SEGMENT_GROUP_NON_LOCAL);
+                let local_result = query_gpu_memory_segment(&adapter3, DXGI_MEMORY_SEGMENT_GROUP_LOCAL);
+                let non_local_result = query_gpu_memory_segment(&adapter3, DXGI_MEMORY_SEGMENT_GROUP_NON_LOCAL);
+                let local = local_result.as_ref().ok().cloned();
+                let local_error_code = local_result.err();
+                let non_local = non_local_result.as_ref().ok().cloned();
+                let non_local_error_code = non_local_result.err();
                 let status = match (local.is_some(), non_local.is_some()) {
                     (true, true) => "detected",
                     (true, false) | (false, true) => "partial",
                     (false, false) => "unavailable",
                 };
-                GpuMemoryBudget { status: status.to_owned(), local, non_local }
+                GpuMemoryBudget {
+                    status: status.to_owned(),
+                    node_index: 0,
+                    local,
+                    local_error_code,
+                    non_local,
+                    non_local_error_code,
+                }
             }
             Err(_) => GpuMemoryBudget {
                 status: "unsupported_interface".to_owned(),
+                node_index: 0,
                 local: None,
+                local_error_code: None,
                 non_local: None,
+                non_local_error_code: None,
             },
         };
         adapters.push(GpuAdapter {
@@ -412,6 +429,9 @@ mod gpu_tests {
                 is_software: false,
                 memory_budget: GpuMemoryBudget {
                     status: "detected".to_owned(),
+                    node_index: 0,
+                    local_error_code: None,
+                    non_local_error_code: None,
                     local: Some(GpuMemorySegment {
                         budget_bytes: 4 * 1024 * 1024 * 1024,
                         current_usage_bytes: 512 * 1024 * 1024,

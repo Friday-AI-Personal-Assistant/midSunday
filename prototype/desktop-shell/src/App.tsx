@@ -8,7 +8,7 @@ type Message = { id: number; role: "user" | "assistant" | "system"; text: string
 type RuntimeStatusSnapshot = { status: string; detail: string | null };
 type HardwareDisk = { mountPoint: string; totalBytes: number; availableBytes: number };
 type GpuMemorySegment = { budgetBytes: number; currentUsageBytes: number; availableForReservationBytes: number; currentReservationBytes: number };
-type GpuMemoryBudget = { status: string; local: GpuMemorySegment | null; nonLocal: GpuMemorySegment | null };
+type GpuMemoryBudget = { status: string; nodeIndex: number; local: GpuMemorySegment | null; localErrorCode: number | null; nonLocal: GpuMemorySegment | null; nonLocalErrorCode: number | null };
 type GpuAdapter = { name: string; vendorId: number; deviceId: number; dedicatedVideoMemoryBytes: number; dedicatedSystemMemoryBytes: number; sharedSystemMemoryBytes: number; isSoftware: boolean; memoryBudget: GpuMemoryBudget };
 type GpuDetection = { status: string; adapters: GpuAdapter[] };
 type HardwareSnapshot = {
@@ -1284,9 +1284,11 @@ export default function App() {
                 <div className="hardware-subsection"><strong>Graphics adapters (DXGI on Windows)</strong>
                   <p className="settings-footnote">{hardwareSnapshot.gpu.status === "detected" ? "Display adapters reported by Windows:" : hardwareSnapshot.gpu.status === "unsupported_platform" ? "DXGI adapter inventory is currently implemented for Windows only." : hardwareSnapshot.gpu.status === "no_adapters" ? "Windows did not report a display adapter." : "GPU adapter information is unavailable on this system."}</p>
                   {hardwareSnapshot.gpu.adapters.map((adapter, index) => <div className="hardware-gpu" key={adapter.vendorId + "-" + adapter.deviceId + "-" + index}><strong>{adapter.name}</strong><span>Vendor 0x{adapter.vendorId.toString(16).padStart(4, "0")} · Device 0x{adapter.deviceId.toString(16).padStart(4, "0")}</span><span>Dedicated video memory: {formatModelSize(adapter.dedicatedVideoMemoryBytes)}</span><span>Dedicated system memory: {formatModelSize(adapter.dedicatedSystemMemoryBytes)} · Shared system memory: {formatModelSize(adapter.sharedSystemMemoryBytes)}</span>{adapter.isSoftware && <span>Software adapter (not a physical GPU)</span>}
-                    <span>Process memory-budget query: {adapter.memoryBudget.status === "detected" ? "Available" : adapter.memoryBudget.status === "partial" ? "Partially available" : adapter.memoryBudget.status === "unsupported_interface" ? "Not supported by this adapter" : "Unavailable"}</span>
+                    <span>Process memory-budget query (DXGI node {adapter.memoryBudget.nodeIndex}): {adapter.memoryBudget.status === "detected" ? "Available" : adapter.memoryBudget.status === "partial" ? "Partially available" : adapter.memoryBudget.status === "unsupported_interface" ? "Not supported by this adapter" : "Unavailable"}</span>
                     {adapter.memoryBudget.local && <span>Local GPU segment: {formatModelSize(adapter.memoryBudget.local.currentUsageBytes)} used / {formatModelSize(adapter.memoryBudget.local.budgetBytes)} budget · {formatModelSize(adapter.memoryBudget.local.availableForReservationBytes)} available for reservation</span>}
+                    {!adapter.memoryBudget.local && adapter.memoryBudget.localErrorCode !== null && <span>Local segment query failed (HRESULT 0x{(adapter.memoryBudget.localErrorCode >>> 0).toString(16).padStart(8, "0").toUpperCase()})</span>}
                     {adapter.memoryBudget.nonLocal && <span>Non-local segment: {formatModelSize(adapter.memoryBudget.nonLocal.currentUsageBytes)} used / {formatModelSize(adapter.memoryBudget.nonLocal.budgetBytes)} budget</span>}
+                    {!adapter.memoryBudget.nonLocal && adapter.memoryBudget.nonLocalErrorCode !== null && <span>Non-local segment query failed (HRESULT 0x{(adapter.memoryBudget.nonLocalErrorCode >>> 0).toString(16).padStart(8, "0").toUpperCase()})</span>}
                   </div>)}
                   <p className="settings-footnote">Memory values are a point-in-time snapshot for midSunday's process, not total free GPU memory. The OS may change the budget. Non-local memory is system-backed; no memory is reserved or changed by this check. Runtime acceleration is still not verified.</p>
                 </div>

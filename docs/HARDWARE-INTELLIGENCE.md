@@ -329,3 +329,8 @@ This is a point-in-time, read-only snapshot refreshed only when the user request
 Microsoft documents that the budget is the process's OS-provided target and that usage beyond it can cause performance penalties. See [IDXGIAdapter3::QueryVideoMemoryInfo](https://learn.microsoft.com/en-us/windows/win32/api/dxgi1_4/nf-dxgi1_4-idxgiadapter3-queryvideomemoryinfo), [DXGI_QUERY_VIDEO_MEMORY_INFO](https://learn.microsoft.com/en-us/windows/win32/api/dxgi1_4/ns-dxgi1_4-dxgi_query_video_memory_info), and the [windows 0.62.2 Rust bindings](https://microsoft.github.io/windows-docs-rs/doc/windows/Win32/Graphics/Dxgi/struct.IDXGIAdapter3.html).
 
 Real-device comparison against Windows Task Manager / GPU engine telemetry and multi-GPU hardware remains required before using these fields for recommendations or workload scheduling.
+
+
+### Process-specific DXGI query diagnostics (2026-11-25)
+
+The current Windows snapshot calls `IDXGIAdapter3::QueryVideoMemoryInfo` for **node index 0** on each enumerated adapter, separately for local and non-local segments. This is deliberately labelled as node zero; it does not enumerate or claim to cover every node in a multi-node adapter. Each segment query preserves its own result and, when it fails, the signed HRESULT is retained for diagnostics and rendered as an eight-digit hexadecimal code. An unsupported adapter interface is distinct from an attempted query that failed. The snapshot remains on-demand and read-only. Node enumeration, runtime-to-adapter mapping, and real-device comparison with Windows Task Manager remain open validation work.
