@@ -3,6 +3,10 @@
 All notable project changes are recorded here. The project is in foundation/prototype development; no application release has been made.
 
 ## 2026-11-25
+- Added the first local HIARM hardware inventory baseline for OS, CPU, RAM, and storage, with on-demand refresh in Settings. GPU detection and adaptive recommendations remain future work.
+- Recorded the internal commercial licensing plan: one-time lifetime-use target, six months of included updates, paid upgrades thereafter, verified website checkout, email/recovery delivery, one active device, transfer/revocation, and strict separation from private app data. Pricing, offline verification policy, payment/email providers, and final legal terms remain open.
+
+## 2026-11-25
 - Confirmed Windows 10 and Windows 11 as the intended Windows support targets; Windows 10 version 22H2 is the initial compatibility baseline, with earlier builds subject to dependency and real-device validation. Added planned diagnostics covering startup/runtime health, missing prerequisites, crash/error dialogs, a Diagnostics centre, local-only-by-default logs, and user-approved diagnostic export.
 - Recorded cloud-provider migration and disconnect behaviour, separate remote-backup deletion controls, and encrypted-backup default-password rotation. Password changes affect future backups only; existing archives retain their original password/recovery-key protection, and a recovery key can authorise changing the default after a forgotten password.
 - Corrected the legacy unversioned-database migration test to expect schema version 8 after the saved-memory FTS5 migration; the migration and data-preservation behavior were already passing.

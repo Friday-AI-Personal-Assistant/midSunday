@@ -1031,3 +1031,132 @@ Conversation-derived Awareness must not outlive the conversation messages that s
 - Added requirements for startup health checks, runtime/crash detection, clear user-facing error dialogs, a Diagnostics centre, local-by-default logs, and user-approved diagnostic export only.
 - Added installer/pre-launch prerequisite checks for failures such as missing or damaged WebView2/runtime components that could prevent midSunday itself from opening.
 - Windows 7 and Windows 8/8.1 are not official support targets.
+
+---
+
+# INTERNAL / CONFIDENTIAL — Commercial licensing and delivery plan
+
+> This section is an internal planning record, not public product documentation. Revisit and remove or replace it before the public release. Commercial terms, prices, update periods, payment providers, and infrastructure remain subject to final legal, technical, and cost review.
+
+## 1. Commercial licence model
+
+- Initial target price: **US$20 one-time purchase** for a lifetime-use licence. The price is a planning target, not a final public offer.
+- One licence may be active on **one computer at a time**. The owner may deactivate it and transfer it to another computer, subject to reasonable anti-abuse controls.
+- Lifetime use does **not** mean lifetime feature updates or lifetime technical support.
+- Include updates released during the first **six months from the purchase date**. This period covers feature updates, improvements, bug fixes, and security updates released within that window.
+- After the included update period ends, the customer may continue using the licensed version they already have indefinitely. Updates released after that period require a separately purchased upgrade or update entitlement; no subscription is required to keep using the existing version.
+- Consider a fair discounted upgrade price rather than automatically charging the full initial purchase price again. Final upgrade pricing and the exact meaning of a major-version upgrade must be defined before sales begin.
+- Do not promise lifetime technical support. Define a realistic support policy separately.
+
+## 2. Separate licensing infrastructure
+
+- Use a small, independent licensing service, with Cloudflare Workers and D1 as an initial candidate, subject to current free-tier quotas, terms, availability, and a tested migration path.
+- The licensing service manages purchase verification, licence issuance, activation/deactivation, device transfers, recovery, replacement, revocation, and update entitlements.
+- Keep licensing infrastructure separate from the midSunday application and its local data. It must not become a chat, memory, model, file, microphone, or backup service.
+- Keep requests lightweight and event-driven. Do not run a continuously active server or scheduled workload unless a demonstrated requirement justifies it.
+- Free-tier quotas are limits, not a guarantee of unlimited free service. Disclose unavoidable payment-processing or email-delivery costs before choosing providers.
+
+## 3. Licence administration and founder/test licences
+
+- Provide a private administration process for creating, issuing, reviewing, suspending, revoking, and replacing licences.
+- Support manually issued founder, development, demonstration, and QA licences without requiring a customer payment.
+- Support batch issuance only for controlled testing or approved promotions.
+- Record purchase references, licence status, entitlement dates, activation events, and administrative actions with minimal necessary metadata.
+- Protect administration with strong authentication, least privilege, and audit records. Never embed an administrative master key in the desktop application.
+
+## 4. Official website purchase and licence delivery
+
+- The official website may display the licence key and recovery code on a secure checkout-success page after the backend independently verifies that payment succeeded.
+- Also send the licence details to the buyer's email as a convenient backup, where a suitable email-delivery provider is available.
+- Never issue a licence solely because a browser was redirected to a success URL. Verify payment through a trusted server-side provider response or signed webhook.
+- Make webhook processing idempotent so retries cannot create duplicate licences or duplicate entitlements.
+- Do not place licence keys, recovery codes, or other secrets in public URLs, analytics events, or browser-visible payment metadata.
+- Provide a secure way to retrieve the purchase later if the buyer closes the success page or the email is delayed. Email delivery failure must not silently invalidate a verified purchase.
+- Compare provider free tiers and limits before implementation. Do not promise that email sending or payment processing will be free.
+
+## 5. Buyer email and ownership recovery
+
+- Associate each purchased licence with a buyer-provided, verified email address for receipts, ownership records, and recovery. Support ordinary email providers and custom domains.
+- Do not require Google Sign-In or a Google account. An email address is an ownership/recovery contact, not permission for Google to access midSunday.
+- Do not make continued access to one email inbox the sole proof of ownership.
+- Provide a separate recovery code at purchase/issuance. Store only a secure verifier/hash server-side, not the plaintext recovery code.
+- If the buyer loses the licence key but still controls the verified email, allow a verified recovery flow. If the buyer loses email access but has the key, require additional purchase evidence. If both are lost, use a manual purchase-verification process.
+- After ownership is verified, allow the buyer email to be updated and the key/recovery material to be reissued. Revoke the superseded key.
+- Clearly explain that losing both the key/recovery material and the ability to prove purchase may make recovery impossible.
+
+## 6. Customer activation
+
+- Activation should be simple: the customer enters the licence key in midSunday. Do not ask them to copy or submit a Device ID manually.
+- The application may generate a privacy-conscious device binding automatically and send only the minimum required activation data to the licensing service.
+- The service returns a signed entitlement that the application can verify locally. Define the signing format, key rotation, entitlement fields, and replay protections during implementation.
+- The entitlement should identify the licence, activation status, permitted device count, and included-update expiry without exposing unnecessary buyer data.
+- Do not transmit conversations, memories, local model contents, files, microphone data, or backups during activation.
+
+## 7. Deactivation and device transfer
+
+- Add a clear **Deactivate this computer** action in Settings → Licence.
+- After successful deactivation, the server releases that activation so the same key can be used on another computer.
+- Explain that deactivation normally requires an internet connection. Provide a support-assisted recovery path for a lost, broken, or inaccessible computer.
+- Apply reasonable transfer limits and human review for suspicious patterns, without trapping legitimate customers after hardware replacement or OS reinstall.
+
+## 8. Lost, stolen, replaced, and revoked licences
+
+- Provide a support process for reporting a stolen or compromised key.
+- Verify ownership before cancelling or replacing a licence.
+- Revoke the old key and issue a replacement linked to the verified owner and the remaining purchase/update entitlement.
+- Keep a minimal audit trail of replacement and revocation events.
+- Clarify how a revoked entitlement affects an offline computer: a device that never reconnects cannot learn about a server-side revocation until it checks again.
+
+## 9. Offline use and verification policy — decision required
+
+- Core app functionality and user data must remain local. Do not require continuous connectivity or a permanently running licensing server.
+- Activation-only is the preferred first implementation for minimal cost and customer friction. Under this model, an already activated installation continues offline, but remote revocation or device-transfer changes cannot take effect on that device until it contacts the service again.
+- A periodic verification policy with a defined offline grace period is an alternative, but must not be introduced without a clear customer-facing explanation and tested outage behaviour.
+- Finalise whether activation-only or periodic verification is used before implementation and before publishing licence terms.
+- Never make local conversations, memories, backups, or files inaccessible merely because the licensing service is temporarily unavailable.
+
+## 10. Security architecture and realistic limits
+
+- Keep private signing keys and payment-provider secrets on the server, outside the public repository and desktop package.
+- Verify signed entitlements in the Rust application layer; do not rely only on frontend checks.
+- Use rate limits, abuse detection, secure transport, strict input validation, and protected administrative access.
+- Avoid collecting a hardware fingerprint more detailed than needed for one-active-device enforcement. Document what device information is collected and why.
+- Treat client-side checks as a deterrent, not perfect DRM. A modified client can potentially bypass local enforcement; do not promise uncrackable protection.
+- Do not silently lock users out of their local data during a server outage or routine service migration.
+
+## 11. Developer, founder, and testing licences
+
+- Provide manually created internal licences for the founder, developers, testers, and approved demonstrations.
+- Keep test and production licensing environments separate, with visibly distinct test keys and records.
+- Test licences must not grant hidden administrative powers or introduce a master bypass into the released application.
+- Document how internal licences are created, rotated, and revoked.
+
+## 12. Privacy and data separation
+
+- The licensing backend may store only the minimum information needed for licence ownership and enforcement: licence identifiers or secure key verifiers, verified contact email, purchase reference/status, entitlement dates, activation binding, and necessary audit metadata.
+- It must not have access to private chats, saved memories, Awareness data, prompts, local models, user files, microphone recordings, or backup contents.
+- No Google Sign-In, Google Drive access, or Google account permission is required for licensing.
+- Publish a plain-language privacy notice describing licensing data, device binding, retention, and support/recovery handling before sales begin.
+
+## 13. Reliability, recovery, and provider migration
+
+- Back up licensing records securely and test restoration before accepting real purchases.
+- Keep a documented export/migration path so the service can move away from Cloudflare or another provider without invalidating legitimate customer licences.
+- Design signed entitlements so already-issued licences can be validated locally during a temporary backend outage, within the final chosen verification policy.
+- Monitor quota usage and service errors without collecting application content.
+- Keep a manual support procedure for verified purchases if automated email or website delivery fails.
+
+## 14. Implementation and release acceptance criteria
+
+- Payment is verified server-side before a paid licence is issued.
+- Checkout success page and email delivery do not expose secrets in URLs or analytics.
+- Repeated payment webhooks cannot issue duplicate licences.
+- Manual founder/test licence issuance works without payment.
+- Key activation succeeds without asking the customer to provide a Device ID.
+- One active computer is enforced; normal deactivation and transfer work.
+- Lost-key, lost-email, recovery-code, replacement, and stolen-key support flows are tested.
+- Signed entitlements validate locally and survive temporary licensing-service outages according to the published policy.
+- The six-month included-update period is calculated from verified purchase time; the existing licensed version remains usable after expiry, while later updates require a valid upgrade entitlement.
+- Licensing requests contain no private application content, and the application remains usable with local data intact if the licensing service is unavailable.
+- Free-tier limits, payment fees, email costs, legal terms, refund rules, and support obligations are reviewed before launch.
+
