@@ -3,6 +3,7 @@
 All notable project changes are recorded here. The project is in foundation/prototype development; no application release has been made.
 
 ## 2026-11-25
+- Corrected the legacy unversioned-database migration test to expect schema version 6 after the new Awareness review-queue migration; all original conversation data assertions remain unchanged.
 - Added the local Awareness Learning Review queue with a versioned SQLite migration, Rust-enforced source/master/category/suppression checks, explicit approve/reject actions, and rejection fingerprints. Suggestions remain pending until user approval; the automatic local extractor is not connected yet.
 - Fixed the legacy Awareness-settings regression test to update the migration-created default preference row instead of inserting a duplicate primary key.
 - Added independently switchable local Awareness category exclusions in Settings; exclusions are validated, normalized, persisted backward-compatibly, and enforced in Rust by a guarded automatic-ingestion command. Added regression tests for master/source opt-in, category exclusions, deletion fingerprints, legacy settings, and invalid categories. No automatic extraction or activity collection is active yet.
