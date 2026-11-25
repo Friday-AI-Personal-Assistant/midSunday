@@ -15,7 +15,7 @@ type HardwareSnapshot = {
   capturedAtUnixSeconds: number;
   osName: string | null; osVersion: string | null; architecture: string;
   cpuModel: string | null; cpuInstructionSets: { status: string; features: string[] }; logicalCoreCount: number; physicalCoreCount: number | null;
-  totalMemoryBytes: number; availableMemoryBytes: number; processMemory: { status: string; residentBytes: number | null; virtualBytes: number | null }; disks: HardwareDisk[];
+  totalMemoryBytes: number; availableMemoryBytes: number; modelStorage: { status: string; mountPoint: string | null; availableBytes: number | null; freePercent: number | null; volumeStatus: string | null }; processMemory: { status: string; residentBytes: number | null; virtualBytes: number | null }; disks: HardwareDisk[];
   gpu: GpuDetection;
   assessment: { suggestedMode: string; memoryTier: string; rationale: string; currentMemoryPressure: boolean; limitations: string };
 };
@@ -248,7 +248,7 @@ export default function App() {
         setCpuThreads(settings.cpuThreads === null ? "" : String(settings.cpuThreads));
       })
       .catch(() => { if (active) setRuntimeError("Could not load saved local engine settings."); });
-    invoke<HardwareSnapshot>("get_hardware_snapshot")
+    invoke<HardwareSnapshot>("get_hardware_snapshot", { modelPath: modelPath.trim() || null })
       .then((snapshot) => { if (active) { setHardwareSnapshot(snapshot); setHardwareError(""); } })
       .catch((error) => { if (active) setHardwareError("Hardware information is unavailable: " + String(error)); });
     refreshRuntimeStatus();
@@ -1284,6 +1284,14 @@ export default function App() {
                   <p>{hardwareSnapshot.assessment.rationale}</p>
                   {hardwareSnapshot.assessment.currentMemoryPressure && <p className="hardware-pressure" role="status">Current available memory is low compared with the installed RAM. Close unnecessary applications and refresh before attempting a demanding model workload.</p>}
                   <small className="hardware-assessment-limit">{hardwareSnapshot.assessment.limitations}</small>
+                </div>
+                <div className="hardware-subsection"><strong>Configured model storage</strong>
+                  {hardwareSnapshot.modelStorage.status === "matched" ? <div className={"hardware-model-storage hardware-model-storage-" + (hardwareSnapshot.modelStorage.volumeStatus ?? "unknown")}>
+                    <strong>{hardwareSnapshot.modelStorage.mountPoint}</strong>
+                    <span>{hardwareSnapshot.modelStorage.availableBytes === null ? "Free space unavailable" : formatModelSize(hardwareSnapshot.modelStorage.availableBytes) + " free"}{hardwareSnapshot.modelStorage.freePercent === null ? "" : " · " + hardwareSnapshot.modelStorage.freePercent + "% free"}</span>
+                    <span>{hardwareSnapshot.modelStorage.volumeStatus === "critical" ? "Critical free-space warning" : hardwareSnapshot.modelStorage.volumeStatus === "low" ? "Low free-space warning" : hardwareSnapshot.modelStorage.volumeStatus === "healthy" ? "General volume headroom looks adequate" : "Volume capacity status unavailable"}</span>
+                  </div> : <p className="settings-footnote">{hardwareSnapshot.modelStorage.status === "not_configured" ? "Set a GGUF model path in Local AI settings to identify its storage volume." : hardwareSnapshot.modelStorage.status === "model_path_unavailable" ? "The configured model path could not be resolved. Check that the file exists and refresh." : hardwareSnapshot.modelStorage.status === "model_file_not_found" ? "The configured path is not an existing model file." : "The model storage volume could not be matched to an enumerated volume."}</p>}
+                  <p className="settings-footnote">This identifies the containing volume only. It does not estimate download staging space, conversion space, context/KV cache, or runtime memory requirements.</p>
                 </div>
                 <div className="hardware-subsection"><strong>Storage volumes</strong>
                   {hardwareSnapshot.disks.length === 0 ? <p className="settings-footnote">No storage-volume information was available.</p> : hardwareSnapshot.disks.map((disk) => <div className={"hardware-disk hardware-disk-" + disk.status} key={disk.mountPoint}><div className="hardware-disk-heading"><strong>{disk.mountPoint}</strong><span>{formatModelSize(disk.availableBytes)} free of {formatModelSize(disk.totalBytes)} · {disk.freePercent}% free</span></div><div className="hardware-disk-track" role="meter" aria-label={"Used storage on " + disk.mountPoint} aria-valuemin={0} aria-valuemax={100} aria-valuenow={100 - disk.freePercent}><div className="hardware-disk-fill" style={{ width: (100 - disk.freePercent) + "%" }} /></div><span className="hardware-disk-status">{disk.status === "critical" ? "Very low free space" : disk.status === "low" ? "Low free space" : disk.status === "healthy" ? "Free-space headroom looks adequate" : "Capacity information unavailable"}</span></div>)}

@@ -1231,7 +1231,16 @@ The node-zero query is diagnostic inventory only. It does not establish which ad
 - [x] Classify volumes as Healthy, Low, Critical, or Unknown using conservative absolute and percentage thresholds.
 - [x] Display used-space bars and plain-language free-space status in Settings → System & hardware.
 - [x] Add Rust regression tests for threshold boundaries, zero capacity, and free-space clamping.
-- [ ] Identify the actual configured model storage volume and compare its free space with a model-specific download/install/runtime estimate.
+- [x] Identify the configured model storage volume and display its containing volume's available space and health status.
+- [ ] Compare free space with a model-specific download/install/runtime estimate.
 - [ ] Validate volume enumeration and threshold usefulness on real Windows, Linux, and macOS devices.
 
 These indicators describe general volume headroom only. They do not guarantee that a model can be downloaded, installed, loaded, or run.
+
+### 2026-11-25 — HIARM configured model storage-volume matching
+
+- [x] Pass the configured GGUF model path into the local hardware refresh.
+- [x] Resolve an existing model file and match it to the most specific enumerated volume using canonical filesystem paths.
+- [x] Display the matched volume, available bytes, free percentage, and general volume health in Settings.
+- [x] Report unconfigured, inaccessible, missing, and unmatched paths explicitly; do not guess a drive.
+- [ ] Validate path and mount matching on physical Windows, Linux, and macOS devices and add model-specific storage-footprint estimates.

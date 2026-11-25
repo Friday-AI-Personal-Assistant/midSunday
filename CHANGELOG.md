@@ -3,6 +3,7 @@
 All notable project changes are recorded here. The project is in foundation/prototype development; no application release has been made.
 
 ## 2026-11-25
+- Added HIARM matching of the configured GGUF model file to its containing storage volume, showing free-space headroom and explicit unresolved-path states without reading model contents or transmitting the path.
 - Added an on-demand midSunday process-memory snapshot showing resident physical memory and virtual address space, with explicit unavailable states and a privacy boundary that queries no other processes.
 - Added runtime-detected CPU instruction-set inventory for x86/x86-64 (SSE, AVX, AVX2, FMA) and AArch64 NEON, displayed in System & hardware with explicit runtime-compatibility caveats.
 - Added a preliminary local HIARM capability assessment based on installed RAM and logical CPU count, including an independent low-current-memory warning and explicit limitations. It is informational only and does not select models or change settings.

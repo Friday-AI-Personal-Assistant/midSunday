@@ -102,6 +102,16 @@ pub struct ProcessMemorySnapshot {
 
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+pub struct ModelStorageAssessment {
+    pub status: String,
+    pub mount_point: Option<String>,
+    pub available_bytes: Option<u64>,
+    pub free_percent: Option<u8>,
+    pub volume_status: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct HardwareSnapshot {
     /// Unix timestamp in seconds captured when this snapshot was collected.
     pub captured_at_unix_seconds: u64,
@@ -116,6 +126,7 @@ pub struct HardwareSnapshot {
     pub available_memory_bytes: u64,
     pub process_memory: ProcessMemorySnapshot,
     pub disks: Vec<HardwareDisk>,
+    pub model_storage: ModelStorageAssessment,
     pub gpu: GpuDetection,
     pub assessment: CapabilityAssessment,
 }
@@ -333,8 +344,35 @@ pub fn collect_current_process_memory() -> ProcessMemorySnapshot {
     }
 }
 
+/// Matches an existing configured model file to the most specific enumerated volume.
+pub fn assess_model_storage(model_path: Option<&str>, disks: &[HardwareDisk]) -> ModelStorageAssessment {
+    let Some(path_text) = model_path.map(str::trim).filter(|value| !value.is_empty()) else {
+        return ModelStorageAssessment { status: "not_configured".to_owned(), mount_point: None, available_bytes: None, free_percent: None, volume_status: None };
+    };
+    let Ok(model_file) = std::fs::canonicalize(path_text) else {
+        return ModelStorageAssessment { status: "model_path_unavailable".to_owned(), mount_point: None, available_bytes: None, free_percent: None, volume_status: None };
+    };
+    if !model_file.is_file() {
+        return ModelStorageAssessment { status: "model_file_not_found".to_owned(), mount_point: None, available_bytes: None, free_percent: None, volume_status: None };
+    }
+    let matched = disks.iter().filter_map(|disk| {
+        let mount = std::fs::canonicalize(&disk.mount_point).ok()?;
+        if model_file.starts_with(&mount) { Some((mount.components().count(), disk)) } else { None }
+    }).max_by_key(|(depth, _)| *depth).map(|(_, disk)| disk);
+    match matched {
+        Some(disk) => ModelStorageAssessment {
+            status: "matched".to_owned(),
+            mount_point: Some(disk.mount_point.clone()),
+            available_bytes: Some(disk.available_bytes),
+            free_percent: Some(disk.free_percent),
+            volume_status: Some(disk.status.clone()),
+        },
+        None => ModelStorageAssessment { status: "volume_not_detected".to_owned(), mount_point: None, available_bytes: None, free_percent: None, volume_status: None },
+    }
+}
+
 /// Collects a one-time snapshot and queries only midSunday's own process memory.
-pub fn collect_hardware_snapshot() -> HardwareSnapshot {
+pub fn collect_hardware_snapshot(model_path: Option<String>) -> HardwareSnapshot {
     let mut system = System::new();
     system.refresh_memory();
     system.refresh_cpu_list(CpuRefreshKind::everything());
@@ -363,6 +401,7 @@ pub fn collect_hardware_snapshot() -> HardwareSnapshot {
         .collect::<Vec<_>>();
     disks.sort_by(|left, right| left.mount_point.cmp(&right.mount_point));
 
+    let model_storage = assess_model_storage(model_path.as_deref(), &disks);
     let total_memory_bytes = system.total_memory();
     let available_memory_bytes = system.available_memory();
     let logical_core_count = system.cpus().len();
@@ -383,6 +422,7 @@ pub fn collect_hardware_snapshot() -> HardwareSnapshot {
         available_memory_bytes,
         process_memory: collect_current_process_memory(),
         disks,
+        model_storage,
         gpu: detect_gpu_adapters(),
         assessment: assess_capability(total_memory_bytes, available_memory_bytes, logical_core_count),
     }
@@ -413,6 +453,7 @@ mod tests {
                 free_percent: 50,
                 status: "healthy".to_owned(),
             }],
+            model_storage: ModelStorageAssessment { status: "not_configured".to_owned(), mount_point: None, available_bytes: None, free_percent: None, volume_status: None },
             gpu: GpuDetection { status: "unsupported_platform".to_owned(), adapters: Vec::new() },
             assessment: assess_capability(16 * 1024 * 1024 * 1024, 8 * 1024 * 1024 * 1024, 8),
         };

@@ -278,8 +278,8 @@ fn get_app_status() -> &'static str {
 }
 
 #[tauri::command]
-async fn get_hardware_snapshot() -> Result<HardwareSnapshot, String> {
-    tauri::async_runtime::spawn_blocking(system_info::collect_hardware_snapshot)
+async fn get_hardware_snapshot(model_path: Option<String>) -> Result<HardwareSnapshot, String> {
+    tauri::async_runtime::spawn_blocking(move || system_info::collect_hardware_snapshot(model_path))
         .await
         .map_err(|_| "The local hardware detection worker could not complete.".to_owned())
 }

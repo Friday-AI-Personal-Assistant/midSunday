@@ -348,3 +348,9 @@ h1 { margin: 0; color: #eef5ef; font-size: clamp(25px, 3vw, 34px); font-weight: 
 .hardware-process-memory > div { display: grid; gap: 5px; min-width: 120px; }
 .hardware-process-memory small, .hardware-process-memory span { color: #829287; font-size: 9px; line-height: 1.5; }
 .hardware-process-memory strong { color: #dce8de; font-size: 13px; }
+
+.hardware-model-storage { display: grid; gap: 5px; padding: 11px; border: 1px solid var(--line); border-radius: 8px; background: rgba(255,255,255,.02); }
+.hardware-model-storage strong { color: #dce8de; font-size: 11px; overflow-wrap: anywhere; }
+.hardware-model-storage span { color: #9aab9f; font-size: 9px; line-height: 1.5; overflow-wrap: anywhere; }
+.hardware-model-storage-low span:last-child { color: #d9b878; }
+.hardware-model-storage-critical span:last-child { color: #e39a90; }

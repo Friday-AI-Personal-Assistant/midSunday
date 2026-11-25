@@ -359,3 +359,11 @@ The on-demand hardware refresh now queries memory for **only the current midSund
 The probe requests only the current process ID internally and does not return or persist the PID. It does not enumerate other processes or collect their names, command lines, memory use, or application identities. If the operating system does not provide the current process record, the fields remain unavailable rather than being guessed. Values are point-in-time diagnostics and are not a history or a measure of model-only memory.
 
 Virtual address space must not be confused with physical RAM consumption. Resident memory includes all memory resident for the midSunday process, not just an AI model. This metric does not identify individual allocations, prove GPU use, or trigger resource-management actions. It remains local and on-demand.
+
+## 21. Configured model storage-volume matching (2026-11-25)
+
+The hardware refresh accepts the configured GGUF model path and resolves the existing file locally. It matches the canonical file path to the most specific enumerated storage-volume mount point. Settings displays the matched volume, available bytes, free percentage, and general volume health.
+
+No model file contents are read. The full configured path is not copied into the hardware snapshot; only the matched mount point and capacity indicators are returned. Empty, missing, inaccessible, or unmatched paths produce explicit statuses. The check runs only when the user refreshes hardware information.
+
+This is volume identification, not a model-fit calculation. It does not estimate download staging space, model conversion overhead, context/KV cache, runtime allocations, or GPU memory. Real-device validation remains required on Windows, Linux, and macOS.
