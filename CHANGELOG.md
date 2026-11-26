@@ -185,3 +185,5 @@ All notable project changes are recorded here. The project is in foundation/prot
 - Hardened GGUF string-array scanning so a declared string payload that would exceed the aggregate 64 MiB metadata-section budget is rejected before allocating or reading that payload; added regression coverage for the preflight.
 
 - Hardened both GGUF metadata inspectors to reject a metadata key whose declared length exceeds the remaining aggregate 8 MiB key budget before allocating or reading its payload; added a cursor-position regression test.
+
+- Hardened GGUF metadata-section accounting so metadata keys and scalar string values are rejected before allocation/read when their declared payload would cross the aggregate 64 MiB section budget; added cursor-boundary regression tests.

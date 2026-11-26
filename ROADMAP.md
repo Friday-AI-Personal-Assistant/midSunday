@@ -1680,3 +1680,13 @@ This prevents a single bounded string allocation from temporarily overshooting t
 - [x] Add regression coverage proving an over-budget key payload is not consumed.
 
 See docs/HARDWARE-INTELLIGENCE.md section 55.
+
+
+### 2026-11-26 — GGUF metadata string section-budget preflight (Batch #165)
+
+- [x] Apply the aggregate 64 MiB metadata-section boundary to metadata-key payloads before allocation or reading.
+- [x] Apply the same preflight to scalar string values, including selected fields and unknown metadata strings.
+- [x] Preserve the separate 8 MiB aggregate metadata-key budget, per-string cap, and opened-file truncation check.
+- [x] Add regression tests proving over-budget metadata-key and scalar-string payloads are rejected while their payload bytes remain unread.
+
+This closes the remaining single-string allocation gap in the metadata-section work budget. It does not change tensor parsing, load model weights, or transmit data. See docs/HARDWARE-INTELLIGENCE.md section 56.
