@@ -1767,3 +1767,15 @@ These checks reject internally contradictory model metadata before HIARM uses it
 - [x] Keep production parser behaviour unchanged; correct the incomplete synthetic fixture only.
 
 See docs/HARDWARE-INTELLIGENCE.md section 64.
+
+
+### 2026-11-26 — HIARM pressure-aware starting profiles (Batch #174)
+
+- [x] Keep the installed-RAM tier and CPU-topology assessment as the baseline.
+- [x] Clamp available-memory readings to installed RAM before evaluating headroom.
+- [x] Reduce the suggested profile by one level when current available RAM falls below the conservative headroom threshold.
+- [x] Preserve Lightweight as the safest profile when the machine is already constrained.
+- [x] Add regression tests for Balanced-to-Lightweight and High-capacity-to-Balanced downgrades, healthy headroom, and inconsistent memory readings.
+- [x] Keep the assessment advisory only; it does not change runtime settings or claim model compatibility.
+
+See docs/HARDWARE-INTELLIGENCE.md section 65.

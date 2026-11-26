@@ -661,3 +661,10 @@ Recognised architecture-specific dimensions and counts are now required to be po
 - Corrected the positive-dimension and count-relationship regression fixture to include the required `general.architecture = "llama"` metadata entry.
 - Preserved the parser rule that architecture-specific metadata must match a declared architecture, independent of metadata ordering.
 - Kept the production validation rules unchanged; this is a test-fixture correction, not a relaxation of GGUF validation.
+
+
+## 65. HIARM pressure-aware starting profiles (Batch #174)
+
+The first HIARM capability assessment now considers both installed RAM and the currently available RAM snapshot. It continues to classify the machine by installed-memory tier and CPU logical-processor count, then conservatively reduces the suggested starting profile by one level when available RAM falls below the existing headroom threshold. A high-capacity suggestion becomes Balanced; a Balanced suggestion becomes Lightweight; a Lightweight suggestion remains Lightweight. Available memory is clamped to installed memory so inconsistent operating-system readings cannot create artificial headroom.
+
+This is a recommendation only: it does not change runtime settings, terminate applications, select or download a model, or guarantee that a model will fit. The assessment still explicitly excludes GPU/VRAM, runtime acceleration, model-specific benchmarks, context size, and speech workloads. Regression tests cover both downgrade levels, comfortable headroom, and impossible available-memory readings.

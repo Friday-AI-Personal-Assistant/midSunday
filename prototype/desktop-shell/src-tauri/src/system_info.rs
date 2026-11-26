@@ -193,18 +193,34 @@ pub fn assess_capability(
         ("Very high-capacity", "High capability", "Installed RAM is at least 48 GiB.")
     };
 
-    let rationale = if logical_core_count < 4 {
+    let available = available_memory_bytes.min(total_memory_bytes);
+    let pressure_threshold = (total_memory_bytes / 6).max(2 * GIB);
+    let current_memory_pressure = available < pressure_threshold;
+
+    let cpu_reason = if logical_core_count < 4 {
         suggested_mode = "Lightweight";
-        format!("{memory_reason} The CPU reports fewer than 4 logical processors, so Lightweight is the safer starting point.")
+        "The CPU reports fewer than 4 logical processors, so Lightweight is the safer starting point.".to_owned()
     } else if suggested_mode == "High capability" && logical_core_count < 8 {
         suggested_mode = "Balanced";
-        format!("{memory_reason} The CPU reports fewer than 8 logical processors, so Balanced is the more cautious starting point.")
+        "The CPU reports fewer than 8 logical processors, so Balanced is the more cautious starting point.".to_owned()
     } else {
-        format!("{memory_reason} The detected CPU reports {logical_core_count} logical processors.")
+        format!("The detected CPU reports {logical_core_count} logical processors.")
     };
 
-    let pressure_threshold = (total_memory_bytes / 6).max(2 * GIB);
-    let current_memory_pressure = available_memory_bytes < pressure_threshold;
+    let rationale = if current_memory_pressure {
+        let previous_mode = suggested_mode;
+        suggested_mode = match suggested_mode {
+            "High capability" => "Balanced",
+            "Balanced" => "Lightweight",
+            other => other,
+        };
+        format!(
+            "{memory_reason} {cpu_reason} Available RAM is below the conservative headroom threshold of {} GiB, so the suggested profile is reduced from {previous_mode} to {suggested_mode} for this snapshot.",
+            pressure_threshold / GIB
+        )
+    } else {
+        format!("{memory_reason} {cpu_reason}")
+    };
 
     CapabilityAssessment {
         suggested_mode: suggested_mode.to_owned(),
@@ -214,7 +230,6 @@ pub fn assess_capability(
         limitations: limitations.to_owned(),
     }
 }
-
 /// Queries one process-specific DXGI memory segment. This is a point-in-time snapshot.
 #[cfg(target_os = "windows")]
 fn query_gpu_memory_segment(
@@ -575,11 +590,33 @@ mod tests {
     }
 
     #[test]
-    fn capability_assessment_flags_low_current_memory_headroom() {
+    fn capability_assessment_downgrades_profiles_under_current_memory_pressure() {
         let gib = 1024_u64 * 1024 * 1024;
-        let assessment = assess_capability(16 * gib, gib, 8);
-        assert!(assessment.current_memory_pressure);
-        assert!(!assess_capability(16 * gib, 8 * gib, 8).current_memory_pressure);
+
+        let balanced_hardware = assess_capability(16 * gib, gib, 8);
+        assert_eq!(balanced_hardware.memory_tier, "Balanced");
+        assert_eq!(balanced_hardware.suggested_mode, "Lightweight");
+        assert!(balanced_hardware.current_memory_pressure);
+        assert!(balanced_hardware.rationale.contains("reduced from Balanced to Lightweight"));
+
+        let high_capacity_hardware = assess_capability(32 * gib, gib, 12);
+        assert_eq!(high_capacity_hardware.memory_tier, "High-capacity");
+        assert_eq!(high_capacity_hardware.suggested_mode, "Balanced");
+        assert!(high_capacity_hardware.current_memory_pressure);
+        assert!(high_capacity_hardware.rationale.contains("reduced from High capability to Balanced"));
+
+        let comfortable = assess_capability(32 * gib, 8 * gib, 12);
+        assert_eq!(comfortable.suggested_mode, "High capability");
+        assert!(!comfortable.current_memory_pressure);
+    }
+
+    #[test]
+    fn capability_assessment_clamps_available_memory_to_installed_ram() {
+        let gib = 1024_u64 * 1024 * 1024;
+        let assessment = assess_capability(8 * gib, 20 * gib, 8);
+        assert!(!assessment.current_memory_pressure);
+        assert_eq!(assessment.suggested_mode, "Lightweight");
+        assert!(!assessment.rationale.contains("reduced from"));
     }
 
     #[test]

@@ -202,3 +202,6 @@ All notable project changes are recorded here. The project is in foundation/prot
 - Strengthened GGUF architecture metadata validation: reject blank architecture identifiers, zero-valued dimensions/counts, KV-head counts above total heads, and expert-used counts above total experts; added focused regression coverage.
 
 - Corrected the GGUF architecture-semantic regression fixture to declare `general.architecture = "llama"` before testing `llama.*` fields; production validation remains unchanged.
+
+
+- HIARM now reduces its suggested starting profile when current available RAM is under the conservative headroom threshold, while preserving the installed-memory tier and making no automatic settings changes. Added cross-platform regression coverage.
