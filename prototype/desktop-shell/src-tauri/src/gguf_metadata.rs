@@ -177,14 +177,14 @@ pub fn analyse_tensor_storage(input:&str)->Result<TensorStorageAnalysis,String>{
     if data_start>file_size{return Err("GGUF tensor descriptors extend beyond the file.".to_owned());}
     let mut grouped:std::collections::BTreeMap<u32,TensorTypeSummary>=std::collections::BTreeMap::new();
     let mut known_total=0u64;let mut unknown_total=0u64;let mut analysed=0u64;
-    let mut tensor_element_count=0u64;
+    let mut total_tensor_elements=0u64;
     // Descriptor order is not trusted. Sort by relative data offset so known payload
     // ranges can be checked for overlap without reading tensor weights.
     descriptors.sort_unstable_by_key(|tensor| tensor.offset);
     let mut previous_known_end:Option<u64>=None;
     for tensor in descriptors{
         let elements=tensor_element_count(&tensor.dimensions)?;
-        tensor_element_count=tensor_element_count.checked_add(elements)
+        total_tensor_elements=total_tensor_elements.checked_add(elements)
             .ok_or_else(||"Aggregate GGUF tensor element count overflowed.".to_owned())?;
         let (name,block,block_bytes)=tensor_type_layout(tensor.type_code).unwrap_or(("UNKNOWN",0,0));
         let summary=grouped.entry(tensor.type_code).or_insert_with(||TensorTypeSummary{
@@ -212,12 +212,12 @@ pub fn analyse_tensor_storage(input:&str)->Result<TensorStorageAnalysis,String>{
     let status=if unknown_total==0{"complete"}else if analysed==0{"unknown"}else{"partial"};
     let parameter_count_status=match reported_parameter_count{
         None=>"not_provided",
-        Some(value) if value==tensor_element_count=>"matches_reported_count",
-        Some(value) if tensor_element_count>value=>"tensor_elements_exceed_reported_count",
+        Some(value) if value==total_tensor_elements=>"matches_reported_count",
+        Some(value) if total_tensor_elements>value=>"tensor_elements_exceed_reported_count",
         Some(_)=>"tensor_elements_below_reported_count",
     };
     Ok(TensorStorageAnalysis{status:status.to_owned(),tensor_count,analysed_tensor_count:analysed,
-        unknown_size_tensor_count:unknown_total,known_payload_bytes:known_total,tensor_element_count,
+        unknown_size_tensor_count:unknown_total,known_payload_bytes:known_total,tensor_element_count:total_tensor_elements,
         reported_parameter_count,parameter_count_status,data_start_offset:data_start,
         alignment,types:grouped.into_values().collect(),
         note:"Known payload sizes use verified GGML block layouts and exclude inter-tensor alignment padding. Unsupported types or dimensions that do not fit a known block layout remain unknown. This is stored tensor payload size, not RAM/VRAM required to run the model.".to_owned()})
@@ -494,6 +494,19 @@ mod tests{
     fn tensor_fixture(type_code:u32,dimension:u64,offset:u64,payload:&[u8])->Vec<u8>{
         tensor_fixture_many(&[(type_code,dimension,offset)],payload)
     }
+    fn tensor_fixture_dimensions(dimensions:&[u64],type_code:u32,reported_count:Option<u64>,payload:&[u8])->Vec<u8>{
+        let mut b=b"GGUF".to_vec();b.extend_from_slice(&3u32.to_le_bytes());
+        b.extend_from_slice(&1u64.to_le_bytes());
+        b.extend_from_slice(&(if reported_count.is_some(){2u64}else{1u64}).to_le_bytes());
+        entry_u32(&mut b,"general.alignment",32);
+        if let Some(value)=reported_count{
+            push_string(&mut b,"general.parameter_count");b.extend_from_slice(&10u32.to_le_bytes());b.extend_from_slice(&value.to_le_bytes());
+        }
+        push_string(&mut b,"test.tensor");b.extend_from_slice(&(dimensions.len() as u32).to_le_bytes());
+        for dimension in dimensions{b.extend_from_slice(&dimension.to_le_bytes());}
+        b.extend_from_slice(&type_code.to_le_bytes());b.extend_from_slice(&0u64.to_le_bytes());
+        let aligned=((b.len()+31)/32)*32;b.resize(aligned,0);b.extend_from_slice(payload);b
+    }
     #[test]fn analyses_known_q4_0_tensor_payload_without_reading_weights(){
         let p=temp(&tensor_fixture(2,32,0,&[0;18]),"gguf");
         let report=analyse_tensor_storage(p.to_str().unwrap()).unwrap();
@@ -539,6 +552,37 @@ mod tests{
         let p=temp(&tensor_fixture(2,31,0,&[0;18]),"gguf");
         let report=analyse_tensor_storage(p.to_str().unwrap()).unwrap();
         assert_eq!(report.status,"unknown");assert_eq!(report.unknown_size_tensor_count,1);
+        let _=std::fs::remove_file(p);
+    }
+    #[test]fn aggregates_tensor_elements_and_compares_reported_parameter_count(){
+        let p=temp(&tensor_fixture_dimensions(&[4,8],0,Some(32),&[0;128]),"gguf");
+        let report=analyse_tensor_storage(p.to_str().unwrap()).unwrap();
+        assert_eq!(report.tensor_element_count,32);
+        assert_eq!(report.reported_parameter_count,Some(32));
+        assert_eq!(report.parameter_count_status,"matches_reported_count");
+        let _=std::fs::remove_file(p);
+
+        let p=temp(&tensor_fixture_dimensions(&[4,8],99,Some(40),&[0;1]),"gguf");
+        let report=analyse_tensor_storage(p.to_str().unwrap()).unwrap();
+        assert_eq!(report.tensor_element_count,32);
+        assert_eq!(report.parameter_count_status,"tensor_elements_below_reported_count");
+        assert_eq!(report.unknown_size_tensor_count,1);
+        let _=std::fs::remove_file(p);
+    }
+    #[test]fn reports_missing_parameter_count_and_rejects_bad_tensor_dimensions(){
+        let p=temp(&tensor_fixture(0,16,0,&[0;64]),"gguf");
+        let report=analyse_tensor_storage(p.to_str().unwrap()).unwrap();
+        assert_eq!(report.tensor_element_count,16);
+        assert_eq!(report.reported_parameter_count,None);
+        assert_eq!(report.parameter_count_status,"not_provided");
+        let _=std::fs::remove_file(p);
+
+        let p=temp(&tensor_fixture_dimensions(&[0,2],0,None,&[]),"gguf");
+        assert!(analyse_tensor_storage(p.to_str().unwrap()).unwrap_err().contains("zero-sized"));
+        let _=std::fs::remove_file(p);
+
+        let p=temp(&tensor_fixture_dimensions(&[u64::MAX,2],0,None,&[]),"gguf");
+        assert!(analyse_tensor_storage(p.to_str().unwrap()).unwrap_err().contains("element count overflowed"));
         let _=std::fs::remove_file(p);
     }
     #[test]fn rejects_non_gguf_extensions(){let p=temp(&fixture(),"bin");assert!(inspect(p.to_str().unwrap()).unwrap_err().contains(".gguf"));let _=std::fs::remove_file(p);}
