@@ -1514,3 +1514,14 @@ This is parser resilience and efficiency work only; it does not load model weigh
 - [x] Preserve bounded skipping of unknown metadata keys and add regression coverage for wrong types and integer overflow.
 
 This validates metadata representation only; it does not prove that metadata values are truthful or that a model is runtime-compatible. See docs/HARDWARE-INTELLIGENCE.md section 40.
+
+
+### 2026-11-26 — GGUF recognised metadata ambiguity checks (Batch #146)
+
+- [x] Map each recognised architecture-specific metadata suffix to one semantic field before parsing its value.
+- [x] Reject multiple competing keys for the same recognised field instead of silently using the last value encountered.
+- [x] Require recognised architecture-specific suffixes to have a non-empty namespace prefix.
+- [x] Preserve unrelated vendor-specific metadata keys and bounded skipping behaviour.
+- [x] Add regression coverage for competing architecture aliases and unrelated unknown suffixes.
+
+This prevents ambiguous metadata from silently changing the displayed dimensions. It does not verify architecture truthfulness or runtime compatibility. See docs/HARDWARE-INTELLIGENCE.md section 41.

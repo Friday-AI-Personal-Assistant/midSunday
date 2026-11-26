@@ -535,3 +535,10 @@ Unknown fixed-width metadata arrays are now skipped in one checked byte-range op
 Recognised metadata fields are now required to contain the expected broad value category: architecture/name fields must be strings, while counts, dimensions, file-type codes, quantisation versions, and alignment must be non-negative integers. Values that previously appeared as silently missing when encoded with an incompatible GGUF scalar type now produce an explicit inspection error. Values narrowed to 32-bit fields are checked for range overflow. Tensor-storage analysis applies the same strict checks to general.alignment and general.parameter_count. Unknown metadata keys remain supported through the existing bounded type-aware skip path.
 
 Regression tests cover wrong string/integer encodings in both inspection paths, string-versus-number mismatches, and 32-bit range overflow. These checks validate container metadata representation only; they do not establish architecture correctness, model compatibility, or runtime support.
+
+
+## 41. GGUF recognised-field ambiguity checks (2026-11-26)
+
+The metadata inspector now maps recognised architecture-specific suffixes to one semantic field and rejects files that provide multiple competing keys for that field (for example, both llama.block_count and mistral.block_count). This prevents the parser from silently allowing whichever matching key appears last to overwrite the earlier value. Recognised suffixes must also have a non-empty namespace prefix. Unrelated vendor-specific keys remain supported and are skipped through the existing bounded parser.
+
+Regression coverage verifies that competing architecture aliases are rejected while unrelated namespaced metadata with the same unrecognised suffix remains accepted. This is an ambiguity check, not proof that the selected architecture metadata is truthful or that the model is runtime-compatible. Tensor weights remain unread and no data is transmitted.

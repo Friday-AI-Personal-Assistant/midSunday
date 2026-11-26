@@ -99,6 +99,27 @@ fn required_u32(value:Value,key:&str)->Result<u32,String>{
 fn required_text(value:Value,key:&str)->Result<String,String>{
     match value{Value::Text(text)=>Ok(text),_=>Err(format!("GGUF metadata field {key} must contain a string."))}
 }
+fn selected_metadata_field(key:&str)->Option<&'static str>{
+    match key{
+        "general.architecture"=>Some("architecture"),
+        "general.name"=>Some("name"),
+        "general.file_type"=>Some("file_type"),
+        "general.parameter_count"=>Some("parameter_count"),
+        "general.quantization_version"=>Some("quantization_version"),
+        "general.alignment"=>Some("alignment"),
+        _ if key.strip_suffix(".context_length").is_some_and(|prefix|!prefix.is_empty())=>Some("context_length"),
+        _ if key.strip_suffix(".block_count").is_some_and(|prefix|!prefix.is_empty())=>Some("block_count"),
+        _ if key.strip_suffix(".embedding_length").is_some_and(|prefix|!prefix.is_empty())=>Some("embedding_length"),
+        _ if key.strip_suffix(".attention.head_count").is_some_and(|prefix|!prefix.is_empty())=>Some("attention_head_count"),
+        _ if key.strip_suffix(".attention.head_count_kv").is_some_and(|prefix|!prefix.is_empty())=>Some("attention_kv_head_count"),
+        _ if key.strip_suffix(".attention.key_length").is_some_and(|prefix|!prefix.is_empty())=>Some("attention_key_length"),
+        _ if key.strip_suffix(".attention.value_length").is_some_and(|prefix|!prefix.is_empty())=>Some("attention_value_length"),
+        _ if key.strip_suffix(".rope.dimension_count").is_some_and(|prefix|!prefix.is_empty())=>Some("rope_dimension_count"),
+        _ if key.strip_suffix(".expert_count").is_some_and(|prefix|!prefix.is_empty())=>Some("expert_count"),
+        _ if key.strip_suffix(".expert_used_count").is_some_and(|prefix|!prefix.is_empty())=>Some("expert_used_count"),
+        _=>None,
+    }
+}
 fn file_type_description(code:u32)->Option<String>{
     let label=match code{0=>"F32",1=>"F16",2=>"Q4_0",3=>"Q4_1",4=>"Q4_1 with some F16 tensors",5=>"Q8_0",6=>"Q5_0",7=>"Q5_1",8=>"Q2_K",9=>"Q3_K_S",10=>"Q3_K_M",11=>"Q3_K_L",12=>"Q4_K_S",13=>"Q4_K_M",14=>"Q5_K_S",15=>"Q5_K_M",16=>"Q6_K",17=>"Q8_K",18=>"IQ2_XXS",19=>"IQ2_XS",20=>"IQ3_XXS",21=>"IQ1_S",22=>"IQ4_NL",23=>"IQ3_S",24=>"IQ2_S",25=>"IQ4_XS",_=>return None};Some(label.to_owned())
 }
@@ -277,16 +298,16 @@ pub fn inspect(input:&str)->Result<GgufMetadata,String>{
     let(mut architecture,mut model_name,mut file_type_code,mut parameter_count,mut context_length,mut block_count,mut embedding_length,mut attention_head_count)=(None,None,None,None,None,None,None,None);
     let(mut attention_kv_head_count,mut attention_key_length,mut attention_value_length,mut rope_dimension_count,mut expert_count,mut expert_used_count,mut quantization_version,mut alignment)=(None,None,None,None,None,None,None,None);
     let mut metadata_keys=HashSet::with_capacity(entries as usize);
+    let mut selected_fields=HashSet::new();
     for _ in 0..entries{
         let key=read_string(&mut f)?;
         if key.is_empty(){return Err("The GGUF file contains an empty metadata key.".to_owned());}
         if !metadata_keys.insert(key.clone()){return Err("The GGUF file contains a duplicate metadata key.".to_owned());}
         let kind=read_u32(&mut f)?;
-        let selected=matches!(key.as_str(),"general.architecture"|"general.name"|"general.file_type"|"general.parameter_count"|"general.quantization_version"|"general.alignment")
-            ||key.ends_with(".context_length")||key.ends_with(".block_count")||key.ends_with(".embedding_length")||key.ends_with(".attention.head_count")
-            ||key.ends_with(".attention.head_count_kv")||key.ends_with(".attention.key_length")||key.ends_with(".attention.value_length")
-            ||key.ends_with(".rope.dimension_count")||key.ends_with(".expert_count")||key.ends_with(".expert_used_count");
-        if !selected{skip_value(&mut f,kind)?;continue;}
+        let Some(field)=selected_metadata_field(&key) else{skip_value(&mut f,kind)?;continue;};
+        if !selected_fields.insert(field){
+            return Err(format!("The GGUF file contains multiple metadata keys for the same recognised field ({field}); the value is ambiguous."));
+        }
         let value=scalar(&mut f,kind)?;
         match key.as_str(){
             "general.architecture"=>architecture=Some(required_text(value,&key)?),
@@ -520,6 +541,32 @@ mod tests{
         b.extend_from_slice(&0u64.to_le_bytes());b.extend_from_slice(&1u64.to_le_bytes());
         push_string(&mut b,key);b.extend_from_slice(&kind.to_le_bytes());b.extend_from_slice(value);
         while b.len()%32!=0{b.push(0);}b
+    }
+    #[test]fn rejects_ambiguous_architecture_metadata_aliases(){
+        let mut b=b"GGUF".to_vec();b.extend_from_slice(&3u32.to_le_bytes());
+        b.extend_from_slice(&0u64.to_le_bytes());b.extend_from_slice(&2u64.to_le_bytes());
+        for key in ["llama.block_count","mistral.block_count"]{
+            push_string(&mut b,key);b.extend_from_slice(&10u32.to_le_bytes());
+            b.extend_from_slice(&32u64.to_le_bytes());
+        }
+        while b.len()%32!=0{b.push(0);}
+        let p=temp(&b,"gguf");
+        let error=inspect(p.to_str().unwrap()).unwrap_err();
+        assert!(error.contains("multiple metadata keys"));
+        assert!(error.contains("block_count"));
+        let _=std::fs::remove_file(p);
+    }
+    #[test]fn ignores_unrelated_namespaced_metadata_without_suffix_collisions(){
+        let mut b=b"GGUF".to_vec();b.extend_from_slice(&3u32.to_le_bytes());
+        b.extend_from_slice(&0u64.to_le_bytes());b.extend_from_slice(&2u64.to_le_bytes());
+        for key in ["vendor_a.custom_value","vendor_b.custom_value"]{
+            push_string(&mut b,key);b.extend_from_slice(&10u32.to_le_bytes());
+            b.extend_from_slice(&32u64.to_le_bytes());
+        }
+        while b.len()%32!=0{b.push(0);}
+        let p=temp(&b,"gguf");
+        assert!(inspect(p.to_str().unwrap()).is_ok());
+        let _=std::fs::remove_file(p);
     }
     #[test]fn rejects_wrong_types_and_out_of_range_selected_metadata(){
         let mut string_value=Vec::new();push_string(&mut string_value,"seven");

@@ -1,3 +1,4 @@
+- Hardened GGUF metadata inspection against competing architecture-specific aliases: multiple keys that map to the same recognised field now fail explicitly instead of silently allowing the last value to win; unrelated vendor metadata remains supported.
 # Changelog
 - Fixed GGUF tensor element-count comparison compilation by storing an owned status string and updating all existing tensor-analysis evidence fixtures with the new fields.
 - Added a GGUF tensor element-count cross-check using checked dimension arithmetic, with a separate comparison against optional file-reported parameter-count metadata; values are explicitly advisory and do not imply unique model parameters.
