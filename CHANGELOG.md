@@ -143,3 +143,5 @@ All notable project changes are recorded here. The project is in foundation/prot
 - Fixed TypeScript null-safety in the GGUF-reported context display by using optional chaining and a nullish fallback for unavailable metadata.
 
 - Added bounded GGUF tensor-name parsing and structural validation for empty, truncated, invalid UTF-8, and duplicate descriptor names, with regression coverage. Tensor weights remain unread.
+
+- Added GGUF metadata-key uniqueness checks to both inspection paths, rejecting duplicate known or unknown keys while preserving distinct unknown metadata and adding regression coverage.

@@ -511,3 +511,10 @@ Regression coverage includes dimension-product aggregation, optional/matching/mi
 Tensor storage analysis now reads each bounded tensor name instead of blindly skipping its bytes. It rejects empty names, names longer than the supported 64-byte inspection limit, truncated names, invalid UTF-8, and duplicate names before analysing tensor dimensions or payload ranges. Names are compared exactly and case-sensitively; no names or tensor contents are uploaded, and tensor weights remain unread.
 
 This is a structural container check only. It does not establish that tensor names match a particular model architecture, that all expected tensors are present, or that a model can run. Regression coverage includes empty, invalid-UTF-8, duplicate, and distinct valid names.
+
+
+## 37. GGUF metadata-key uniqueness (2026-11-26)
+
+Both GGUF metadata inspection paths now track metadata keys and reject duplicate keys, including duplicates for unknown fields. This prevents ambiguous files from silently overwriting earlier values or producing different results depending on which inspector is used. Distinct unknown keys remain supported and their values continue to be skipped using the bounded type-aware parser. Duplicate detection is exact and case-sensitive. No metadata is transmitted, no tensor weights are read, and no runtime settings are changed.
+
+Regression coverage verifies duplicate-key rejection in both inspectors and confirms that distinct unknown keys remain accepted.

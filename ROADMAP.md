@@ -1473,3 +1473,13 @@ The comparison is an advisory structural cross-check only. It does not establish
 - [x] Add regression fixtures for empty, invalid UTF-8, duplicate, and distinct valid names.
 
 This is a structural GGUF container check only; it does not validate architecture-specific tensor naming conventions, prove model completeness, or guarantee runtime compatibility. See docs/HARDWARE-INTELLIGENCE.md section 36.
+
+
+### 2026-11-26 — GGUF metadata-key uniqueness (Batch #141)
+
+- [x] Reject duplicate metadata keys in both the metadata inspector and tensor-storage analyser.
+- [x] Apply the check to all keys, including unknown metadata fields, to avoid ambiguous parser behaviour.
+- [x] Preserve support for distinct unknown keys and bounded type-aware skipping.
+- [x] Add regression tests covering both inspector paths and valid distinct unknown keys.
+
+This is a structural GGUF metadata check. It does not validate architecture-specific values or guarantee model compatibility. See docs/HARDWARE-INTELLIGENCE.md section 37.
