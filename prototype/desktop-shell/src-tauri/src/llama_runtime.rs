@@ -77,8 +77,13 @@ impl ManagedServerProcess for LlamaServerProcess {
 #[serde(rename_all = "camelCase")]
 pub struct RuntimeStartupMemoryReport {
     pub status: String,
+    pub startup_duration_ms: u64,
+    pub initial_resident_bytes: Option<u64>,
+    pub initial_virtual_bytes: Option<u64>,
     pub peak_resident_bytes: Option<u64>,
     pub peak_virtual_bytes: Option<u64>,
+    pub peak_resident_growth_bytes: Option<i64>,
+    pub peak_virtual_growth_bytes: Option<i64>,
     pub sample_count: u64,
     pub sampling_interval_ms: u64,
     pub captured_at_unix_seconds: u64,
@@ -88,6 +93,15 @@ pub struct RuntimeStartupMemoryReport {
 ///
 /// The session is synchronous and bounded by the supplied HTTP/startup timeouts.
 /// Dropping it also drops the process supervisor, which performs best-effort cleanup.
+fn signed_memory_delta(initial: Option<u64>, peak: Option<u64>) -> Option<i64> {
+    let (initial, peak) = (initial?, peak?);
+    if peak >= initial {
+        i64::try_from(peak - initial).ok()
+    } else {
+        i64::try_from(initial - peak).ok().map(|delta| -delta)
+    }
+}
+
 pub struct LlamaRuntimeSession {
     process: Box<dyn ManagedServerProcess>,
     client: LlamaHttpClient,
@@ -109,6 +123,7 @@ impl LlamaRuntimeSession {
             return Err(RuntimeSessionError::InvalidTiming);
         }
 
+        let startup_started_at = Instant::now();
         let mut process: Box<dyn ManagedServerProcess> = Box::new(
             LlamaServerProcess::start(config, executable, model)
                 .map_err(RuntimeSessionError::ProcessStart)?,
@@ -131,6 +146,8 @@ impl LlamaRuntimeSession {
         // The readiness poll interval bounds sampling frequency and avoids a
         // separate long-lived monitor thread during startup.
         let sampling_pid = process.process_id();
+        let mut initial_resident_bytes: Option<u64> = None;
+        let mut initial_virtual_bytes: Option<u64> = None;
         let mut peak_resident_bytes: Option<u64> = None;
         let mut peak_virtual_bytes: Option<u64> = None;
         let mut sample_count = 0u64;
@@ -141,6 +158,10 @@ impl LlamaRuntimeSession {
             if let Some(pid) = sampling_pid {
                 let snapshot = collect_known_process_memory(pid);
                 if snapshot.status == "detected" {
+                    if sample_count == 0 {
+                        initial_resident_bytes = snapshot.resident_bytes;
+                        initial_virtual_bytes = snapshot.virtual_bytes;
+                    }
                     if let Some(value) = snapshot.resident_bytes {
                         peak_resident_bytes = Some(peak_resident_bytes.map_or(value, |peak| peak.max(value)));
                     }
@@ -169,10 +190,16 @@ impl LlamaRuntimeSession {
         lifecycle.transition(RuntimeStatus::Ready)
             .map_err(|_| RuntimeSessionError::InvalidState)?;
 
+        let startup_duration_ms = u64::try_from(startup_started_at.elapsed().as_millis()).unwrap_or(u64::MAX);
         let startup_memory_report = RuntimeStartupMemoryReport {
             status: if sample_count > 0 { "detected".to_owned() } else { "unavailable".to_owned() },
+            startup_duration_ms,
+            initial_resident_bytes,
+            initial_virtual_bytes,
             peak_resident_bytes,
             peak_virtual_bytes,
+            peak_resident_growth_bytes: signed_memory_delta(initial_resident_bytes, peak_resident_bytes),
+            peak_virtual_growth_bytes: signed_memory_delta(initial_virtual_bytes, peak_virtual_bytes),
             sample_count,
             sampling_interval_ms: sample_interval_ms,
             captured_at_unix_seconds: SystemTime::now().duration_since(UNIX_EPOCH)
@@ -497,8 +524,13 @@ mod recovery_integration_tests {
                 config,
                 startup_memory_report: RuntimeStartupMemoryReport {
                     status: "unavailable".to_owned(),
+                    startup_duration_ms: 0,
+                    initial_resident_bytes: None,
+                    initial_virtual_bytes: None,
                     peak_resident_bytes: None,
                     peak_virtual_bytes: None,
+                    peak_resident_growth_bytes: None,
+                    peak_virtual_growth_bytes: None,
                     sample_count: 0,
                     sampling_interval_ms: 0,
                     captured_at_unix_seconds: 0,
@@ -510,6 +542,15 @@ mod recovery_integration_tests {
 
     fn no_delay_policy(attempts: u8) -> RecoveryPolicy {
         RecoveryPolicy { max_attempts: attempts, retry_delay: Duration::ZERO }
+    }
+
+    #[test]
+    fn startup_memory_delta_reports_growth_and_missing_values() {
+        assert_eq!(signed_memory_delta(Some(100), Some(150)), Some(50));
+        assert_eq!(signed_memory_delta(Some(150), Some(100)), Some(-50));
+        assert_eq!(signed_memory_delta(Some(100), Some(100)), Some(0));
+        assert_eq!(signed_memory_delta(None, Some(150)), None);
+        assert_eq!(signed_memory_delta(Some(u64::MAX), Some(0)), None);
     }
 
     #[test]

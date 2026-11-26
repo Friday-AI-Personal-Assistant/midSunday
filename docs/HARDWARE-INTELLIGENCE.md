@@ -437,3 +437,14 @@ The sample query uses the already-known child PID and does not enumerate unrelat
 **Interpretation limits:** the report describes the whole llama-server process, not model weights alone. It is the maximum observed at sample points, not a guaranteed true peak; spikes between polls may be missed. It excludes GPU allocations and does not prove the model is fully resident in physical RAM, guarantee model fit, or establish runtime compatibility. A failed startup does not produce a completed startup report. Real-device comparison against operating-system process monitors remains required before using these values for recommendations or adaptive resource management.
 
 Regression coverage for sample aggregation and real-device validation remain follow-up work.
+
+
+## 29. Startup duration and memory-growth context (2026-11-26)
+
+The startup report now includes elapsed time from immediately before launching the managed server process until the local readiness check succeeds. It also records the first valid process-memory sample as the startup baseline and reports the observed peak-minus-initial resident and virtual memory deltas. These values help distinguish the process's early footprint from the highest value observed during model startup.
+
+The deltas are signed and remain unavailable when either baseline or peak data is missing or the magnitude cannot be represented safely. Startup duration includes process launch, server initialization, model loading, and readiness response; it is not a pure model-load benchmark. Measurements are point-in-time observations for the managed process only, remain local/in-memory, and are not persisted as telemetry.
+
+**Interpretation limits:** observed growth is not a model-weight size or a total system-memory impact measurement. It excludes GPU allocations, other processes, and transient spikes between samples. Different machines, models, quantisations, runtimes, context settings, and cache states affect results. No automatic hardware profile, model selection, or runtime tuning is enabled by these diagnostics.
+
+Regression tests cover positive, negative, zero, missing, and out-of-range signed memory deltas.

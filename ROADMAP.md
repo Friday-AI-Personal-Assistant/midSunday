@@ -1373,3 +1373,17 @@ The reported peak is the maximum observed at the sample points, not a guaranteed
 - [ ] Evaluate whether startup sampling cadence and overhead are suitable for future measured resource profiles; do not enable automatic model selection or resource changes from this report alone.
 
 This report measures the whole managed inference process during startup. It may miss short spikes between readiness polls and excludes GPU memory. It does not guarantee model fit or runtime compatibility. See docs/HARDWARE-INTELLIGENCE.md section 28.
+
+
+### 2026-11-26 — Startup duration and memory-growth context (Batch #126)
+
+- [x] Measure elapsed time from immediately before managed process launch until the local server readiness check succeeds.
+- [x] Preserve the first valid managed-process resident/virtual sample as a startup baseline.
+- [x] Report signed observed peak-minus-initial resident and virtual memory deltas, with safe handling of missing values and integer-range overflow.
+- [x] Display startup duration, initial footprint, observed peaks, and growth values together in Settings.
+- [x] Keep all measurements local and in-memory; do not persist telemetry or use values to change runtime settings or select models.
+- [x] Add regression tests for positive, negative, zero, missing, and out-of-range deltas.
+- [ ] Compare timing and memory-growth values against operating-system monitors on real Windows, Linux, and macOS devices across representative model sizes and quantisations.
+- [ ] Collect repeated controlled runs before treating startup duration or memory growth as a performance benchmark or using it for adaptive recommendations.
+
+Startup duration includes process launch, server initialisation, model loading, and readiness response; it is not a pure model-load duration. Memory growth is based on the first valid sample and maximum observed sample, not a guaranteed peak or model-only allocation. See docs/HARDWARE-INTELLIGENCE.md section 29.

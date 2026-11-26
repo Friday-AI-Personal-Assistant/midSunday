@@ -1,6 +1,7 @@
 # Changelog
 
 ## 2026-11-26
+- Added startup timing and baseline-relative memory-growth diagnostics for the managed llama-server process. Settings now shows elapsed time to readiness, the first valid resident/virtual sample, observed peaks, and signed peak-minus-initial growth; values remain local and informational, not pure model-load benchmarks or model-only allocations.
 - Added bounded startup-phase peak memory sampling for the managed llama-server child while the local engine becomes ready, retaining observed resident/virtual maxima and displaying the latest successful startup report in Settings. Values are process-wide observed maxima, not guaranteed peaks or model-only memory.
 - Fixed the generation command's Rust return type to forward the peak/boundary memory report expected by the frontend.
 - Added request-scoped peak resident/virtual memory sampling for the managed llama-server process during generation, using targeted 250 ms samples plus before/after readings. Reported peaks are observed maxima, not guaranteed true peaks.

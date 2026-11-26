@@ -5,7 +5,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 type BackendState = "checking" | "connected" | "error";
 type Section = "chat" | "characters" | "settings";
 type Message = { id: number; role: "user" | "assistant" | "system"; text: string };
-type RuntimeStartupMemoryReport = { status: string; peakResidentBytes: number | null; peakVirtualBytes: number | null; sampleCount: number; samplingIntervalMs: number; capturedAtUnixSeconds: number };
+type RuntimeStartupMemoryReport = { status: string; startupDurationMs: number; initialResidentBytes: number | null; initialVirtualBytes: number | null; peakResidentBytes: number | null; peakVirtualBytes: number | null; peakResidentGrowthBytes: number | null; peakVirtualGrowthBytes: number | null; sampleCount: number; samplingIntervalMs: number; capturedAtUnixSeconds: number };
 type RuntimeStatusSnapshot = { status: string; detail: string | null; startupMemory: RuntimeStartupMemoryReport | null };
 type RuntimeProcessMemorySnapshot = { status: string; residentBytes: number | null; virtualBytes: number | null };
 type RuntimeGenerationMemoryReport = {
