@@ -24,6 +24,11 @@ pub struct GgufMetadata {
 enum Value { Text(String), Unsigned(u64), Signed(i64), Other }
 
 fn read_u8(f:&mut File)->Result<u8,String>{let mut b=[0;1];f.read_exact(&mut b).map_err(|_|"The GGUF metadata is truncated.".to_owned())?;Ok(b[0])}
+fn skip_bool(f:&mut File)->Result<(),String>{
+    let value=read_u8(f)?;
+    if value>1{return Err("GGUF boolean metadata must be encoded as 0 or 1.".to_owned());}
+    Ok(())
+}
 fn read_u32(f:&mut File)->Result<u32,String>{let mut b=[0;4];f.read_exact(&mut b).map_err(|_|"The GGUF metadata is truncated.".to_owned())?;Ok(u32::from_le_bytes(b))}
 fn read_u64(f:&mut File)->Result<u64,String>{let mut b=[0;8];f.read_exact(&mut b).map_err(|_|"The GGUF metadata is truncated.".to_owned())?;Ok(u64::from_le_bytes(b))}
 fn read_string(f:&mut File)->Result<String,String>{
@@ -47,7 +52,7 @@ fn scalar(f:&mut File,kind:u32)->Result<Value,String>{
         4=>Ok(Value::Unsigned(read_u32(f)? as u64)),
         5=>Ok(Value::Signed(read_u32(f)? as i32 as i64)),
         6=>{let _=read_u32(f)?;Ok(Value::Other)},
-        7=>{let _=read_u8(f)?;Ok(Value::Other)},
+        7=>{skip_bool(f)?;Ok(Value::Other)},
         8=>Ok(Value::Text(read_string(f)?)),
         10=>Ok(Value::Unsigned(read_u64(f)?)),
         11=>Ok(Value::Signed(read_u64(f)? as i64)),
@@ -61,7 +66,7 @@ fn skip_value(f:&mut File,kind:u32)->Result<(),String>{
     if count>MAX_ARRAY_ITEMS{return Err("A GGUF metadata array exceeds the safe inspection limit.".to_owned());}
     if element==9{return Err("Nested GGUF metadata arrays are not supported.".to_owned());}
     for _ in 0..count{match element{
-        0|1|7=>skip_bytes(f,1)?,2|3=>skip_bytes(f,2)?,4|5|6=>skip_bytes(f,4)?,
+        0|1=>skip_bytes(f,1)?,7=>skip_bool(f)?,2|3=>skip_bytes(f,2)?,4|5|6=>skip_bytes(f,4)?,
         10|11|12=>skip_bytes(f,8)?,8=>{let _=read_string(f)?;},
         _=>return Err(format!("The GGUF file uses unsupported array element type {element}.")),
     }}
@@ -151,6 +156,7 @@ pub fn analyse_tensor_storage(input:&str)->Result<TensorStorageAnalysis,String>{
     let mut metadata_keys=HashSet::with_capacity(metadata_count as usize);
     for _ in 0..metadata_count{
         let key=read_string(&mut f)?;
+        if key.is_empty(){return Err("The GGUF file contains an empty metadata key.".to_owned());}
         if !metadata_keys.insert(key.clone()){return Err("The GGUF file contains a duplicate metadata key.".to_owned());}
         let kind=read_u32(&mut f)?;
         if key=="general.alignment"{
@@ -247,6 +253,7 @@ pub fn inspect(input:&str)->Result<GgufMetadata,String>{
     let mut metadata_keys=HashSet::with_capacity(entries as usize);
     for _ in 0..entries{
         let key=read_string(&mut f)?;
+        if key.is_empty(){return Err("The GGUF file contains an empty metadata key.".to_owned());}
         if !metadata_keys.insert(key.clone()){return Err("The GGUF file contains a duplicate metadata key.".to_owned());}
         let kind=read_u32(&mut f)?;
         let selected=matches!(key.as_str(),"general.architecture"|"general.name"|"general.file_type"|"general.parameter_count"|"general.quantization_version"|"general.alignment")
@@ -432,6 +439,17 @@ mod tests{
         }
         let aligned=((b.len()+31)/32)*32;b.resize(aligned,0);b
     }
+    fn metadata_bool_fixture(is_array:bool,value:u8)->Vec<u8>{
+        let mut b=b"GGUF".to_vec();b.extend_from_slice(&3u32.to_le_bytes());
+        b.extend_from_slice(&0u64.to_le_bytes());b.extend_from_slice(&1u64.to_le_bytes());
+        push_string(&mut b,"unknown.boolean");
+        if is_array{
+            b.extend_from_slice(&9u32.to_le_bytes());b.extend_from_slice(&7u32.to_le_bytes());
+            b.extend_from_slice(&1u64.to_le_bytes());
+        }else{b.extend_from_slice(&7u32.to_le_bytes());}
+        b.push(value);
+        let aligned=((b.len()+31)/32)*32;b.resize(aligned,0);b
+    }
     fn temp(bytes:&[u8],ext:&str)->std::path::PathBuf{let p=std::env::temp_dir().join(format!("midsunday-gguf-{}-{}.{}",std::process::id(),NEXT.fetch_add(1,Ordering::Relaxed),ext));let mut f=File::create(&p).unwrap();f.write_all(bytes).unwrap();p}
     #[test]fn reads_core_metadata_without_tensor_payloads(){let p=temp(&fixture(),"gguf");let m=inspect(p.to_str().unwrap()).unwrap();assert_eq!(m.format_version,3);assert_eq!(m.tensor_count,2);assert_eq!(m.architecture.as_deref(),Some("llama"));assert_eq!(m.model_name.as_deref(),Some("Tiny test model"));assert_eq!(m.file_type_code,Some(2));assert_eq!(m.file_type_description.as_deref(),Some("Q4_0"));assert_eq!(m.parameter_count,Some(7_000_000_000));assert_eq!(m.context_length,Some(8192));assert_eq!(m.block_count,Some(32));assert_eq!(m.embedding_length,Some(4096));assert_eq!(m.attention_head_count,Some(32));assert_eq!(m.attention_kv_head_count,Some(8));assert_eq!(m.attention_key_length,Some(128));assert_eq!(m.attention_value_length,Some(128));assert_eq!(m.rope_dimension_count,Some(128));assert_eq!(m.expert_count,Some(8));assert_eq!(m.expert_used_count,Some(2));assert_eq!(m.quantization_version,Some(2));assert_eq!(m.alignment,Some(32));let _=std::fs::remove_file(p);}
     #[test]fn rejects_duplicate_metadata_keys_in_both_inspectors(){
@@ -446,6 +464,27 @@ mod tests{
         assert_eq!(inspect(p.to_str().unwrap()).unwrap().metadata_entry_count,2);
         assert_eq!(analyse_tensor_storage(p.to_str().unwrap()).unwrap().tensor_count,0);
         let _=std::fs::remove_file(p);
+    }
+    #[test]fn validates_metadata_keys_and_boolean_encodings(){
+        let empty=metadata_keys_fixture(&[""]);
+        let p=temp(&empty,"gguf");
+        assert!(inspect(p.to_str().unwrap()).unwrap_err().contains("empty metadata key"));
+        assert!(analyse_tensor_storage(p.to_str().unwrap()).unwrap_err().contains("empty metadata key"));
+        let _=std::fs::remove_file(p);
+
+        for is_array in [false,true]{
+            let valid=metadata_bool_fixture(is_array,1);
+            let p=temp(&valid,"gguf");
+            assert!(inspect(p.to_str().unwrap()).is_ok());
+            assert!(analyse_tensor_storage(p.to_str().unwrap()).is_ok());
+            let _=std::fs::remove_file(p);
+
+            let invalid=metadata_bool_fixture(is_array,2);
+            let p=temp(&invalid,"gguf");
+            assert!(inspect(p.to_str().unwrap()).unwrap_err().contains("must be encoded as 0 or 1"));
+            assert!(analyse_tensor_storage(p.to_str().unwrap()).unwrap_err().contains("must be encoded as 0 or 1"));
+            let _=std::fs::remove_file(p);
+        }
     }
     #[test]fn rejects_invalid_magic_and_versions(){let p=temp(b"NOPE","gguf");assert!(inspect(p.to_str().unwrap()).is_err());let _=std::fs::remove_file(p);let mut b=fixture();b[4..8].copy_from_slice(&99u32.to_le_bytes());let p=temp(&b,"gguf");assert!(inspect(p.to_str().unwrap()).unwrap_err().contains("version 99"));let _=std::fs::remove_file(p);}
     #[test]fn rejects_truncated_metadata_and_unreasonable_counts(){let mut b=fixture();b.truncate(35);let p=temp(&b,"gguf");assert!(inspect(p.to_str().unwrap()).is_err());let _=std::fs::remove_file(p);let mut b=fixture();b[20..28].copy_from_slice(&(MAX_METADATA_ENTRIES+1).to_le_bytes());let p=temp(&b,"gguf");assert!(inspect(p.to_str().unwrap()).unwrap_err().contains("too many metadata"));let _=std::fs::remove_file(p);}

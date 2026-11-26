@@ -1483,3 +1483,13 @@ This is a structural GGUF container check only; it does not validate architectur
 - [x] Add regression tests covering both inspector paths and valid distinct unknown keys.
 
 This is a structural GGUF metadata check. It does not validate architecture-specific values or guarantee model compatibility. See docs/HARDWARE-INTELLIGENCE.md section 37.
+
+
+### 2026-11-26 — GGUF metadata key and boolean encoding validation (Batch #142)
+
+- [x] Reject empty metadata keys in both the metadata inspector and tensor-storage analyser.
+- [x] Validate scalar GGUF boolean values as exactly 0 or 1.
+- [x] Validate boolean-array elements using the same canonical 0/1 encoding rule.
+- [x] Preserve valid scalar and array booleans and add malformed/valid regression fixtures for both inspector paths.
+
+This is structural container validation only; it does not establish model compatibility or runtime support. See docs/HARDWARE-INTELLIGENCE.md section 38.

@@ -518,3 +518,8 @@ This is a structural container check only. It does not establish that tensor nam
 Both GGUF metadata inspection paths now track metadata keys and reject duplicate keys, including duplicates for unknown fields. This prevents ambiguous files from silently overwriting earlier values or producing different results depending on which inspector is used. Distinct unknown keys remain supported and their values continue to be skipped using the bounded type-aware parser. Duplicate detection is exact and case-sensitive. No metadata is transmitted, no tensor weights are read, and no runtime settings are changed.
 
 Regression coverage verifies duplicate-key rejection in both inspectors and confirms that distinct unknown keys remain accepted.
+
+
+## 38. GGUF metadata key and boolean encoding validation (2026-11-26)
+
+Both GGUF inspection paths now reject empty metadata keys. Scalar boolean values and boolean-array elements must use the GGUF-defined canonical byte encodings 0 or 1; other byte values are rejected instead of being silently accepted as truthy or false-like data. Valid scalar and array booleans remain supported. These checks validate container encoding only and do not establish model compatibility. Regression coverage exercises valid and invalid scalar/array booleans and empty keys in both inspectors. Tensor weights remain unread and no metadata is transmitted.

@@ -145,3 +145,5 @@ All notable project changes are recorded here. The project is in foundation/prot
 - Added bounded GGUF tensor-name parsing and structural validation for empty, truncated, invalid UTF-8, and duplicate descriptor names, with regression coverage. Tensor weights remain unread.
 
 - Added GGUF metadata-key uniqueness checks to both inspection paths, rejecting duplicate known or unknown keys while preserving distinct unknown metadata and adding regression coverage.
+
+- Hardened GGUF metadata parsing in both inspection paths: reject empty metadata keys and non-canonical boolean encodings (only 0/1 accepted) for scalar values and array elements; added valid/invalid regression coverage. Tensor weights remain unread.
