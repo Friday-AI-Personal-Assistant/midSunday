@@ -613,6 +613,9 @@ mod tests{
         file.write_all(&1u64.to_le_bytes()).unwrap();
         file.write_all(&MAX_STRING_BYTES.to_le_bytes()).unwrap();
         file.write_all(&vec![b'x';MAX_STRING_BYTES as usize]).unwrap();
+        drop(file);
+        // File::create opens write-only; reopen read-only for the parser under test.
+        let mut file=File::open(&p).unwrap();
         file.seek(SeekFrom::Start(start)).unwrap();
         let error=skip_value(&mut file,9,0).unwrap_err();
         assert!(error.contains("metadata section exceeds"));

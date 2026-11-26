@@ -1653,3 +1653,12 @@ This closes a per-entry accounting gap for string arrays; it does not change ten
 - [x] Re-run the shared Rust test suite on Windows, Linux, and macOS.
 
 The previous fixture was eight bytes too short and therefore triggered the correct truncated-string guard before reaching the aggregate metadata-section guard. See docs/HARDWARE-INTELLIGENCE.md section 53.
+
+
+### 2026-11-26 — GGUF string-array fixture read-handle correction (Batch #161)
+
+- [x] Reopen the sparse regression fixture read-only after writing it, because `File::create` supplies a write-only handle.
+- [x] Keep the corrected encoded array size and production metadata-section enforcement unchanged.
+- [x] Re-run the Rust core tests on Windows, Linux, and macOS.
+
+The previous fixture correction fixed the encoded byte count but left the test reading through a write-only file handle. See docs/HARDWARE-INTELLIGENCE.md section 53.
