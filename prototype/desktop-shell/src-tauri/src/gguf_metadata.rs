@@ -4,6 +4,7 @@ use serde::Serialize;
 use std::{collections::HashSet, fs::File, io::{Read, Seek, SeekFrom}, path::Path};
 
 const MAX_METADATA_ENTRIES: u64 = 100_000;
+const MAX_METADATA_KEY_BYTES: u64 = 8 * 1024 * 1024;
 const MAX_TENSORS: u64 = 1_000_000;
 const MIN_TENSOR_DESCRIPTOR_BYTES: u64 = 33;
 const MAX_STRING_BYTES: u64 = 1_048_576;
@@ -207,10 +208,16 @@ pub fn analyse_tensor_storage(input:&str)->Result<TensorStorageAnalysis,String>{
     if tensor_count>MAX_TENSORS{return Err("The GGUF file declares too many tensors for safe inspection.".to_owned());}
     let mut alignment=32u32;
     let mut reported_parameter_count=None;
-    let mut metadata_keys=HashSet::with_capacity(metadata_count as usize);
+    // Bound the aggregate bytes retained by the metadata-key uniqueness set.
+    // The per-string cap alone would still allow many large keys to accumulate.
+    let mut metadata_keys=HashSet::new();
+    let mut metadata_key_bytes=0u64;
     for _ in 0..metadata_count{
         let key=read_string(&mut f)?;
         if key.is_empty(){return Err("The GGUF file contains an empty metadata key.".to_owned());}
+        metadata_key_bytes=metadata_key_bytes.checked_add(key.len() as u64)
+            .ok_or_else(||"GGUF metadata key byte count overflowed.".to_owned())?;
+        if metadata_key_bytes>MAX_METADATA_KEY_BYTES{return Err("GGUF metadata keys exceed the aggregate safe inspection limit.".to_owned());}
         if !metadata_keys.insert(key.clone()){return Err("The GGUF file contains a duplicate metadata key.".to_owned());}
         let kind=read_u32(&mut f)?;
         if key=="general.alignment"{
@@ -322,12 +329,17 @@ pub fn inspect(input:&str)->Result<GgufMetadata,String>{
     if entries>MAX_METADATA_ENTRIES{return Err("The GGUF file declares too many metadata entries for safe inspection.".to_owned());}
     let(mut architecture,mut model_name,mut file_type_code,mut parameter_count,mut context_length,mut block_count,mut embedding_length,mut attention_head_count)=(None,None,None,None,None,None,None,None);
     let(mut attention_kv_head_count,mut attention_key_length,mut attention_value_length,mut rope_dimension_count,mut expert_count,mut expert_used_count,mut quantization_version,mut alignment)=(None,None,None,None,None,None,None,None);
-    let mut metadata_keys=HashSet::with_capacity(entries as usize);
+    // Bound aggregate key storage instead of reserving from the untrusted entry count.
+    let mut metadata_keys=HashSet::new();
+    let mut metadata_key_bytes=0u64;
     let mut selected_fields=HashSet::new();
     let mut architecture_metadata_prefixes=HashSet::new();
     for _ in 0..entries{
         let key=read_string(&mut f)?;
         if key.is_empty(){return Err("The GGUF file contains an empty metadata key.".to_owned());}
+        metadata_key_bytes=metadata_key_bytes.checked_add(key.len() as u64)
+            .ok_or_else(||"GGUF metadata key byte count overflowed.".to_owned())?;
+        if metadata_key_bytes>MAX_METADATA_KEY_BYTES{return Err("GGUF metadata keys exceed the aggregate safe inspection limit.".to_owned());}
         if !metadata_keys.insert(key.clone()){return Err("The GGUF file contains a duplicate metadata key.".to_owned());}
         let kind=read_u32(&mut f)?;
         let Some(field)=selected_metadata_field(&key) else{skip_value(&mut f,kind)?;continue;};
@@ -532,6 +544,16 @@ mod tests{
     }
     fn temp(bytes:&[u8],ext:&str)->std::path::PathBuf{let p=std::env::temp_dir().join(format!("midsunday-gguf-{}-{}.{}",std::process::id(),NEXT.fetch_add(1,Ordering::Relaxed),ext));let mut f=File::create(&p).unwrap();f.write_all(bytes).unwrap();p}
     #[test]fn reads_core_metadata_without_tensor_payloads(){let p=temp(&fixture(),"gguf");let m=inspect(p.to_str().unwrap()).unwrap();assert_eq!(m.format_version,3);assert_eq!(m.tensor_count,2);assert_eq!(m.architecture.as_deref(),Some("llama"));assert_eq!(m.model_name.as_deref(),Some("Tiny test model"));assert_eq!(m.file_type_code,Some(2));assert_eq!(m.file_type_description.as_deref(),Some("Q4_0"));assert_eq!(m.parameter_count,Some(7_000_000_000));assert_eq!(m.context_length,Some(8192));assert_eq!(m.block_count,Some(32));assert_eq!(m.embedding_length,Some(4096));assert_eq!(m.attention_head_count,Some(32));assert_eq!(m.attention_kv_head_count,Some(8));assert_eq!(m.attention_key_length,Some(128));assert_eq!(m.attention_value_length,Some(128));assert_eq!(m.rope_dimension_count,Some(128));assert_eq!(m.expert_count,Some(8));assert_eq!(m.expert_used_count,Some(2));assert_eq!(m.quantization_version,Some(2));assert_eq!(m.alignment,Some(32));let _=std::fs::remove_file(p);}
+    #[test]fn rejects_aggregate_metadata_key_storage_limit_in_both_inspectors(){
+        let long_key="k".repeat(MAX_STRING_BYTES as usize);
+        let keys:Vec<String>=(0..9).map(|index|format!("{long_key}{index}")).collect();
+        let borrowed:Vec<&str>=keys.iter().map(String::as_str).collect();
+        let bytes=metadata_keys_fixture(&borrowed);
+        let p=temp(&bytes,"gguf");
+        assert!(inspect(p.to_str().unwrap()).unwrap_err().contains("aggregate safe inspection limit"));
+        assert!(analyse_tensor_storage(p.to_str().unwrap()).unwrap_err().contains("aggregate safe inspection limit"));
+        let _=std::fs::remove_file(p);
+    }
     #[test]fn rejects_duplicate_metadata_keys_in_both_inspectors(){
         let duplicate=metadata_keys_fixture(&["general.alignment","general.alignment"]);
         let p=temp(&duplicate,"gguf");

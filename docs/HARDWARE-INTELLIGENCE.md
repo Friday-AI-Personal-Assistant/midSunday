@@ -564,3 +564,8 @@ Both GGUF entry points now enforce the same explicit maximum of 1,000,000 tensor
 Before allocating descriptor storage or the tensor-name uniqueness set, tensor-storage analysis now checks whether the declared descriptor count could physically fit in the remaining file. The lower-bound calculation accounts for the smallest legal descriptor shape (one-byte name, one dimension, type code, and data offset) and uses checked multiplication and subtraction. Impossible counts in tiny or truncated files are rejected before count-sized allocations. The existing one-million-descriptor safety cap remains in force. This is an allocation-safety preflight, not a complete file-validity check; actual descriptor fields and payload ranges are still validated while parsing. No tensor weights are read and no file data is transmitted.
 
 Regression coverage confirms that a tiny file declaring a tensor descriptor is rejected before descriptor allocation.
+
+
+## 46. Aggregate GGUF metadata-key memory budget (2026-11-26)
+
+Both GGUF inspection paths now enforce an 8 MiB aggregate budget for metadata-key bytes retained by duplicate-key tracking. The existing per-string limit remains in place, but a per-string limit alone could still permit many individually valid large keys to accumulate substantial memory. The key sets now grow incrementally rather than reserving capacity directly from the untrusted metadata-entry count. Checked accounting rejects a file as soon as the aggregate key budget is exceeded. This is a bound on retained key text, not a total metadata-file-size limit; scalar values and arrays continue to use their existing bounded readers/skippers. Regression coverage verifies that both inspection paths reject the same over-budget fixture.

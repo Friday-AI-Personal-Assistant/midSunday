@@ -1567,3 +1567,14 @@ This is a defensive parser bound, not a model-loadability guarantee. See `docs/H
 - [x] Add a regression test using a tiny file with an impossible declared tensor count.
 
 This is an allocation-safety preflight; detailed descriptor and payload validation remains in place. See `docs/HARDWARE-INTELLIGENCE.md` section 45.
+
+
+### 2026-11-26 — Aggregate GGUF metadata-key memory budget (Batch #151)
+
+- [x] Add a shared 8 MiB aggregate budget for metadata-key bytes retained during inspection.
+- [x] Enforce the budget in both metadata-only inspection and tensor-storage analysis.
+- [x] Replace entry-count-based HashSet preallocation with incremental growth under the byte budget.
+- [x] Use checked accounting and reject over-budget metadata before retaining additional keys.
+- [x] Add regression coverage proving both inspection paths reject an over-budget file.
+
+This bounds retained key text; it is not a complete cap on all metadata bytes or the GGUF file size. See `docs/HARDWARE-INTELLIGENCE.md` section 46.

@@ -163,3 +163,6 @@ All notable project changes are recorded here. The project is in foundation/prot
 
 
 - Hardened GGUF tensor-storage analysis with a checked minimum-descriptor-size preflight, rejecting impossible header counts before allocating descriptor and tensor-name collections; added regression coverage.
+
+
+- Added an 8 MiB aggregate GGUF metadata-key memory budget to both inspection paths and removed metadata-entry-count-based preallocation; oversized key sets now fail safely with regression coverage.
