@@ -1747,3 +1747,14 @@ See docs/HARDWARE-INTELLIGENCE.md section 61.
 - [x] Add cross-inspector regression coverage for valid values 1, 32, and 4096 and invalid values 0, 3, and 8192.
 
 This prevents the metadata-only inspector from presenting a malformed declared alignment as usable when tensor analysis would reject it. See docs/HARDWARE-INTELLIGENCE.md section 62.
+
+
+### 2026-11-26 — GGUF architecture metadata semantic validation (Batch #172)
+
+- [x] Reject blank `general.architecture` identifiers.
+- [x] Require positive values for recognised architecture dimensions and counts when present.
+- [x] Ensure attention key/value heads do not exceed total attention heads.
+- [x] Ensure expert-used count does not exceed total expert count.
+- [x] Add regression tests for zero-valued fields, valid relationships, invalid relationships, and blank architecture identifiers.
+
+These checks reject internally contradictory model metadata before HIARM uses it for hardware and context recommendations. Optional fields remain optional. See docs/HARDWARE-INTELLIGENCE.md section 63.

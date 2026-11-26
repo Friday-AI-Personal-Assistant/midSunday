@@ -177,6 +177,11 @@ fn unsigned(v:Value)->Option<u64>{match v{Value::Unsigned(n)=>Some(n),Value::Sig
 fn required_unsigned(value:Value,key:&str)->Result<u64,String>{
     unsigned(value).ok_or_else(||format!("GGUF metadata field {key} must contain a non-negative integer."))
 }
+fn required_positive_unsigned(value:Value,key:&str)->Result<u64,String>{
+    let number=required_unsigned(value,key)?;
+    if number==0{return Err(format!("GGUF metadata field {key} must be greater than zero."));}
+    Ok(number)
+}
 fn required_u32(value:Value,key:&str)->Result<u32,String>{
     u32::try_from(required_unsigned(value,key)?).map_err(|_|format!("GGUF metadata field {key} exceeds the supported 32-bit range."))
 }
@@ -469,24 +474,34 @@ pub fn inspect(input:&str)->Result<GgufMetadata,String>{
         if let Some(prefix)=architecture_metadata_prefix(&key){architecture_metadata_prefixes.insert(prefix.to_owned());}
         let value=scalar(&mut f,kind,metadata_section_start)?;
         match key.as_str(){
-            "general.architecture"=>architecture=Some(required_text(value,&key)?),
+            "general.architecture"=>{
+                let name=required_text(value,&key)?;
+                if name.trim().is_empty(){return Err("GGUF metadata field general.architecture must not be empty.".to_owned());}
+                architecture=Some(name);
+            },
             "general.name"=>model_name=Some(required_text(value,&key)?),
             "general.file_type"=>file_type_code=Some(required_u32(value,&key)?),
             "general.parameter_count"=>parameter_count=Some(required_unsigned(value,&key)?),
             "general.quantization_version"=>quantization_version=Some(required_u32(value,&key)?),
             "general.alignment"=>alignment=Some(required_u32(value,&key)?),
-            _ if key.ends_with(".context_length")=>context_length=Some(required_unsigned(value,&key)?),
-            _ if key.ends_with(".block_count")=>block_count=Some(required_unsigned(value,&key)?),
-            _ if key.ends_with(".embedding_length")=>embedding_length=Some(required_unsigned(value,&key)?),
-            _ if key.ends_with(".attention.head_count_kv")=>attention_kv_head_count=Some(required_unsigned(value,&key)?),
-            _ if key.ends_with(".attention.key_length")=>attention_key_length=Some(required_unsigned(value,&key)?),
-            _ if key.ends_with(".attention.value_length")=>attention_value_length=Some(required_unsigned(value,&key)?),
-            _ if key.ends_with(".attention.head_count")=>attention_head_count=Some(required_unsigned(value,&key)?),
-            _ if key.ends_with(".rope.dimension_count")=>rope_dimension_count=Some(required_unsigned(value,&key)?),
-            _ if key.ends_with(".expert_count")=>expert_count=Some(required_unsigned(value,&key)?),
-            _ if key.ends_with(".expert_used_count")=>expert_used_count=Some(required_unsigned(value,&key)?),
+            _ if key.ends_with(".context_length")=>context_length=Some(required_positive_unsigned(value,&key)?),
+            _ if key.ends_with(".block_count")=>block_count=Some(required_positive_unsigned(value,&key)?),
+            _ if key.ends_with(".embedding_length")=>embedding_length=Some(required_positive_unsigned(value,&key)?),
+            _ if key.ends_with(".attention.head_count_kv")=>attention_kv_head_count=Some(required_positive_unsigned(value,&key)?),
+            _ if key.ends_with(".attention.key_length")=>attention_key_length=Some(required_positive_unsigned(value,&key)?),
+            _ if key.ends_with(".attention.value_length")=>attention_value_length=Some(required_positive_unsigned(value,&key)?),
+            _ if key.ends_with(".attention.head_count")=>attention_head_count=Some(required_positive_unsigned(value,&key)?),
+            _ if key.ends_with(".rope.dimension_count")=>rope_dimension_count=Some(required_positive_unsigned(value,&key)?),
+            _ if key.ends_with(".expert_count")=>expert_count=Some(required_positive_unsigned(value,&key)?),
+            _ if key.ends_with(".expert_used_count")=>expert_used_count=Some(required_positive_unsigned(value,&key)?),
             _=>{}
         }
+    }
+    if let (Some(kv),Some(heads))=(attention_kv_head_count,attention_head_count){
+        if kv>heads{return Err("GGUF attention key/value head count cannot exceed the total attention head count.".to_owned());}
+    }
+    if let (Some(used),Some(total))=(expert_used_count,expert_count){
+        if used>total{return Err("GGUF expert-used count cannot exceed the total expert count.".to_owned());}
     }
     if let Some(value)=alignment{validate_tensor_alignment(value)?;}
     if !architecture_metadata_prefixes.is_empty(){
@@ -1220,6 +1235,50 @@ mod tests{
         let _=std::fs::remove_file(p);
     }
     #[test]fn rejects_non_gguf_extensions(){let p=temp(&fixture(),"bin");assert!(inspect(p.to_str().unwrap()).unwrap_err().contains(".gguf"));let _=std::fs::remove_file(p);}
+    fn semantic_metadata_fixture(entries:&[(&str,u64)])->Vec<u8>{
+        let mut b=b"GGUF".to_vec();b.extend_from_slice(&3u32.to_le_bytes());
+        b.extend_from_slice(&0u64.to_le_bytes());b.extend_from_slice(&(entries.len() as u64).to_le_bytes());
+        for (key,value) in entries{push_string(&mut b,key);b.extend_from_slice(&10u32.to_le_bytes());b.extend_from_slice(&value.to_le_bytes());}
+        while b.len()%32!=0{b.push(0);}b
+    }
+    #[test]fn validates_positive_architecture_dimensions_and_related_counts(){
+        let positive_fields=[
+            "llama.context_length","llama.block_count","llama.embedding_length",
+            "llama.attention.head_count","llama.attention.head_count_kv",
+            "llama.attention.key_length","llama.attention.value_length",
+            "llama.rope.dimension_count","llama.expert_count","llama.expert_used_count"
+        ];
+        for key in positive_fields{
+            let bytes=semantic_metadata_fixture(&[(key,0)]);
+            let path=temp(&bytes,"gguf");
+            let error=inspect(path.to_str().unwrap()).unwrap_err();
+            assert!(error.contains("must be greater than zero"),"{key}: {error}");
+            let _=std::fs::remove_file(path);
+        }
+        let valid=semantic_metadata_fixture(&[
+            ("llama.attention.head_count",32),("llama.attention.head_count_kv",8),
+            ("llama.expert_count",8),("llama.expert_used_count",2)
+        ]);
+        let path=temp(&valid,"gguf");assert!(inspect(path.to_str().unwrap()).is_ok());let _=std::fs::remove_file(path);
+
+        for entries in [
+            vec![("llama.attention.head_count",8),("llama.attention.head_count_kv",16)],
+            vec![("llama.expert_count",4),("llama.expert_used_count",8)]
+        ]{
+            let bytes=semantic_metadata_fixture(&entries);
+            let path=temp(&bytes,"gguf");
+            let error=inspect(path.to_str().unwrap()).unwrap_err();
+            assert!(error.contains("cannot exceed"),"{error}");
+            let _=std::fs::remove_file(path);
+        }
+    }
+    #[test]fn rejects_empty_architecture_identifier(){
+        let mut value=Vec::new();push_string(&mut value,"   ");
+        let bytes=single_metadata_fixture("general.architecture",8,&value);
+        let path=temp(&bytes,"gguf");
+        assert!(inspect(path.to_str().unwrap()).unwrap_err().contains("must not be empty"));
+        let _=std::fs::remove_file(path);
+    }
     #[test]fn validates_declared_tensor_alignment_in_both_inspectors(){
         for alignment in [1u32,32,4096]{
             let mut bytes=single_metadata_fixture("general.alignment",4,&alignment.to_le_bytes());

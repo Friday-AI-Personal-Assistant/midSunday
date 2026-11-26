@@ -198,3 +198,5 @@ All notable project changes are recorded here. The project is in foundation/prot
 - Corrected the Batch #169 sparse-file regression fixture to restore its intended cursor position after reopening; parser changes remain unchanged.
 
 - Unified GGUF declared tensor-alignment validation across metadata inspection and tensor-storage analysis; malformed values (zero, non-power-of-two, or above 4096 bytes) are now rejected consistently, with valid/invalid cross-inspector regression coverage.
+
+- Strengthened GGUF architecture metadata validation: reject blank architecture identifiers, zero-valued dimensions/counts, KV-head counts above total heads, and expert-used counts above total experts; added focused regression coverage.
