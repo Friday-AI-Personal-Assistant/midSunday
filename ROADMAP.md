@@ -1805,3 +1805,16 @@ See docs/HARDWARE-INTELLIGENCE.md section 66.
 - [x] Add regression coverage for thresholds, mixed adapters, missing budgets, and unsupported/unavailable states.
 
 See docs/HARDWARE-INTELLIGENCE.md section 67.
+
+
+### 2026-11-26 — GPU context in GGUF model memory evidence (Batch #177)
+
+- [x] Attach a fresh GPU inventory summary to each model-memory evidence report.
+- [x] Include physical adapter count, usable local-budget coverage, per-adapter headroom bands, and lowest reported headroom.
+- [x] Keep GPU context separate from host-RAM and KV-cache calculations.
+- [x] Preserve unsupported/unavailable GPU states without inventing values.
+- [x] Show GPU context in the model library's memory-evidence panel.
+- [x] Add regression coverage proving GPU headroom does not change the host-RAM verdict.
+- [x] Explicitly avoid claims about free VRAM, model fit, or inference-backend offload support.
+
+See docs/HARDWARE-INTELLIGENCE.md section 68.

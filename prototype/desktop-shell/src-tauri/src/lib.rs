@@ -284,7 +284,21 @@ async fn assess_gguf_memory_evidence(file_path: String, context_tokens: u64) -> 
         let metadata = gguf_metadata::inspect(&file_path)?;
         let tensor_analysis = gguf_metadata::analyse_tensor_storage(&file_path)?;
         let (total_memory_bytes, available_memory_bytes) = system_info::collect_system_memory_bytes();
-        gguf_metadata::assess_memory_evidence(&metadata, &tensor_analysis, total_memory_bytes, available_memory_bytes, context_tokens)
+        let gpu = system_info::detect_gpu_adapters();
+        let gpu_inventory = system_info::assess_gpu_inventory(&gpu);
+        let gpu_headroom = system_info::assess_gpu_memory_headroom(&gpu);
+        let gpu_memory_context = gguf_metadata::GpuMemoryContext {
+            inventory_status: gpu_inventory.status,
+            physical_adapter_count: gpu_inventory.hardware_adapter_count,
+            headroom_status: gpu_headroom.status,
+            adapters_with_local_budget: gpu_headroom.adapters_with_local_budget,
+            adapters_with_critical_headroom: gpu_headroom.adapters_with_critical_headroom,
+            adapters_with_constrained_headroom: gpu_headroom.adapters_with_constrained_headroom,
+            adapters_with_reported_headroom: gpu_headroom.adapters_with_reported_headroom,
+            lowest_available_for_reservation_bytes: gpu_headroom.lowest_available_for_reservation_bytes,
+            lowest_headroom_percent: gpu_headroom.lowest_headroom_percent,
+        };
+        gguf_metadata::assess_memory_evidence(&metadata, &tensor_analysis, total_memory_bytes, available_memory_bytes, context_tokens, gpu_memory_context)
     }).await.map_err(|error| format!("Model memory evidence worker failed: {error}"))?
 }
 
