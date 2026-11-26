@@ -211,3 +211,6 @@ All notable project changes are recorded here. The project is in foundation/prot
 
 
 - Added the approved Live System Monitor feature to the roadmap: a local-first, cross-platform dashboard for CPU, RAM, GPU, storage, network, battery, and midSunday process usage, with bounded sampling, honest unsupported states, privacy safeguards, and real-hardware validation requirements. Implementation is scheduled after Batch #177.
+
+
+- Began the Live System Monitor implementation with an opt-in, local CPU/RAM/process-memory dashboard, bounded recent-activity bars, and a stateful Rust sampler. GPU live utilisation, network, battery, and live disk activity remain planned follow-up work.

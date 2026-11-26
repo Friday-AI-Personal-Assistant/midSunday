@@ -3,6 +3,11 @@ import { Channel, invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 
 type BackendState = "checking" | "connected" | "error";
+type LiveSystemMetrics = {
+  capturedAtUnixMillis: number; cpuStatus: string; cpuUsagePercent: number | null; cpuCoreUsagePercent: number[];
+  totalMemoryBytes: number; usedMemoryBytes: number; availableMemoryBytes: number;
+  processMemory: { status: string; residentBytes: number | null; virtualBytes: number | null };
+};
 type Section = "chat" | "characters" | "settings";
 type Message = { id: number; role: "user" | "assistant" | "system"; text: string };
 type RuntimeStartupMemoryReport = { status: string; startupDurationMs: number; initialResidentBytes: number | null; initialVirtualBytes: number | null; peakResidentBytes: number | null; peakVirtualBytes: number | null; peakResidentGrowthBytes: number | null; peakVirtualGrowthBytes: number | null; sampleCount: number; samplingIntervalMs: number; capturedAtUnixSeconds: number };
@@ -188,6 +193,10 @@ export default function App() {
   const [hardwareSnapshot, setHardwareSnapshot] = useState<HardwareSnapshot | null>(null);
   const [hardwareBusy, setHardwareBusy] = useState(false);
   const [hardwareError, setHardwareError] = useState("");
+  const [monitorRunning, setMonitorRunning] = useState(false);
+  const [liveMetrics, setLiveMetrics] = useState<LiveSystemMetrics | null>(null);
+  const [monitorError, setMonitorError] = useState("");
+  const [monitorHistory, setMonitorHistory] = useState<{ cpu: number; ram: number }[]>([]);
   const [executablePath, setExecutablePath] = useState("");
   const [modelPath, setModelPath] = useState("");
   const [contextTokens, setContextTokens] = useState("2048");
@@ -212,6 +221,28 @@ export default function App() {
   const importFileRef = useRef<HTMLInputElement>(null);
   const [memoryImportBusy, setMemoryImportBusy] = useState(false);
   const memoryImportFileRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!monitorRunning || section !== "settings") return;
+    let active = true;
+    const poll = () => {
+      invoke<LiveSystemMetrics>("get_live_system_metrics")
+        .then((snapshot) => {
+          if (!active) return;
+          setLiveMetrics(snapshot);
+          setMonitorError("");
+          if (snapshot.totalMemoryBytes > 0) {
+            const ram = Math.max(0, Math.min(100, (snapshot.usedMemoryBytes / snapshot.totalMemoryBytes) * 100));
+            const cpu = snapshot.cpuUsagePercent ?? 0;
+            setMonitorHistory((previous) => [...previous, { cpu, ram }].slice(-36));
+          }
+        })
+        .catch(() => { if (active) setMonitorError("Live measurements are temporarily unavailable."); });
+    };
+    poll();
+    const timer = window.setInterval(poll, 1500);
+    return () => { active = false; window.clearInterval(timer); };
+  }, [monitorRunning, section]);
 
   useEffect(() => {
     let active = true;
@@ -1402,6 +1433,24 @@ export default function App() {
             </section>
             <section className="settings-section">
               <div className="settings-section-title"><div><h2>System & hardware</h2><p>A local snapshot helps midSunday understand this computer. It is collected only on this device.</p></div><span className="settings-symbol">⌘</span></div>
+              <div className="system-monitor-panel">
+                <div className="system-monitor-heading"><div><strong>Live System Monitor</strong><p>Local, read-only CPU and memory measurements. Sampling pauses when this settings view is left.</p></div><button className="secondary-action" type="button" onClick={() => { setMonitorRunning((running) => !running); if (monitorRunning) { setLiveMetrics(null); setMonitorHistory([]); setMonitorError(""); } }}>{monitorRunning ? "Stop monitoring" : "Start live monitoring"}</button></div>
+                {monitorRunning && <>
+                  {monitorError && <p className="hardware-error" role="status">{monitorError}</p>}
+                  <div className="system-monitor-grid">
+                    <div className="system-monitor-card"><small>CPU · total usage</small><strong>{liveMetrics?.cpuUsagePercent === null || !liveMetrics ? (liveMetrics?.cpuStatus === "unavailable" ? "Unavailable" : "Warming up…") : liveMetrics.cpuUsagePercent.toFixed(1) + "%"}</strong><div className="system-monitor-track"><i style={{ width: (liveMetrics?.cpuUsagePercent ?? 0) + "%" }} /></div><span>{liveMetrics?.cpuCoreUsagePercent.length ? liveMetrics.cpuCoreUsagePercent.length + " logical processors" : "Waiting for CPU samples"}</span></div>
+                    <div className="system-monitor-card"><small>RAM · system-wide</small><strong>{liveMetrics ? formatModelSize(liveMetrics.usedMemoryBytes) + " / " + formatModelSize(liveMetrics.totalMemoryBytes) : "Collecting…"}</strong><div className="system-monitor-track"><i style={{ width: (liveMetrics && liveMetrics.totalMemoryBytes > 0 ? (liveMetrics.usedMemoryBytes / liveMetrics.totalMemoryBytes) * 100 : 0) + "%" }} /></div><span>{liveMetrics ? formatModelSize(liveMetrics.availableMemoryBytes) + " available" : "Waiting for memory sample"}</span></div>
+                    <div className="system-monitor-card"><small>midSunday · resident RAM</small><strong>{liveMetrics?.processMemory.residentBytes === null || !liveMetrics ? "Unavailable" : formatModelSize(liveMetrics.processMemory.residentBytes)}</strong><span>{liveMetrics?.processMemory.status === "detected" && liveMetrics.processMemory.virtualBytes !== null ? formatModelSize(liveMetrics.processMemory.virtualBytes) + " virtual address space" : "Own-process reading unavailable"}</span></div>
+                    <div className="system-monitor-card"><small>GPU · live utilisation</small><strong>Not available yet</strong><span>GPU inventory and memory-budget evidence remain in the hardware section below.</span></div>
+                  </div>
+                  <div className="system-monitor-history"><div><strong>Recent activity</strong><span>Last 36 samples · approximately 54 seconds</span></div>
+                    <div className="system-monitor-history-row"><small>CPU</small><div>{monitorHistory.map((point, index) => <i key={"cpu-" + index} title={point.cpu.toFixed(1) + "%"} style={{ height: Math.max(2, point.cpu) + "%" }} />)}</div></div>
+                    <div className="system-monitor-history-row"><small>RAM</small><div>{monitorHistory.map((point, index) => <i key={"ram-" + index} title={point.ram.toFixed(1) + "%"} style={{ height: Math.max(2, point.ram) + "%" }} />)}</div></div>
+                  </div>
+                  <p className="settings-footnote">CPU usage is calculated from successive operating-system samples. The first CPU sample establishes a baseline. System RAM and midSunday's own process memory are separate readings; other applications' process details are not collected. GPU utilisation, network, battery, and live disk activity are not included in this first monitoring slice.</p>
+                  {liveMetrics && <p className="settings-footnote">Last sample: {new Date(liveMetrics.capturedAtUnixMillis).toLocaleTimeString()}</p>}
+                </>}
+              </div>
               <div className="hardware-actions"><button className="secondary-action" type="button" onClick={() => void refreshHardwareSnapshot()} disabled={hardwareBusy}>{hardwareBusy ? "Checking…" : "Refresh hardware information"}</button><span>{hardwareSnapshot ? "Last checked " + new Date(hardwareSnapshot.capturedAtUnixSeconds * 1000).toLocaleString() : "Not checked yet"}</span></div>
               {hardwareError && <p className="hardware-error">{hardwareError}</p>}
               {hardwareSnapshot && <>

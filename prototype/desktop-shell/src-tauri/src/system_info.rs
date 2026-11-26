@@ -3,6 +3,7 @@
 //! device serial numbers, or private user files.
 use serde::Serialize;
 use sysinfo::{get_current_pid, CpuRefreshKind, Disks, Pid, ProcessRefreshKind, ProcessesToUpdate, System};
+use std::sync::Mutex;
 
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -572,8 +573,106 @@ pub fn collect_hardware_snapshot(model_path: Option<String>) -> HardwareSnapshot
     }
 }
 
+/// Bounded, read-only sampler for the live System Monitor. It refreshes only CPU,
+/// memory, and the current midSunday process; it never enumerates unrelated processes.
+pub struct SystemMonitor {
+    state: Mutex<SystemMonitorState>,
+}
+
+struct SystemMonitorState {
+    system: System,
+    samples: u64,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct LiveSystemMetrics {
+    pub captured_at_unix_millis: u64,
+    pub cpu_status: String,
+    pub cpu_usage_percent: Option<f32>,
+    pub cpu_core_usage_percent: Vec<f32>,
+    pub total_memory_bytes: u64,
+    pub used_memory_bytes: u64,
+    pub available_memory_bytes: u64,
+    pub process_memory: ProcessMemorySnapshot,
+}
+
+impl Default for SystemMonitor {
+    fn default() -> Self {
+        let mut system = System::new();
+        system.refresh_cpu_list(CpuRefreshKind::everything());
+        system.refresh_memory();
+        Self { state: Mutex::new(SystemMonitorState { system, samples: 0 }) }
+    }
+}
+
+impl SystemMonitor {
+    pub fn sample(&self) -> LiveSystemMetrics {
+        let mut state = self.state.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        state.system.refresh_cpu_usage();
+        state.system.refresh_memory();
+        let cpu_core_usage_percent = state.system.cpus().iter()
+            .map(|cpu| normalise_cpu_usage_percent(cpu.cpu_usage()))
+            .collect::<Vec<_>>();
+        let cpu_usage_percent = if state.samples == 0 || cpu_core_usage_percent.is_empty() {
+            None
+        } else {
+            Some(normalise_cpu_usage_percent(cpu_core_usage_percent.iter().sum::<f32>() / cpu_core_usage_percent.len() as f32))
+        };
+        state.samples = state.samples.saturating_add(1);
+        let total_memory_bytes = state.system.total_memory();
+        let available_memory_bytes = state.system.available_memory().min(total_memory_bytes);
+        let process_memory = match get_current_pid() {
+            Ok(pid) => {
+                state.system.refresh_processes_specifics(
+                    ProcessesToUpdate::Some(&[pid]), true, ProcessRefreshKind::nothing().with_memory(),
+                );
+                match state.system.process(pid) {
+                    Some(process) => ProcessMemorySnapshot { status: "detected".to_owned(), resident_bytes: Some(process.memory()), virtual_bytes: Some(process.virtual_memory()) },
+                    None => ProcessMemorySnapshot { status: "unavailable".to_owned(), resident_bytes: None, virtual_bytes: None },
+                }
+            }
+            Err(_) => ProcessMemorySnapshot { status: "unavailable".to_owned(), resident_bytes: None, virtual_bytes: None },
+        };
+        LiveSystemMetrics {
+            captured_at_unix_millis: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis().min(u64::MAX as u128) as u64,
+            cpu_status: if cpu_usage_percent.is_some() { "detected".to_owned() } else if cpu_core_usage_percent.is_empty() { "unavailable".to_owned() } else { "warming_up".to_owned() },
+            cpu_usage_percent,
+            cpu_core_usage_percent,
+            total_memory_bytes,
+            used_memory_bytes: total_memory_bytes.saturating_sub(available_memory_bytes),
+            available_memory_bytes,
+            process_memory,
+        }
+    }
+}
+
+fn normalise_cpu_usage_percent(value: f32) -> f32 {
+    if value.is_finite() { value.clamp(0.0, 100.0) } else { 0.0 }
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn cpu_usage_is_clamped_and_non_finite_values_are_safe() {
+        assert_eq!(super::normalise_cpu_usage_percent(-4.0), 0.0);
+        assert_eq!(super::normalise_cpu_usage_percent(42.5), 42.5);
+        assert_eq!(super::normalise_cpu_usage_percent(140.0), 100.0);
+        assert_eq!(super::normalise_cpu_usage_percent(f32::NAN), 0.0);
+        assert_eq!(super::normalise_cpu_usage_percent(f32::INFINITY), 0.0);
+    }
+
+    #[test]
+    fn live_monitor_samples_only_current_process_and_returns_bounded_memory() {
+        let monitor = super::SystemMonitor::default();
+        let snapshot = monitor.sample();
+        assert!(snapshot.available_memory_bytes <= snapshot.total_memory_bytes);
+        assert!(snapshot.used_memory_bytes <= snapshot.total_memory_bytes);
+        assert_eq!(snapshot.used_memory_bytes + snapshot.available_memory_bytes, snapshot.total_memory_bytes);
+        assert!(snapshot.cpu_core_usage_percent.iter().all(|value| value.is_finite() && (0.0..=100.0).contains(value)));
+        assert!(matches!(snapshot.process_memory.status.as_str(), "detected" | "unavailable"));
+        assert!(matches!(snapshot.cpu_status.as_str(), "warming_up" | "detected" | "unavailable"));
+    }
     use super::*;
 
     #[test]

@@ -1862,3 +1862,16 @@ See docs/HARDWARE-INTELLIGENCE.md section 68.
 - [ ] Document per-platform limitations and distinguish measured values from estimates or OS-reported budgets.
 
 **Relationship to HIARM:** The System Monitor observes current resource usage. HIARM may later consume selected, validated measurements to improve advisory workload/model recommendations, but monitoring and adaptation remain separate. No automatic system changes are permitted without a separately designed, user-approved control.
+
+
+### 2026-11-26 — Live System Monitor foundation (Batch #178)
+
+- [x] Add a local Rust sampler for CPU utilisation, per-logical-processor utilisation, system RAM, and midSunday's own resident/virtual memory.
+- [x] Keep the sampler stateful so CPU percentages are calculated from successive OS samples; identify the initial baseline as warming up.
+- [x] Restrict process refreshes to the current midSunday process; do not enumerate unrelated applications.
+- [x] Add an opt-in Settings → System & hardware live panel with a 1.5-second polling target, bounded recent CPU/RAM history, and an explicit stop control.
+- [x] Pause sampling when the user leaves Settings and clear the live session when monitoring is stopped.
+- [x] Keep GPU live utilisation, network throughput, battery, and live disk activity explicitly marked as not yet implemented; existing GPU inventory and storage-capacity snapshots remain separate.
+- [ ] Validate real metric accuracy on physical Windows, Linux, and macOS devices; hosted CI validates builds/tests, not sensor accuracy.
+
+This is the first vertical slice of the roadmap feature, not the completed System Monitor. See the Live System Monitor section in ROADMAP.md.

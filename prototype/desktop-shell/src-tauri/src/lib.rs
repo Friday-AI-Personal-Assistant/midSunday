@@ -11,7 +11,7 @@ mod runtime_manager;
 mod system_info;
 
 use tauri::{ipc::Channel, State};
-use system_info::HardwareSnapshot;
+use system_info::{HardwareSnapshot, LiveSystemMetrics, SystemMonitor};
 use serde::Deserialize;
 use runtime::{ConversationMessage, GenerationRequest, RuntimeConfig};
 use runtime_manager::{RuntimeGenerationMemoryReport, RuntimeManager, RuntimeStatusSnapshot};
@@ -324,6 +324,11 @@ fn get_app_status() -> &'static str {
 }
 
 #[tauri::command]
+fn get_live_system_metrics(monitor: State<'_, SystemMonitor>) -> LiveSystemMetrics {
+    monitor.sample()
+}
+
+#[tauri::command]
 async fn get_hardware_snapshot(model_path: Option<String>) -> Result<HardwareSnapshot, String> {
     tauri::async_runtime::spawn_blocking(move || system_info::collect_hardware_snapshot(model_path))
         .await
@@ -528,9 +533,11 @@ pub fn run() {
         })
         .plugin(tauri_plugin_dialog::init())
         .manage(RuntimeManager::default())
+        .manage(SystemMonitor::default())
         .invoke_handler(tauri::generate_handler![
             get_app_status,
             get_hardware_snapshot,
+            get_live_system_metrics,
             list_local_models,
             inspect_gguf_metadata,
             estimate_gguf_kv_cache,
