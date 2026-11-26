@@ -1249,17 +1249,22 @@ export default function App() {
             <section className="settings-section runtime-settings"><div className="settings-section-title"><div><h2>Local AI engine</h2><p>Connect an existing llama.cpp server executable and a GGUF model stored on this device.</p></div><span className="settings-symbol">◈</span></div>
               <div className="runtime-status-line"><span className={runtimeStatus.status === "ready" ? "core-dot good" : runtimeStatus.status === "failed" ? "core-dot bad" : "core-dot"} />Engine status: <strong>{runtimeStatus.status}</strong></div>
               {runtimeStatus.startupMemory && <div className="model-kv-estimate">
-                <strong>Model startup memory · observed peak</strong>
-                <p className="settings-footnote">Measured while the managed llama-server process was starting and loading the selected model.</p>
+                <strong>Model startup · time and memory</strong>
+                <p className="settings-footnote">Elapsed time from launching the managed llama-server process until its local server became ready.</p>
                 <div className="model-kv-grid">
-                  <span>Status<strong>{runtimeStatus.startupMemory.status}</strong></span>
+                  <span>Startup duration<strong>{(runtimeStatus.startupMemory.startupDurationMs / 1000).toFixed(1)} seconds</strong></span>
+                  <span>Sample status<strong>{runtimeStatus.startupMemory.status}</strong></span>
+                  <span>Initial resident<strong>{runtimeStatus.startupMemory.initialResidentBytes === null ? "Unavailable" : formatModelSize(runtimeStatus.startupMemory.initialResidentBytes)}</strong></span>
+                  <span>Initial virtual<strong>{runtimeStatus.startupMemory.initialVirtualBytes === null ? "Unavailable" : formatModelSize(runtimeStatus.startupMemory.initialVirtualBytes)}</strong></span>
                   <span>Peak resident<strong>{runtimeStatus.startupMemory.peakResidentBytes === null ? "Unavailable" : formatModelSize(runtimeStatus.startupMemory.peakResidentBytes)}</strong></span>
                   <span>Peak virtual<strong>{runtimeStatus.startupMemory.peakVirtualBytes === null ? "Unavailable" : formatModelSize(runtimeStatus.startupMemory.peakVirtualBytes)}</strong></span>
+                  <span>Resident growth<strong>{runtimeStatus.startupMemory.peakResidentGrowthBytes === null ? "Unavailable" : `${runtimeStatus.startupMemory.peakResidentGrowthBytes > 0 ? "+" : runtimeStatus.startupMemory.peakResidentGrowthBytes < 0 ? "−" : ""}${formatModelSize(Math.abs(runtimeStatus.startupMemory.peakResidentGrowthBytes))}`}</strong></span>
+                  <span>Virtual growth<strong>{runtimeStatus.startupMemory.peakVirtualGrowthBytes === null ? "Unavailable" : `${runtimeStatus.startupMemory.peakVirtualGrowthBytes > 0 ? "+" : runtimeStatus.startupMemory.peakVirtualGrowthBytes < 0 ? "−" : ""}${formatModelSize(Math.abs(runtimeStatus.startupMemory.peakVirtualGrowthBytes))}`}</strong></span>
                   <span>Valid samples<strong>{runtimeStatus.startupMemory.sampleCount}</strong></span>
                   <span>Sampling interval<strong>{runtimeStatus.startupMemory.samplingIntervalMs} ms</strong></span>
                 </div>
                 <p className="settings-footnote">Captured: {new Date(runtimeStatus.startupMemory.capturedAtUnixSeconds * 1000).toLocaleString()}</p>
-                <p className="settings-footnote">This is the highest process-wide memory value observed during startup, not a guaranteed true peak or model-only allocation. Short spikes between samples and GPU memory may be missed.</p>
+                <p className="settings-footnote">These are whole-process observations, not a pure model-load benchmark or model-only allocations. Short spikes between samples and GPU memory may be missed.</p>
               </div>}
               <div className="model-kv-estimate">
                 <strong>Inference process memory</strong>
