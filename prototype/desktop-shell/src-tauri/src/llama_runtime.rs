@@ -374,6 +374,11 @@ mod recovery_integration_tests {
             Ok(self.running.load(Ordering::SeqCst))
         }
 
+        fn process_id(&self) -> Option<u32> {
+            // The fake process does not own an operating-system child.
+            None
+        }
+
         fn stop(&mut self) -> std::io::Result<()> {
             self.stop_count.fetch_add(1, Ordering::SeqCst);
             self.running.store(false, Ordering::SeqCst);
