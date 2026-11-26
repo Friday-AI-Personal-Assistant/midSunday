@@ -52,6 +52,11 @@ impl LlamaServerProcess {
         Ok(Self { child: Some(child) })
     }
 
+    /// Returns the PID of the child started by this supervisor.
+    pub fn process_id(&self) -> Option<u32> {
+        self.child.as_ref().map(|child| child.id())
+    }
+
     /// Returns false when the child has already exited.
     pub fn is_running(&mut self) -> Result<bool, std::io::Error> {
         match self.child.as_mut() {

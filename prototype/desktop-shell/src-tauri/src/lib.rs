@@ -330,6 +330,11 @@ fn get_runtime_status(manager: State<'_, RuntimeManager>) -> Result<RuntimeStatu
 }
 
 #[tauri::command]
+fn get_runtime_process_memory(manager: State<'_, RuntimeManager>) -> Result<system_info::ProcessMemorySnapshot, String> {
+    manager.process_memory_snapshot()
+}
+
+#[tauri::command]
 async fn start_local_runtime(
     manager: State<'_, RuntimeManager>,
     settings: State<'_, EngineSettingsStore>,
@@ -547,6 +552,7 @@ pub fn run() {
             get_companion_settings,
             save_companion_settings,
             get_runtime_status,
+            get_runtime_process_memory,
             start_local_runtime,
             generate_local_response,
             analyze_conversation_for_awareness,
