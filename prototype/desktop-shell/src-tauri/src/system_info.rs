@@ -47,6 +47,22 @@ pub struct GpuDetection {
 
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+pub struct GpuInventoryAssessment {
+    /// Describes adapter inventory only; it does not establish inference-backend support.
+    pub status: String,
+    pub adapter_count: usize,
+    pub hardware_adapter_count: usize,
+    pub software_adapter_count: usize,
+    /// Largest dedicated-memory figure reported by a non-software adapter.
+    pub largest_dedicated_video_memory_bytes: Option<u64>,
+    /// Largest OS-reported local segment budget; not equivalent to free VRAM.
+    pub largest_local_memory_budget_bytes: Option<u64>,
+    pub adapters_with_local_memory_budget: usize,
+    pub limitations: String,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct HardwareDisk {
     pub mount_point: String,
     pub total_bytes: u64,
@@ -128,6 +144,7 @@ pub struct HardwareSnapshot {
     pub disks: Vec<HardwareDisk>,
     pub model_storage: ModelStorageAssessment,
     pub gpu: GpuDetection,
+    pub gpu_assessment: GpuInventoryAssessment,
     pub assessment: CapabilityAssessment,
 }
 
@@ -338,6 +355,42 @@ pub fn detect_gpu_adapters() -> GpuDetection {
     GpuDetection { status: "unsupported_platform".to_owned(), adapters: Vec::new() }
 }
 
+/// Summarises detected display adapters without claiming that an inference backend can use them.
+pub fn assess_gpu_inventory(gpu: &GpuDetection) -> GpuInventoryAssessment {
+    let hardware_adapters = gpu.adapters.iter().filter(|adapter| !adapter.is_software).collect::<Vec<_>>();
+    let software_adapter_count = gpu.adapters.len().saturating_sub(hardware_adapters.len());
+    let largest_dedicated_video_memory_bytes = hardware_adapters
+        .iter()
+        .map(|adapter| adapter.dedicated_video_memory_bytes)
+        .max();
+    let local_budgets = hardware_adapters.iter().filter_map(|adapter| {
+        adapter.memory_budget.local.as_ref().map(|segment| segment.budget_bytes)
+    }).collect::<Vec<_>>();
+
+    let status = if gpu.status == "unsupported_platform" {
+        "unsupported_platform"
+    } else if gpu.status == "unavailable" {
+        "unavailable"
+    } else if gpu.adapters.is_empty() {
+        "no_adapters"
+    } else if hardware_adapters.is_empty() {
+        "software_only"
+    } else {
+        "detected"
+    };
+
+    GpuInventoryAssessment {
+        status: status.to_owned(),
+        adapter_count: gpu.adapters.len(),
+        hardware_adapter_count: hardware_adapters.len(),
+        software_adapter_count,
+        largest_dedicated_video_memory_bytes,
+        largest_local_memory_budget_bytes: local_budgets.iter().copied().max(),
+        adapters_with_local_memory_budget: local_budgets.len(),
+        limitations: "Display-adapter inventory only. Dedicated memory and OS local-memory budgets are not guaranteed free memory; integrated GPUs may use shared system RAM. This does not detect inference-backend support, compute capability, driver/runtime compatibility, model fit, or performance.".to_owned(),
+    }
+}
+
 /// Queries only the current midSunday process; no other process details are collected.
 pub fn collect_current_process_memory() -> ProcessMemorySnapshot {
     let Ok(pid) = get_current_pid() else {
@@ -445,6 +498,8 @@ pub fn collect_hardware_snapshot(model_path: Option<String>) -> HardwareSnapshot
     disks.sort_by(|left, right| left.mount_point.cmp(&right.mount_point));
 
     let model_storage = assess_model_storage(model_path.as_deref(), &disks);
+    let gpu = detect_gpu_adapters();
+    let gpu_assessment = assess_gpu_inventory(&gpu);
     let total_memory_bytes = system.total_memory();
     let available_memory_bytes = system.available_memory();
     let logical_core_count = system.cpus().len();
@@ -466,7 +521,8 @@ pub fn collect_hardware_snapshot(model_path: Option<String>) -> HardwareSnapshot
         process_memory: collect_current_process_memory(),
         disks,
         model_storage,
-        gpu: detect_gpu_adapters(),
+        gpu,
+        gpu_assessment,
         assessment: assess_capability(total_memory_bytes, available_memory_bytes, logical_core_count),
     }
 }
@@ -498,6 +554,7 @@ mod tests {
             }],
             model_storage: ModelStorageAssessment { status: "not_configured".to_owned(), mount_point: None, available_bytes: None, free_percent: None, volume_status: None },
             gpu: GpuDetection { status: "unsupported_platform".to_owned(), adapters: Vec::new() },
+            gpu_assessment: assess_gpu_inventory(&GpuDetection { status: "unsupported_platform".to_owned(), adapters: Vec::new() }),
             assessment: assess_capability(16 * 1024 * 1024 * 1024, 8 * 1024 * 1024 * 1024, 8),
         };
         let value = serde_json::to_value(&snapshot).unwrap();
@@ -544,6 +601,7 @@ mod tests {
             model_storage: ModelStorageAssessment { status: "not_configured".to_owned(), mount_point: None, available_bytes: None, free_percent: None, volume_status: None },
             disks: Vec::new(),
             gpu: GpuDetection { status: "unsupported_platform".to_owned(), adapters: Vec::new() },
+            gpu_assessment: assess_gpu_inventory(&GpuDetection { status: "unsupported_platform".to_owned(), adapters: Vec::new() }),
             assessment: assess_capability(0, 0, 0),
         };
         assert_eq!(snapshot.gpu.status, "unsupported_platform");
@@ -668,6 +726,94 @@ mod gpu_tests {
         assert_eq!(value["adapters"][0]["memoryBudget"]["local"]["budgetBytes"], 4_u64 * 1024 * 1024 * 1024);
         assert_eq!(value["adapters"][0]["memoryBudget"]["local"]["currentUsageBytes"], 512_u64 * 1024 * 1024);
         assert_eq!(value["adapters"][0]["memoryBudget"]["status"], "detected");
+    }
+
+    #[test]
+    fn gpu_assessment_distinguishes_unsupported_unavailable_and_empty_inventory() {
+        let unsupported = assess_gpu_inventory(&GpuDetection { status: "unsupported_platform".to_owned(), adapters: Vec::new() });
+        assert_eq!(unsupported.status, "unsupported_platform");
+        assert_eq!(unsupported.hardware_adapter_count, 0);
+
+        let unavailable = assess_gpu_inventory(&GpuDetection { status: "unavailable".to_owned(), adapters: Vec::new() });
+        assert_eq!(unavailable.status, "unavailable");
+
+        let empty = assess_gpu_inventory(&GpuDetection { status: "no_adapters".to_owned(), adapters: Vec::new() });
+        assert_eq!(empty.status, "no_adapters");
+    }
+
+    #[test]
+    fn gpu_assessment_excludes_software_adapters_from_hardware_memory_summary() {
+        let gpu = GpuDetection {
+            status: "detected".to_owned(),
+            adapters: vec![
+                GpuAdapter {
+                    name: "Software renderer".to_owned(), vendor_id: 0, device_id: 0,
+                    dedicated_video_memory_bytes: u64::MAX,
+                    dedicated_system_memory_bytes: 0, shared_system_memory_bytes: 0, is_software: true,
+                    memory_budget: GpuMemoryBudget {
+                        status: "unavailable".to_owned(), node_index: 0, local: None,
+                        local_error_code: None, non_local: None, non_local_error_code: None,
+                    },
+                },
+                GpuAdapter {
+                    name: "Integrated GPU".to_owned(), vendor_id: 0x8086, device_id: 1,
+                    dedicated_video_memory_bytes: 128 * 1024 * 1024,
+                    dedicated_system_memory_bytes: 0, shared_system_memory_bytes: 8 * 1024 * 1024 * 1024, is_software: false,
+                    memory_budget: GpuMemoryBudget {
+                        status: "detected".to_owned(), node_index: 0,
+                        local: Some(GpuMemorySegment {
+                            budget_bytes: 3 * 1024 * 1024 * 1024,
+                            current_usage_bytes: 512 * 1024 * 1024,
+                            available_for_reservation_bytes: 2 * 1024 * 1024 * 1024,
+                            current_reservation_bytes: 0,
+                        }),
+                        local_error_code: None, non_local: None, non_local_error_code: None,
+                    },
+                },
+                GpuAdapter {
+                    name: "Discrete GPU".to_owned(), vendor_id: 0x10de, device_id: 2,
+                    dedicated_video_memory_bytes: 8 * 1024 * 1024 * 1024,
+                    dedicated_system_memory_bytes: 0, shared_system_memory_bytes: 8 * 1024 * 1024 * 1024, is_software: false,
+                    memory_budget: GpuMemoryBudget {
+                        status: "partial".to_owned(), node_index: 0, local: None,
+                        local_error_code: Some(-1), non_local: None, non_local_error_code: Some(-1),
+                    },
+                },
+            ],
+        };
+
+        let assessment = assess_gpu_inventory(&gpu);
+        assert_eq!(assessment.status, "detected");
+        assert_eq!(assessment.adapter_count, 3);
+        assert_eq!(assessment.hardware_adapter_count, 2);
+        assert_eq!(assessment.software_adapter_count, 1);
+        assert_eq!(assessment.largest_dedicated_video_memory_bytes, Some(8 * 1024 * 1024 * 1024));
+        assert_eq!(assessment.largest_local_memory_budget_bytes, Some(3 * 1024 * 1024 * 1024));
+        assert_eq!(assessment.adapters_with_local_memory_budget, 1);
+        assert!(assessment.limitations.contains("does not detect inference-backend support"));
+    }
+
+    #[test]
+    fn gpu_assessment_reports_software_only_inventory_without_calling_it_hardware() {
+        let gpu = GpuDetection {
+            status: "detected".to_owned(),
+            adapters: vec![GpuAdapter {
+                name: "Software renderer".to_owned(), vendor_id: 0, device_id: 0,
+                dedicated_video_memory_bytes: 0, dedicated_system_memory_bytes: 0,
+                shared_system_memory_bytes: 0, is_software: true,
+                memory_budget: GpuMemoryBudget {
+                    status: "unsupported_interface".to_owned(), node_index: 0, local: None,
+                    local_error_code: None, non_local: None, non_local_error_code: None,
+                },
+            }],
+        };
+        let assessment = assess_gpu_inventory(&gpu);
+        assert_eq!(assessment.status, "software_only");
+        assert_eq!(assessment.adapter_count, 1);
+        assert_eq!(assessment.hardware_adapter_count, 0);
+        assert_eq!(assessment.software_adapter_count, 1);
+        assert_eq!(assessment.largest_dedicated_video_memory_bytes, None);
+        assert_eq!(assessment.largest_local_memory_budget_bytes, None);
     }
 
     #[test]

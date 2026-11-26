@@ -205,3 +205,6 @@ All notable project changes are recorded here. The project is in foundation/prot
 
 
 - HIARM now reduces its suggested starting profile when current available RAM is under the conservative headroom threshold, while preserving the installed-memory tier and making no automatic settings changes. Added cross-platform regression coverage.
+
+
+- Added a derived GPU inventory assessment to HIARM snapshots, distinguishing hardware adapters from software renderers and reporting conservative per-adapter memory summaries without claiming inference compatibility or pooling GPU memory.

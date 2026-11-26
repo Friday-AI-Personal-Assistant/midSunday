@@ -1779,3 +1779,15 @@ See docs/HARDWARE-INTELLIGENCE.md section 64.
 - [x] Keep the assessment advisory only; it does not change runtime settings or claim model compatibility.
 
 See docs/HARDWARE-INTELLIGENCE.md section 65.
+
+
+### 2026-11-26 — GPU inventory assessment (Batch #175)
+
+- [x] Add a derived GPU inventory assessment to the serializable hardware snapshot.
+- [x] Distinguish unsupported, unavailable, no-adapter, software-only, and detected hardware states.
+- [x] Exclude software renderers from physical-adapter memory summaries.
+- [x] Report the largest dedicated-memory figure and largest OS local-segment budget without pooling memory across adapters.
+- [x] Keep GPU inventory separate from claims about inference backend, compute capability, model fit, or performance.
+- [x] Add cross-platform tests for mixed adapters, software-only inventory, missing memory budgets, and unavailable states.
+
+See docs/HARDWARE-INTELLIGENCE.md section 66.
