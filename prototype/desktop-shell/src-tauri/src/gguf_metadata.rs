@@ -1,7 +1,7 @@
 //! Bounded, read-only inspection of GGUF container metadata.
 //! This parser stops before tensor descriptors and payloads; model weights are never loaded.
 use serde::Serialize;
-use std::{fs::File, io::{Read, Seek, SeekFrom}, path::Path};
+use std::{collections::HashSet, fs::File, io::{Read, Seek, SeekFrom}, path::Path};
 
 const MAX_METADATA_ENTRIES: u64 = 100_000;
 const MAX_STRING_BYTES: u64 = 1_048_576;
@@ -160,10 +160,15 @@ pub fn analyse_tensor_storage(input:&str)->Result<TensorStorageAnalysis,String>{
     if alignment==0 || alignment>4096 || !alignment.is_power_of_two(){return Err("GGUF tensor alignment must be a power of two from 1 to 4096 bytes.".to_owned());}
     let count=usize::try_from(tensor_count).map_err(|_|"Tensor count is too large for this device.".to_owned())?;
     let mut descriptors=Vec::with_capacity(count);
+    let mut tensor_names=HashSet::with_capacity(count);
     for _ in 0..tensor_count{
         let name_len=read_u64(&mut f)?;
-        if name_len>64{return Err("A GGUF tensor name exceeds the format limit.".to_owned());}
-        skip_bytes(&mut f,name_len)?;
+        if name_len==0 || name_len>64{return Err("A GGUF tensor name must contain between 1 and 64 bytes.".to_owned());}
+        let name_size=usize::try_from(name_len).map_err(|_|"GGUF tensor name is too large for this device.".to_owned())?;
+        let mut name_bytes=vec![0;name_size];
+        f.read_exact(&mut name_bytes).map_err(|_|"A GGUF tensor name is truncated.".to_owned())?;
+        let name=String::from_utf8(name_bytes).map_err(|_|"A GGUF tensor name contains invalid UTF-8.".to_owned())?;
+        if !tensor_names.insert(name){return Err("The GGUF file contains duplicate tensor names.".to_owned());}
         let dimensions_count=read_u32(&mut f)?;
         if !(1..=4).contains(&dimensions_count){return Err("A GGUF tensor has an invalid dimension count.".to_owned());}
         let mut dimensions=Vec::with_capacity(dimensions_count as usize);
@@ -491,6 +496,17 @@ mod tests{
         let aligned=((b.len()+31)/32)*32;b.resize(aligned,0);
         b.extend_from_slice(payload);b
     }
+    fn tensor_fixture_with_names(names:&[&[u8]])->Vec<u8>{
+        let mut b=b"GGUF".to_vec();b.extend_from_slice(&3u32.to_le_bytes());
+        b.extend_from_slice(&(names.len() as u64).to_le_bytes());b.extend_from_slice(&1u64.to_le_bytes());
+        entry_u32(&mut b,"general.alignment",32);
+        for (index,name) in names.iter().enumerate(){
+            b.extend_from_slice(&(name.len() as u64).to_le_bytes());b.extend_from_slice(name);
+            b.extend_from_slice(&1u32.to_le_bytes());b.extend_from_slice(&1u64.to_le_bytes());
+            b.extend_from_slice(&0u32.to_le_bytes());b.extend_from_slice(&((index as u64)*32).to_le_bytes());
+        }
+        let aligned=((b.len()+31)/32)*32;b.resize(aligned,0);b.extend_from_slice(&[0;64]);b
+    }
     fn tensor_fixture(type_code:u32,dimension:u64,offset:u64,payload:&[u8])->Vec<u8>{
         tensor_fixture_many(&[(type_code,dimension,offset)],payload)
     }
@@ -583,6 +599,23 @@ mod tests{
 
         let p=temp(&tensor_fixture_dimensions(&[u64::MAX,2],0,None,&[]),"gguf");
         assert!(analyse_tensor_storage(p.to_str().unwrap()).unwrap_err().contains("element count overflowed"));
+        let _=std::fs::remove_file(p);
+    }
+    #[test]fn validates_tensor_descriptor_names(){
+        let p=temp(&tensor_fixture_with_names(&[b""]), "gguf");
+        assert!(analyse_tensor_storage(p.to_str().unwrap()).unwrap_err().contains("between 1 and 64"));
+        let _=std::fs::remove_file(p);
+
+        let p=temp(&tensor_fixture_with_names(&[&[0xff]]), "gguf");
+        assert!(analyse_tensor_storage(p.to_str().unwrap()).unwrap_err().contains("invalid UTF-8"));
+        let _=std::fs::remove_file(p);
+
+        let p=temp(&tensor_fixture_with_names(&[b"duplicate",b"duplicate"]), "gguf");
+        assert!(analyse_tensor_storage(p.to_str().unwrap()).unwrap_err().contains("duplicate tensor names"));
+        let _=std::fs::remove_file(p);
+
+        let p=temp(&tensor_fixture_with_names(&[b"layer.0.weight",b"layer.1.weight"]), "gguf");
+        assert_eq!(analyse_tensor_storage(p.to_str().unwrap()).unwrap().tensor_count,2);
         let _=std::fs::remove_file(p);
     }
     #[test]fn rejects_non_gguf_extensions(){let p=temp(&fixture(),"bin");assert!(inspect(p.to_str().unwrap()).unwrap_err().contains(".gguf"));let _=std::fs::remove_file(p);}

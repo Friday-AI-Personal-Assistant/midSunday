@@ -1462,3 +1462,14 @@ This is an informational metadata comparison only. It does not reject a context,
 - [ ] Validate comparison behaviour against a representative real-world GGUF corpus, especially tied/shared tensors and exporter-specific parameter-count conventions.
 
 The comparison is an advisory structural cross-check only. It does not establish model correctness, runtime compatibility, or memory requirements, and it does not read tensor weights or change model settings. See `docs/HARDWARE-INTELLIGENCE.md` section 35.
+
+
+### 2026-11-26 — GGUF tensor descriptor name integrity (Batch #140)
+
+- [x] Read each tensor descriptor name using a strict 64-byte bound rather than skipping arbitrary name bytes.
+- [x] Reject empty, truncated, and invalid UTF-8 tensor names with clear parser errors.
+- [x] Reject duplicate tensor names before calculating element counts or payload ranges.
+- [x] Preserve exact, case-sensitive name comparison and avoid exposing tensor names in telemetry or network requests.
+- [x] Add regression fixtures for empty, invalid UTF-8, duplicate, and distinct valid names.
+
+This is a structural GGUF container check only; it does not validate architecture-specific tensor naming conventions, prove model completeness, or guarantee runtime compatibility. See docs/HARDWARE-INTELLIGENCE.md section 36.

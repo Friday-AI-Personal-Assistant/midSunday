@@ -504,3 +504,10 @@ Tensor storage analysis now multiplies the declared dimensions of every tensor u
 This is a structural cross-check, not a definitive parameter-count or model-integrity verdict. A tensor-element total is not necessarily identical to a model's unique parameter count: tied/shared weights, exporter conventions, incomplete or malformed descriptors, and file-supplied metadata can affect the comparison. The UI labels both values separately and presents the comparison as an advisory. Dimension or aggregate overflow and zero-sized dimensions are rejected rather than wrapped or guessed. No tensor weights are read, no model is loaded, and no hardware or runtime settings are changed.
 
 Regression coverage includes dimension-product aggregation, optional/matching/mismatching reported counts, and overflow/zero-dimension handling.
+
+
+## 36. GGUF tensor descriptor name integrity (2026-11-26)
+
+Tensor storage analysis now reads each bounded tensor name instead of blindly skipping its bytes. It rejects empty names, names longer than the supported 64-byte inspection limit, truncated names, invalid UTF-8, and duplicate names before analysing tensor dimensions or payload ranges. Names are compared exactly and case-sensitively; no names or tensor contents are uploaded, and tensor weights remain unread.
+
+This is a structural container check only. It does not establish that tensor names match a particular model architecture, that all expected tensors are present, or that a model can run. Regression coverage includes empty, invalid-UTF-8, duplicate, and distinct valid names.

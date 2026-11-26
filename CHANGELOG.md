@@ -141,3 +141,5 @@ All notable project changes are recorded here. The project is in foundation/prot
 - Added a GGUF-reported context-length advisory to KV-cache and host-memory evidence reports, distinguishing within/above/missing metadata without treating file metadata as a hard runtime limit; added regression coverage.
 
 - Fixed TypeScript null-safety in the GGUF-reported context display by using optional chaining and a nullish fallback for unavailable metadata.
+
+- Added bounded GGUF tensor-name parsing and structural validation for empty, truncated, invalid UTF-8, and duplicate descriptor names, with regression coverage. Tensor weights remain unread.
