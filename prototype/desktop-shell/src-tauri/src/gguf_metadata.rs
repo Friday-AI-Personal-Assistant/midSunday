@@ -658,7 +658,7 @@ mod tests{
     #[test]fn rejects_metadata_key_payload_before_reading_past_aggregate_budget(){
         let p=std::env::temp_dir().join(format!("midsunday-gguf-key-preflight-{}-{}.gguf",std::process::id(),NEXT.fetch_add(1,Ordering::Relaxed)));
         let mut writer=File::create(&p).unwrap();
-        writer.write_all(&u64::MAX.to_le_bytes()).unwrap();
+        writer.write_all(&MAX_STRING_BYTES.to_le_bytes()).unwrap();
         drop(writer);
         let mut reader=File::open(&p).unwrap();
         let error=read_metadata_key(&mut reader,0).unwrap_err();
