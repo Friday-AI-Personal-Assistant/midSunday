@@ -1791,3 +1791,17 @@ See docs/HARDWARE-INTELLIGENCE.md section 65.
 - [x] Add cross-platform tests for mixed adapters, software-only inventory, missing memory budgets, and unavailable states.
 
 See docs/HARDWARE-INTELLIGENCE.md section 66.
+
+
+### 2026-11-26 — GPU memory reservation-headroom assessment (Batch #176)
+
+- [x] Derive per-physical-adapter reservation headroom from the current process's DXGI local-segment budget.
+- [x] Classify reported headroom as critical, constrained, or at least 1 GiB and 20%, without treating it as free VRAM.
+- [x] Report the lowest per-adapter reservation headroom and its percentage without pooling values across GPUs.
+- [x] Exclude software adapters and skip missing or zero-sized local budgets.
+- [x] Preserve partial GPU adapter-enumeration status rather than reporting a complete inventory.
+- [x] Display the summary and limitations in Settings → System & hardware.
+- [x] Keep the assessment advisory; it does not affect model selection, runtime settings, or capability profiles.
+- [x] Add regression coverage for thresholds, mixed adapters, missing budgets, and unsupported/unavailable states.
+
+See docs/HARDWARE-INTELLIGENCE.md section 67.

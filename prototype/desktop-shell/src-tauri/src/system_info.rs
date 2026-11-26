@@ -63,6 +63,15 @@ pub struct GpuInventoryAssessment {
 
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+pub struct GpuMemoryHeadroomAssessment {
+    pub status: String, pub assessed_adapter_count: usize, pub adapters_with_local_budget: usize,
+    pub adapters_with_critical_headroom: usize, pub adapters_with_constrained_headroom: usize,
+    pub adapters_with_reported_headroom: usize, pub lowest_available_for_reservation_bytes: Option<u64>,
+    pub lowest_headroom_percent: Option<u8>, pub limitations: String,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct HardwareDisk {
     pub mount_point: String,
     pub total_bytes: u64,
@@ -145,6 +154,7 @@ pub struct HardwareSnapshot {
     pub model_storage: ModelStorageAssessment,
     pub gpu: GpuDetection,
     pub gpu_assessment: GpuInventoryAssessment,
+    pub gpu_memory_headroom: GpuMemoryHeadroomAssessment,
     pub assessment: CapabilityAssessment,
 }
 
@@ -375,6 +385,8 @@ pub fn assess_gpu_inventory(gpu: &GpuDetection) -> GpuInventoryAssessment {
         "no_adapters"
     } else if hardware_adapters.is_empty() {
         "software_only"
+    } else if gpu.status == "partial" {
+        "partial"
     } else {
         "detected"
     };
@@ -388,6 +400,37 @@ pub fn assess_gpu_inventory(gpu: &GpuDetection) -> GpuInventoryAssessment {
         largest_local_memory_budget_bytes: local_budgets.iter().copied().max(),
         adapters_with_local_memory_budget: local_budgets.len(),
         limitations: "Display-adapter inventory only. Dedicated memory and OS local-memory budgets are not guaranteed free memory; integrated GPUs may use shared system RAM. This does not detect inference-backend support, compute capability, driver/runtime compatibility, model fit, or performance.".to_owned(),
+    }
+}
+
+/// Scores per-adapter OS reservation headroom; this is not free VRAM or model fit.
+pub fn assess_gpu_memory_headroom(gpu: &GpuDetection) -> GpuMemoryHeadroomAssessment {
+    const MIB: u64 = 1024 * 1024; const GIB: u64 = 1024 * MIB;
+    let physical = gpu.adapters.iter().filter(|a| !a.is_software).collect::<Vec<_>>();
+    let (mut count, mut critical, mut constrained, mut reported) = (0_usize, 0_usize, 0_usize, 0_usize);
+    let (mut lowest_bytes, mut lowest_percent): (Option<u64>, Option<u8>) = (None, None);
+    for adapter in &physical {
+        let Some(local) = adapter.memory_budget.local.as_ref() else { continue };
+        if local.budget_bytes == 0 { continue; }
+        count += 1;
+        let available = local.available_for_reservation_bytes.min(local.budget_bytes);
+        let percent = ((available as u128 * 100) / local.budget_bytes as u128) as u8;
+        if lowest_bytes.map_or(true, |v| available < v) { lowest_bytes = Some(available); lowest_percent = Some(percent); }
+        if available < 512 * MIB || percent < 10 { critical += 1; }
+        else if available < GIB || percent < 20 { constrained += 1; }
+        else { reported += 1; }
+    }
+    let status = if gpu.status == "unsupported_platform" { "unsupported_platform" }
+        else if gpu.adapters.is_empty() { if gpu.status == "unavailable" { "unavailable" } else { "no_adapters" } }
+        else if count == 0 { "unavailable" }
+        else if count < physical.len() || gpu.status == "partial" { "partial" }
+        else { "detected" };
+    GpuMemoryHeadroomAssessment {
+        status: status.to_owned(), assessed_adapter_count: physical.len(), adapters_with_local_budget: count,
+        adapters_with_critical_headroom: critical, adapters_with_constrained_headroom: constrained,
+        adapters_with_reported_headroom: reported, lowest_available_for_reservation_bytes: lowest_bytes,
+        lowest_headroom_percent: lowest_percent,
+        limitations: "Point-in-time OS reservation headroom for the current process on DXGI node zero; not free VRAM, model fit, or proof of inference-backend support. Values are not pooled; software adapters and missing/zero local budgets are not scored.".to_owned(),
     }
 }
 
@@ -500,6 +543,7 @@ pub fn collect_hardware_snapshot(model_path: Option<String>) -> HardwareSnapshot
     let model_storage = assess_model_storage(model_path.as_deref(), &disks);
     let gpu = detect_gpu_adapters();
     let gpu_assessment = assess_gpu_inventory(&gpu);
+    let gpu_memory_headroom = assess_gpu_memory_headroom(&gpu);
     let total_memory_bytes = system.total_memory();
     let available_memory_bytes = system.available_memory();
     let logical_core_count = system.cpus().len();
@@ -523,6 +567,7 @@ pub fn collect_hardware_snapshot(model_path: Option<String>) -> HardwareSnapshot
         model_storage,
         gpu,
         gpu_assessment,
+        gpu_memory_headroom,
         assessment: assess_capability(total_memory_bytes, available_memory_bytes, logical_core_count),
     }
 }
@@ -555,6 +600,7 @@ mod tests {
             model_storage: ModelStorageAssessment { status: "not_configured".to_owned(), mount_point: None, available_bytes: None, free_percent: None, volume_status: None },
             gpu: GpuDetection { status: "unsupported_platform".to_owned(), adapters: Vec::new() },
             gpu_assessment: assess_gpu_inventory(&GpuDetection { status: "unsupported_platform".to_owned(), adapters: Vec::new() }),
+            gpu_memory_headroom: assess_gpu_memory_headroom(&GpuDetection { status: "unsupported_platform".to_owned(), adapters: Vec::new() }),
             assessment: assess_capability(16 * 1024 * 1024 * 1024, 8 * 1024 * 1024 * 1024, 8),
         };
         let value = serde_json::to_value(&snapshot).unwrap();
@@ -602,6 +648,7 @@ mod tests {
             disks: Vec::new(),
             gpu: GpuDetection { status: "unsupported_platform".to_owned(), adapters: Vec::new() },
             gpu_assessment: assess_gpu_inventory(&GpuDetection { status: "unsupported_platform".to_owned(), adapters: Vec::new() }),
+            gpu_memory_headroom: assess_gpu_memory_headroom(&GpuDetection { status: "unsupported_platform".to_owned(), adapters: Vec::new() }),
             assessment: assess_capability(0, 0, 0),
         };
         assert_eq!(snapshot.gpu.status, "unsupported_platform");
@@ -814,6 +861,48 @@ mod gpu_tests {
         assert_eq!(assessment.software_adapter_count, 1);
         assert_eq!(assessment.largest_dedicated_video_memory_bytes, None);
         assert_eq!(assessment.largest_local_memory_budget_bytes, None);
+    }
+
+    #[test]
+    fn gpu_memory_headroom_classifies_bands_and_excludes_software() {
+        let make = |available: u64, software: bool| GpuAdapter {
+            name: "test".to_owned(), vendor_id: 1, device_id: 2, dedicated_video_memory_bytes: 8 * 1024 * 1024 * 1024,
+            dedicated_system_memory_bytes: 0, shared_system_memory_bytes: 0, is_software: software,
+            memory_budget: GpuMemoryBudget { status: "detected".to_owned(), node_index: 0,
+                local: Some(GpuMemorySegment { budget_bytes: 8 * 1024 * 1024 * 1024,
+                    current_usage_bytes: 0, available_for_reservation_bytes: available, current_reservation_bytes: 0 }),
+                local_error_code: None, non_local: None, non_local_error_code: None },
+        };
+        let gpu = GpuDetection { status: "detected".to_owned(), adapters: vec![
+            make(400 * 1024 * 1024, false), make(900 * 1024 * 1024, false),
+            make(4 * 1024 * 1024 * 1024, false), make(0, true),
+        ]};
+        let a = assess_gpu_memory_headroom(&gpu);
+        assert_eq!(a.status, "detected"); assert_eq!(a.assessed_adapter_count, 3);
+        assert_eq!(a.adapters_with_local_budget, 3); assert_eq!(a.adapters_with_critical_headroom, 1);
+        assert_eq!(a.adapters_with_constrained_headroom, 1); assert_eq!(a.adapters_with_reported_headroom, 1);
+        assert_eq!(a.lowest_available_for_reservation_bytes, Some(400 * 1024 * 1024));
+        assert_eq!(a.lowest_headroom_percent, Some(4));
+    }
+
+    #[test]
+    fn gpu_memory_headroom_handles_zero_missing_and_partial_inventory() {
+        let make = |budget: u64, missing: bool| GpuAdapter {
+            name: "test".to_owned(), vendor_id: 1, device_id: 2, dedicated_video_memory_bytes: budget,
+            dedicated_system_memory_bytes: 0, shared_system_memory_bytes: 0, is_software: false,
+            memory_budget: GpuMemoryBudget { status: "unavailable".to_owned(), node_index: 0,
+                local: if missing { None } else { Some(GpuMemorySegment { budget_bytes: budget, current_usage_bytes: 0,
+                    available_for_reservation_bytes: budget, current_reservation_bytes: 0 }) },
+                local_error_code: None, non_local: None, non_local_error_code: None },
+        };
+        let no_budget = GpuDetection { status: "detected".to_owned(), adapters: vec![make(0, false), make(8, true)] };
+        assert_eq!(assess_gpu_memory_headroom(&no_budget).status, "unavailable");
+        let partial = GpuDetection { status: "detected".to_owned(), adapters: vec![make(1024, false), make(1024, true)] };
+        assert_eq!(assess_gpu_memory_headroom(&partial).status, "partial");
+        let source_partial = GpuDetection { status: "partial".to_owned(), adapters: vec![make(1024, false)] };
+        assert_eq!(assess_gpu_inventory(&source_partial).status, "partial");
+        assert_eq!(assess_gpu_memory_headroom(&source_partial).status, "partial");
+        assert_eq!(assess_gpu_memory_headroom(&GpuDetection { status: "unsupported_platform".to_owned(), adapters: vec![] }).status, "unsupported_platform");
     }
 
     #[test]
