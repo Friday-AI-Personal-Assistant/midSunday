@@ -1583,3 +1583,14 @@ This bounds retained key text; it is not a complete cap on all metadata bytes or
 ## 2026-11-26 — Batch #152
 
 - Corrected the GGUF aggregate metadata-key memory regression fixture: each generated key now remains within the existing 1 MiB individual string limit, while nine distinct keys collectively exceed the 8 MiB aggregate budget. This makes the test exercise the intended aggregate guard in both inspection paths. Production safety limits and parser behaviour are unchanged.
+
+
+### 2026-11-26 — GGUF tensor-descriptor collection memory bounds (Batch #153)
+
+- [x] Replace per-tensor heap-allocated dimension vectors with a fixed-size four-dimension inline array.
+- [x] Remove tensor-count-based preallocation for descriptor and tensor-name collections.
+- [x] Add checked aggregate accounting with an 8 MiB retained tensor-name text budget.
+- [x] Reject over-budget tensor-name sets before retaining the next name.
+- [x] Add regression coverage for aggregate tensor-name storage exhaustion.
+
+These are parser-owned collection bounds, not a total process-memory guarantee; the existing one-million descriptor cap and file-size preflight remain in force. See `docs/HARDWARE-INTELLIGENCE.md` section 48.

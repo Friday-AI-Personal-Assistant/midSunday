@@ -6,6 +6,7 @@ use std::{collections::HashSet, fs::File, io::{Read, Seek, SeekFrom}, path::Path
 const MAX_METADATA_ENTRIES: u64 = 100_000;
 const MAX_METADATA_KEY_BYTES: u64 = 8 * 1024 * 1024;
 const MAX_TENSORS: u64 = 1_000_000;
+const MAX_TENSOR_NAME_BYTES: u64 = 8 * 1024 * 1024;
 const MIN_TENSOR_DESCRIPTOR_BYTES: u64 = 33;
 const MAX_STRING_BYTES: u64 = 1_048_576;
 const MAX_ARRAY_ITEMS: u64 = 10_000_000;
@@ -158,7 +159,7 @@ pub struct TensorStorageAnalysis {
     pub note: String,
 }
 #[derive(Clone, Debug)]
-struct TensorDescriptor { dimensions: Vec<u64>, type_code: u32, offset: u64 }
+struct TensorDescriptor { dimensions: [u64;4], dimensions_count: u8, type_code: u32, offset: u64 }
 
 fn tensor_type_layout(code:u32)->Option<(&'static str,u64,u64)> {
     match code {
@@ -240,9 +241,12 @@ pub fn analyse_tensor_storage(input:&str)->Result<TensorStorageAnalysis,String>{
     if minimum_descriptor_bytes>remaining_file_bytes{
         return Err("The declared GGUF tensor descriptors cannot fit within the remaining file bytes.".to_owned());
     }
-    let count=usize::try_from(tensor_count).map_err(|_|"Tensor count is too large for this device.".to_owned())?;
-    let mut descriptors=Vec::with_capacity(count);
-    let mut tensor_names=HashSet::with_capacity(count);
+    // Grow descriptor and name collections incrementally; never reserve directly
+    // from an untrusted tensor count. Fixed-size dimensions avoid one heap allocation
+    // per tensor, and aggregate name accounting bounds retained name text.
+    let mut descriptors=Vec::new();
+    let mut tensor_names=HashSet::new();
+    let mut tensor_name_bytes=0u64;
     for _ in 0..tensor_count{
         let name_len=read_u64(&mut f)?;
         if name_len==0 || name_len>64{return Err("A GGUF tensor name must contain between 1 and 64 bytes.".to_owned());}
@@ -250,14 +254,19 @@ pub fn analyse_tensor_storage(input:&str)->Result<TensorStorageAnalysis,String>{
         let mut name_bytes=vec![0;name_size];
         f.read_exact(&mut name_bytes).map_err(|_|"A GGUF tensor name is truncated.".to_owned())?;
         let name=String::from_utf8(name_bytes).map_err(|_|"A GGUF tensor name contains invalid UTF-8.".to_owned())?;
+        tensor_name_bytes=tensor_name_bytes.checked_add(name.len() as u64)
+            .ok_or_else(||"GGUF tensor-name byte count overflowed.".to_owned())?;
+        if tensor_name_bytes>MAX_TENSOR_NAME_BYTES{
+            return Err("GGUF tensor names exceed the aggregate safe inspection limit.".to_owned());
+        }
         if !tensor_names.insert(name){return Err("The GGUF file contains duplicate tensor names.".to_owned());}
         let dimensions_count=read_u32(&mut f)?;
         if !(1..=4).contains(&dimensions_count){return Err("A GGUF tensor has an invalid dimension count.".to_owned());}
-        let mut dimensions=Vec::with_capacity(dimensions_count as usize);
-        for _ in 0..dimensions_count{dimensions.push(read_u64(&mut f)?);}
+        let mut dimensions=[0u64;4];
+        for dimension in dimensions.iter_mut().take(dimensions_count as usize){*dimension=read_u64(&mut f)?;}
         let type_code=read_u32(&mut f)?;let offset=read_u64(&mut f)?;
         if offset%u64::from(alignment)!=0{return Err("A GGUF tensor offset is not aligned as required by the file.".to_owned());}
-        descriptors.push(TensorDescriptor{dimensions,type_code,offset});
+        descriptors.push(TensorDescriptor{dimensions,dimensions_count:dimensions_count as u8,type_code,offset});
     }
     let descriptor_end=f.stream_position().map_err(|e|format!("Could not locate GGUF tensor data: {e}"))?;
     let data_start=align_up(descriptor_end,alignment)?;
@@ -275,7 +284,8 @@ pub fn analyse_tensor_storage(input:&str)->Result<TensorStorageAnalysis,String>{
             return Err("The GGUF file contains multiple tensor descriptors with the same data offset.".to_owned());
         }
         previous_descriptor_offset=Some(tensor.offset);
-        let elements=tensor_element_count(&tensor.dimensions)?;
+        let dimensions=&tensor.dimensions[..usize::from(tensor.dimensions_count)];
+        let elements=tensor_element_count(dimensions)?;
         total_tensor_elements=total_tensor_elements.checked_add(elements)
             .ok_or_else(||"Aggregate GGUF tensor element count overflowed.".to_owned())?;
         let (name,block,block_bytes)=tensor_type_layout(tensor.type_code).unwrap_or(("UNKNOWN",0,0));
@@ -289,7 +299,7 @@ pub fn analyse_tensor_storage(input:&str)->Result<TensorStorageAnalysis,String>{
         if previous_known_end.is_some_and(|previous_end| absolute<previous_end){
             return Err("A known GGUF tensor payload overlaps the next tensor offset.".to_owned());
         }
-        if let Some(bytes)=tensor_payload_bytes(&tensor.dimensions,block,block_bytes){
+        if let Some(bytes)=tensor_payload_bytes(dimensions,block,block_bytes){
             let end=absolute.checked_add(bytes).ok_or_else(||"GGUF tensor payload size overflowed.".to_owned())?;
             if end>file_size{return Err("A GGUF tensor payload extends beyond the file.".to_owned());}
             previous_known_end=Some(end);
@@ -802,6 +812,21 @@ mod tests{
         for dimension in dimensions{b.extend_from_slice(&dimension.to_le_bytes());}
         b.extend_from_slice(&type_code.to_le_bytes());b.extend_from_slice(&0u64.to_le_bytes());
         let aligned=((b.len()+31)/32)*32;b.resize(aligned,0);b.extend_from_slice(payload);b
+    }
+    #[test]fn rejects_aggregate_tensor_name_storage_limit_before_retaining_more_names(){
+        let mut bytes=b"GGUF".to_vec();bytes.extend_from_slice(&3u32.to_le_bytes());
+        let count=(MAX_TENSOR_NAME_BYTES/64+1) as u64;
+        bytes.extend_from_slice(&count.to_le_bytes());bytes.extend_from_slice(&0u64.to_le_bytes());
+        for index in 0..count{
+            push_string(&mut bytes,&format!("{index:064}"));
+            bytes.extend_from_slice(&1u32.to_le_bytes());bytes.extend_from_slice(&1u64.to_le_bytes());
+            bytes.extend_from_slice(&99u32.to_le_bytes());bytes.extend_from_slice(&0u64.to_le_bytes());
+        }
+        let aligned=((bytes.len()+31)/32)*32;bytes.resize(aligned,0);
+        let p=temp(&bytes,"gguf");
+        let error=analyse_tensor_storage(p.to_str().unwrap()).unwrap_err();
+        assert!(error.contains("aggregate safe inspection limit"));
+        let _=std::fs::remove_file(p);
     }
     #[test]fn analyses_known_q4_0_tensor_payload_without_reading_weights(){
         let p=temp(&tensor_fixture(2,32,0,&[0;18]),"gguf");
