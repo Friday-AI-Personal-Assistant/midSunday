@@ -71,6 +71,123 @@ fn unsigned(v:Value)->Option<u64>{match v{Value::Unsigned(n)=>Some(n),Value::Sig
 fn file_type_description(code:u32)->Option<String>{
     let label=match code{0=>"F32",1=>"F16",2=>"Q4_0",3=>"Q4_1",4=>"Q4_1 with some F16 tensors",5=>"Q8_0",6=>"Q5_0",7=>"Q5_1",8=>"Q2_K",9=>"Q3_K_S",10=>"Q3_K_M",11=>"Q3_K_L",12=>"Q4_K_S",13=>"Q4_K_M",14=>"Q5_K_S",15=>"Q5_K_M",16=>"Q6_K",17=>"Q8_K",18=>"IQ2_XXS",19=>"IQ2_XS",20=>"IQ3_XXS",21=>"IQ1_S",22=>"IQ4_NL",23=>"IQ3_S",24=>"IQ2_S",25=>"IQ4_XS",_=>return None};Some(label.to_owned())
 }
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TensorTypeSummary {
+    pub type_code: u32,
+    pub type_name: String,
+    pub tensor_count: u64,
+    pub known_payload_bytes: u64,
+    pub unknown_size_tensor_count: u64,
+}
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TensorStorageAnalysis {
+    pub status: String,
+    pub tensor_count: u64,
+    pub analysed_tensor_count: u64,
+    pub unknown_size_tensor_count: u64,
+    pub known_payload_bytes: u64,
+    pub data_start_offset: u64,
+    pub alignment: u32,
+    pub types: Vec<TensorTypeSummary>,
+    pub note: String,
+}
+#[derive(Clone, Debug)]
+struct TensorDescriptor { dimensions: Vec<u64>, type_code: u32, offset: u64 }
+
+fn tensor_type_layout(code:u32)->Option<(&'static str,u64,u64)> {
+    match code {
+        0=>Some(("F32",1,4)), 1=>Some(("F16",1,2)),
+        2=>Some(("Q4_0",32,18)), 3=>Some(("Q4_1",32,20)),
+        6=>Some(("Q5_0",32,22)), 7=>Some(("Q5_1",32,24)),
+        8=>Some(("Q8_0",32,34)), 9=>Some(("Q8_1",32,36)),
+        10=>Some(("Q2_K",256,84)), 11=>Some(("Q3_K",256,110)),
+        12=>Some(("Q4_K",256,144)), 13=>Some(("Q5_K",256,176)),
+        14=>Some(("Q6_K",256,210)), 15=>Some(("Q8_K",256,292)),
+        32=>Some(("I8",1,1)), 33=>Some(("I16",1,2)),
+        34=>Some(("I32",1,4)), 35=>Some(("I64",1,8)),
+        36=>Some(("F64",1,8)), 38=>Some(("BF16",1,2)),
+        _=>None,
+    }
+}
+fn align_up(value:u64, alignment:u32)->Result<u64,String>{
+    let a=u64::from(alignment);
+    value.checked_add(a-1).map(|v|v/a*a).ok_or_else(||"GGUF tensor-data alignment overflowed.".to_owned())
+}
+fn tensor_payload_bytes(dimensions:&[u64], block:u64, block_bytes:u64)->Option<u64>{
+    let first=*dimensions.first()?;
+    if first==0 || first%block!=0 || dimensions.iter().any(|v|*v==0){return None;}
+    let row=(first/block).checked_mul(block_bytes)?;
+    dimensions.iter().skip(1).try_fold(row,|total,v|total.checked_mul(*v))
+}
+pub fn analyse_tensor_storage(input:&str)->Result<TensorStorageAnalysis,String>{
+    let path=Path::new(input).canonicalize().map_err(|_|"The selected GGUF file could not be found.".to_owned())?;
+    if !path.is_file() || !path.extension().and_then(|v|v.to_str()).is_some_and(|v|v.eq_ignore_ascii_case("gguf")){
+        return Err("Tensor analysis requires an existing .gguf file.".to_owned());
+    }
+    let file_size=std::fs::metadata(&path).map_err(|e|format!("Could not inspect GGUF file: {e}"))?.len();
+    let mut f=File::open(&path).map_err(|e|format!("Could not open GGUF file: {e}"))?;
+    let mut magic=[0;4];f.read_exact(&mut magic).map_err(|_|"The GGUF header is truncated.".to_owned())?;
+    if &magic!=b"GGUF"{return Err("The selected file does not have a valid GGUF header.".to_owned());}
+    let version=read_u32(&mut f)?;
+    if !(2..=3).contains(&version){return Err(format!("GGUF version {version} is not supported."));}
+    let tensor_count=read_u64(&mut f)?;let metadata_count=read_u64(&mut f)?;
+    if metadata_count>MAX_METADATA_ENTRIES{return Err("The GGUF file declares too many metadata entries.".to_owned());}
+    if tensor_count>1_000_000{return Err("The GGUF file declares too many tensors for safe inspection.".to_owned());}
+    let mut alignment=32u32;
+    for _ in 0..metadata_count{
+        let key=read_string(&mut f)?;let kind=read_u32(&mut f)?;
+        if key=="general.alignment"{
+            let value=unsigned(scalar(&mut f,kind)?).and_then(|v|u32::try_from(v).ok()).ok_or_else(||"GGUF alignment metadata is invalid.".to_owned())?;
+            alignment=value;
+        }else{skip_value(&mut f,kind)?;}
+    }
+    if alignment==0 || alignment>4096 || !alignment.is_power_of_two(){return Err("GGUF tensor alignment must be a power of two from 1 to 4096 bytes.".to_owned());}
+    let count=usize::try_from(tensor_count).map_err(|_|"Tensor count is too large for this device.".to_owned())?;
+    let mut descriptors=Vec::with_capacity(count);
+    for _ in 0..tensor_count{
+        let name_len=read_u64(&mut f)?;
+        if name_len>64{return Err("A GGUF tensor name exceeds the format limit.".to_owned());}
+        skip_bytes(&mut f,name_len)?;
+        let dimensions_count=read_u32(&mut f)?;
+        if !(1..=4).contains(&dimensions_count){return Err("A GGUF tensor has an invalid dimension count.".to_owned());}
+        let mut dimensions=Vec::with_capacity(dimensions_count as usize);
+        for _ in 0..dimensions_count{dimensions.push(read_u64(&mut f)?);}
+        let type_code=read_u32(&mut f)?;let offset=read_u64(&mut f)?;
+        if offset%u64::from(alignment)!=0{return Err("A GGUF tensor offset is not aligned as required by the file.".to_owned());}
+        descriptors.push(TensorDescriptor{dimensions,type_code,offset});
+    }
+    let descriptor_end=f.stream_position().map_err(|e|format!("Could not locate GGUF tensor data: {e}"))?;
+    let data_start=align_up(descriptor_end,alignment)?;
+    if data_start>file_size{return Err("GGUF tensor descriptors extend beyond the file.".to_owned());}
+    let mut grouped:std::collections::BTreeMap<u32,TensorTypeSummary>=std::collections::BTreeMap::new();
+    let mut known_total=0u64;let mut unknown_total=0u64;let mut analysed=0u64;
+    for tensor in descriptors{
+        let (name,block,block_bytes)=tensor_type_layout(tensor.type_code).unwrap_or(("UNKNOWN",0,0));
+        let summary=grouped.entry(tensor.type_code).or_insert_with(||TensorTypeSummary{
+            type_code:tensor.type_code,type_name:name.to_owned(),tensor_count:0,known_payload_bytes:0,unknown_size_tensor_count:0});
+        summary.tensor_count=summary.tensor_count.checked_add(1).ok_or_else(||"Tensor count overflowed.".to_owned())?;
+        let absolute=data_start.checked_add(tensor.offset).ok_or_else(||"GGUF tensor offset overflowed.".to_owned())?;
+        if absolute>file_size{return Err("A GGUF tensor offset points beyond the file.".to_owned());}
+        if let Some(bytes)=tensor_payload_bytes(&tensor.dimensions,block,block_bytes){
+            let end=absolute.checked_add(bytes).ok_or_else(||"GGUF tensor payload size overflowed.".to_owned())?;
+            if end>file_size{return Err("A GGUF tensor payload extends beyond the file.".to_owned());}
+            summary.known_payload_bytes=summary.known_payload_bytes.checked_add(bytes).ok_or_else(||"Tensor payload total overflowed.".to_owned())?;
+            known_total=known_total.checked_add(bytes).ok_or_else(||"Tensor payload total overflowed.".to_owned())?;
+            analysed+=1;
+        }else{
+            summary.unknown_size_tensor_count+=1;unknown_total+=1;
+        }
+    }
+    let status=if unknown_total==0{"complete"}else if analysed==0{"unknown"}else{"partial"};
+    Ok(TensorStorageAnalysis{status:status.to_owned(),tensor_count,analysed_tensor_count:analysed,
+        unknown_size_tensor_count:unknown_total,known_payload_bytes:known_total,data_start_offset:data_start,
+        alignment,types:grouped.into_values().collect(),
+        note:"Known payload sizes use verified GGML block layouts and exclude inter-tensor alignment padding. Unsupported types or dimensions that do not fit a known block layout remain unknown. This is stored tensor payload size, not RAM/VRAM required to run the model.".to_owned()})
+}
+
 pub fn inspect(input:&str)->Result<GgufMetadata,String>{
     let path=Path::new(input).canonicalize().map_err(|_|"The selected GGUF file could not be found.".to_owned())?;
     if !path.is_file(){return Err("The selected GGUF path is not a file.".to_owned());}

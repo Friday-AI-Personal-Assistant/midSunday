@@ -265,6 +265,12 @@ async fn inspect_gguf_metadata(file_path: String) -> Result<GgufMetadata, String
 }
 
 #[tauri::command]
+async fn analyse_gguf_tensor_storage(file_path: String) -> Result<gguf_metadata::TensorStorageAnalysis, String> {
+    tauri::async_runtime::spawn_blocking(move || gguf_metadata::analyse_tensor_storage(&file_path)).await
+        .map_err(|error| format!("GGUF tensor analysis worker failed: {error}"))?
+}
+
+#[tauri::command]
 async fn estimate_gguf_kv_cache(file_path: String, context_tokens: u64) -> Result<KvCacheEstimate, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let metadata = gguf_metadata::inspect(&file_path)?;
@@ -559,7 +565,7 @@ pub fn run() {
             cancel_local_generation,
             stop_local_runtime,
             recover_local_runtime
-        ])
+        , analyse_gguf_tensor_storage])
         .run(tauri::generate_context!())
         .expect("error while running midSunday");
 }

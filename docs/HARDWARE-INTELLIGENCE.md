@@ -448,3 +448,12 @@ The deltas are signed and remain unavailable when either baseline or peak data i
 **Interpretation limits:** observed growth is not a model-weight size or a total system-memory impact measurement. It excludes GPU allocations, other processes, and transient spikes between samples. Different machines, models, quantisations, runtimes, context settings, and cache states affect results. No automatic hardware profile, model selection, or runtime tuning is enabled by these diagnostics.
 
 Regression tests cover positive, negative, zero, missing, and out-of-range signed memory deltas.
+
+
+## 30. GGUF tensor storage analysis (2026-11-26)
+
+The model library can explicitly inspect GGUF tensor descriptors without loading tensor weights. The bounded read-only pass validates the container header and metadata, descriptor dimensions, data offsets, alignment, and file boundaries. It calculates payload bytes only for a deliberately limited set of GGML types whose block layouts are known and tested (F32, F16, Q4_0, Q4_1, Q5_0, Q5_1, Q8_0, Q8_1, Q2_K through Q8_K, I8/I16/I32/I64, F64, and BF16). Results are grouped by type and include analysed/unknown counts. Unsupported types and dimensions that do not satisfy the known block layout remain unknown; no guessed byte sizes are reported.
+
+Known payload totals exclude inter-tensor alignment padding and do not claim to represent every byte of the GGUF file. This is stored tensor payload size only—not total file size, runtime RAM, VRAM, KV cache, allocator overhead, compute buffers, or a model-fit guarantee. The action is user-triggered, local, and read-only; it does not load weights, change settings, select a model, or contact a network service. The supported type list is intentionally conservative and must be expanded only with verified upstream layouts and regression fixtures.
+
+Regression coverage includes supported block-size calculations, unknown types, invalid alignment, malformed descriptors, offsets, truncated files, and overflow boundaries.

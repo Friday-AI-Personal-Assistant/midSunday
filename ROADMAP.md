@@ -1387,3 +1387,17 @@ This report measures the whole managed inference process during startup. It may 
 - [ ] Collect repeated controlled runs before treating startup duration or memory growth as a performance benchmark or using it for adaptive recommendations.
 
 Startup duration includes process launch, server initialisation, model loading, and readiness response; it is not a pure model-load duration. Memory growth is based on the first valid sample and maximum observed sample, not a guaranteed peak or model-only allocation. See docs/HARDWARE-INTELLIGENCE.md section 29.
+
+
+### 2026-11-26 — GGUF tensor storage analysis (Batch #128)
+
+- [x] Parse GGUF tensor descriptors without reading tensor weight payloads.
+- [x] Validate tensor names, dimensions, alignment, offsets, and known payload boundaries with bounded counts.
+- [x] Calculate payload sizes only for explicitly supported, verified GGML block layouts.
+- [x] Group tensor counts and known payload bytes by GGML type; expose partial/unknown status instead of guessing unsupported formats.
+- [x] Add a user-triggered tensor storage analysis panel to the local model library.
+- [x] Keep stored tensor payload size distinct from GGUF file size, runtime RAM/VRAM, KV cache, and model-fit recommendations.
+- [ ] Validate the parser against a representative real-world GGUF corpus from multiple architectures and quantisations.
+- [ ] Expand supported GGML types only after verifying upstream block layouts and adding fixtures for each.
+
+The reported known payload total excludes inter-tensor alignment padding and leaves unsupported tensor types unknown. It is not a RAM/VRAM estimate or a model-fit guarantee. See docs/HARDWARE-INTELLIGENCE.md section 30.
