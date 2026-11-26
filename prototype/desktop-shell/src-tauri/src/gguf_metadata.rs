@@ -950,9 +950,12 @@ mod tests{
         f.write_all(b"GGUF").unwrap();f.write_all(&3u32.to_le_bytes()).unwrap();
         f.write_all(&0u64.to_le_bytes()).unwrap();f.write_all(&1u64.to_le_bytes()).unwrap();
         let mut key=Vec::new();push_string(&mut key,"vendor.large_array");f.write_all(&key).unwrap();
-        f.write_all(&9u32.to_le_bytes()).unwrap();f.write_all(&0u32.to_le_bytes()).unwrap();
-        let count=MAX_METADATA_SECTION_BYTES+1;f.write_all(&count.to_le_bytes()).unwrap();
-        let end=f.metadata().unwrap().len().checked_add(count).unwrap();f.set_len(end).unwrap();drop(f);
+        f.write_all(&9u32.to_le_bytes()).unwrap();f.write_all(&10u32.to_le_bytes()).unwrap();
+        // One valid u64 array exceeds the aggregate section budget while staying
+        // below the independent ten-million-item array limit.
+        let count=MAX_METADATA_SECTION_BYTES/8+1;f.write_all(&count.to_le_bytes()).unwrap();
+        let payload=count.checked_mul(8).unwrap();
+        let end=f.metadata().unwrap().len().checked_add(payload).unwrap();f.set_len(end).unwrap();drop(f);
         assert!(inspect(p.to_str().unwrap()).unwrap_err().contains("aggregate safe inspection limit"));
         assert!(analyse_tensor_storage(p.to_str().unwrap()).unwrap_err().contains("aggregate safe inspection limit"));
         let _=std::fs::remove_file(p);
