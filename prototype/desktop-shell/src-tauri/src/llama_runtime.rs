@@ -53,12 +53,17 @@ pub enum RuntimeSessionError {
 /// Minimal process boundary so recovery can be tested without launching a real model.
 trait ManagedServerProcess: Send {
     fn is_running(&mut self) -> std::io::Result<bool>;
+    fn process_id(&self) -> Option<u32>;
     fn stop(&mut self) -> std::io::Result<()>;
 }
 
 impl ManagedServerProcess for LlamaServerProcess {
     fn is_running(&mut self) -> std::io::Result<bool> {
         LlamaServerProcess::is_running(self)
+    }
+
+    fn process_id(&self) -> Option<u32> {
+        LlamaServerProcess::process_id(self)
     }
 
     fn stop(&mut self) -> std::io::Result<()> {
@@ -124,6 +129,24 @@ impl LlamaRuntimeSession {
 
     pub fn status(&self) -> RuntimeStatus {
         self.lifecycle.status()
+    }
+
+    /// Samples memory for the managed child only; the PID remains internal.
+    pub fn process_memory_snapshot(&mut self) -> crate::system_info::ProcessMemorySnapshot {
+        match self.process.is_running() {
+            Ok(true) => match self.process.process_id() {
+                Some(pid) => crate::system_info::collect_known_process_memory(pid),
+                None => crate::system_info::ProcessMemorySnapshot {
+                    status: "unavailable".to_owned(), resident_bytes: None, virtual_bytes: None,
+                },
+            },
+            Ok(false) => crate::system_info::ProcessMemorySnapshot {
+                status: "not_running".to_owned(), resident_bytes: None, virtual_bytes: None,
+            },
+            Err(_) => crate::system_info::ProcessMemorySnapshot {
+                status: "unavailable".to_owned(), resident_bytes: None, virtual_bytes: None,
+            },
+        }
     }
 
     /// Generate one bounded, non-streaming response from the local server.

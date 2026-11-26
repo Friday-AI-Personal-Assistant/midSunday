@@ -2,7 +2,7 @@
 //! This intentionally does not enumerate processes, host names, network interfaces,
 //! device serial numbers, or private user files.
 use serde::Serialize;
-use sysinfo::{get_current_pid, CpuRefreshKind, Disks, ProcessRefreshKind, ProcessesToUpdate, System};
+use sysinfo::{get_current_pid, CpuRefreshKind, Disks, Pid, ProcessRefreshKind, ProcessesToUpdate, System};
 
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -328,6 +328,26 @@ pub fn collect_current_process_memory() -> ProcessMemorySnapshot {
     let Ok(pid) = get_current_pid() else {
         return ProcessMemorySnapshot { status: "unavailable".to_owned(), resident_bytes: None, virtual_bytes: None };
     };
+    let mut system = System::new();
+    system.refresh_processes_specifics(
+        ProcessesToUpdate::Some(&[pid]),
+        true,
+        ProcessRefreshKind::nothing().with_memory(),
+    );
+    match system.process(pid) {
+        Some(process) => ProcessMemorySnapshot {
+            status: "detected".to_owned(),
+            resident_bytes: Some(process.memory()),
+            virtual_bytes: Some(process.virtual_memory()),
+        },
+        None => ProcessMemorySnapshot { status: "unavailable".to_owned(), resident_bytes: None, virtual_bytes: None },
+    }
+}
+
+/// Samples one known child PID supplied by midSunday's process supervisor.
+/// This function never enumerates unrelated processes.
+pub fn collect_known_process_memory(pid_value: u32) -> ProcessMemorySnapshot {
+    let pid = Pid::from_u32(pid_value);
     let mut system = System::new();
     system.refresh_processes_specifics(
         ProcessesToUpdate::Some(&[pid]),
