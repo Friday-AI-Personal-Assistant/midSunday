@@ -1,4 +1,5 @@
 # Changelog
+- Fixed unsupported GGML tensor types to return an unknown payload size safely instead of entering block arithmetic with a zero block size.
 
 ## 2026-11-26
 - Added user-triggered GGUF tensor descriptor analysis that groups tensor counts and known payload sizes by verified GGML type without loading model weights. Unsupported types remain explicitly unknown; stored payload size is not runtime RAM/VRAM.

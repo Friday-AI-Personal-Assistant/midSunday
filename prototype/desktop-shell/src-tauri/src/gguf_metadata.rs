@@ -118,7 +118,7 @@ fn align_up(value:u64, alignment:u32)->Result<u64,String>{
 }
 fn tensor_payload_bytes(dimensions:&[u64], block:u64, block_bytes:u64)->Option<u64>{
     let first=*dimensions.first()?;
-    if first==0 || first%block!=0 || dimensions.iter().any(|v|*v==0){return None;}
+    if block==0 || block_bytes==0 || first==0 || first%block!=0 || dimensions.iter().any(|v|*v==0){return None;}
     let row=(first/block).checked_mul(block_bytes)?;
     dimensions.iter().skip(1).try_fold(row,|total,v|total.checked_mul(*v))
 }
