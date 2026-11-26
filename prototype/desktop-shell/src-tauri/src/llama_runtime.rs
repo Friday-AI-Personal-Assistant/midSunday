@@ -1,6 +1,8 @@
 //! Managed local inference session combining process, readiness, and generation.
 use std::path::Path;
-use std::time::Duration;
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use serde::Serialize;
+use crate::system_info::{collect_known_process_memory, ProcessMemorySnapshot};
 
 use crate::llama_client::{wait_for_ready, GenerationCancellation, LlamaClientError, LlamaHttpClient, ReadinessError};
 use crate::llama_process::{LlamaServerProcess, ProcessStartError};
@@ -71,6 +73,17 @@ impl ManagedServerProcess for LlamaServerProcess {
     }
 }
 
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeStartupMemoryReport {
+    pub status: String,
+    pub peak_resident_bytes: Option<u64>,
+    pub peak_virtual_bytes: Option<u64>,
+    pub sample_count: u64,
+    pub sampling_interval_ms: u64,
+    pub captured_at_unix_seconds: u64,
+}
+
 /// Owns the child process and its loopback client as one lifecycle-managed unit.
 ///
 /// The session is synchronous and bounded by the supplied HTTP/startup timeouts.
@@ -80,6 +93,7 @@ pub struct LlamaRuntimeSession {
     client: LlamaHttpClient,
     lifecycle: RuntimeLifecycle,
     config: crate::runtime::RuntimeConfig,
+    startup_memory_report: RuntimeStartupMemoryReport,
 }
 
 impl LlamaRuntimeSession {
@@ -113,22 +127,67 @@ impl LlamaRuntimeSession {
         lifecycle.transition(RuntimeStatus::Starting)
             .map_err(|_| RuntimeSessionError::InvalidState)?;
 
+        // Sample only the known child PID while the server becomes ready.
+        // The readiness poll interval bounds sampling frequency and avoids a
+        // separate long-lived monitor thread during startup.
+        let sampling_pid = process.process_id();
+        let mut peak_resident_bytes: Option<u64> = None;
+        let mut peak_virtual_bytes: Option<u64> = None;
+        let mut sample_count = 0u64;
+        let mut last_sample = Instant::now();
+        let sample_interval_ms = u64::try_from(poll_interval.as_millis()).unwrap_or(u64::MAX);
+        let mut record_sample = |force: bool| {
+            if !force && last_sample.elapsed() < poll_interval { return; }
+            if let Some(pid) = sampling_pid {
+                let snapshot = collect_known_process_memory(pid);
+                if snapshot.status == "detected" {
+                    if let Some(value) = snapshot.resident_bytes {
+                        peak_resident_bytes = Some(peak_resident_bytes.map_or(value, |peak| peak.max(value)));
+                    }
+                    if let Some(value) = snapshot.virtual_bytes {
+                        peak_virtual_bytes = Some(peak_virtual_bytes.map_or(value, |peak| peak.max(value)));
+                    }
+                    sample_count = sample_count.saturating_add(1);
+                }
+            }
+            last_sample = Instant::now();
+        };
+        record_sample(true);
+
         if let Err(error) = wait_for_ready(&client, startup_timeout, poll_interval, || {
-            process.is_running()
+            let running = process.is_running()?;
+            if running { record_sample(false); }
+            Ok(running)
         }) {
             let _ = process.stop();
             let _ = lifecycle.transition(RuntimeStatus::Failed);
             return Err(RuntimeSessionError::Readiness(error));
         }
+        record_sample(true);
+        drop(record_sample);
 
         lifecycle.transition(RuntimeStatus::Ready)
             .map_err(|_| RuntimeSessionError::InvalidState)?;
 
-        Ok(Self { process, client, lifecycle, config: config.clone() })
+        let startup_memory_report = RuntimeStartupMemoryReport {
+            status: if sample_count > 0 { "detected".to_owned() } else { "unavailable".to_owned() },
+            peak_resident_bytes,
+            peak_virtual_bytes,
+            sample_count,
+            sampling_interval_ms: sample_interval_ms,
+            captured_at_unix_seconds: SystemTime::now().duration_since(UNIX_EPOCH)
+                .map(|duration| duration.as_secs()).unwrap_or(0),
+        };
+
+        Ok(Self { process, client, lifecycle, config: config.clone(), startup_memory_report })
     }
 
     pub fn status(&self) -> RuntimeStatus {
         self.lifecycle.status()
+    }
+
+    pub fn startup_memory_report(&self) -> &RuntimeStartupMemoryReport {
+        &self.startup_memory_report
     }
 
     /// Returns a PID only for the live managed child; it is never exposed to the UI.

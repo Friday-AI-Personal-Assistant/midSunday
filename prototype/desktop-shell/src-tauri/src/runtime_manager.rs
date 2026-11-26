@@ -10,7 +10,7 @@ use std::{path::Path, sync::{atomic::{AtomicBool, Ordering}, Arc, Mutex}, thread
 use serde::Serialize;
 
 use crate::llama_client::GenerationCancellation;
-use crate::llama_runtime::{LlamaRuntimeSession, RecoveryPolicy, RuntimeSessionError};
+use crate::llama_runtime::{LlamaRuntimeSession, RecoveryPolicy, RuntimeSessionError, RuntimeStartupMemoryReport};
 use crate::runtime::{GenerationRequest, RuntimeConfig, RuntimeStatus};
 use crate::system_info::{collect_known_process_memory, ProcessMemorySnapshot};
 
@@ -19,6 +19,7 @@ use crate::system_info::{collect_known_process_memory, ProcessMemorySnapshot};
 pub struct RuntimeStatusSnapshot {
     pub status: String,
     pub detail: Option<String>,
+    pub startup_memory: Option<RuntimeStartupMemoryReport>,
 }
 
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
@@ -98,6 +99,7 @@ impl Default for RuntimeManager {
                 status: Mutex::new(RuntimeStatusSnapshot {
                     status: "notInstalled".to_owned(),
                     detail: None,
+                    startup_memory: None,
                 }),
                 active_cancellation: Mutex::new(None),
             }),
@@ -156,8 +158,14 @@ impl RuntimeManager {
             startup_timeout, poll_interval, request_timeout,
         ) {
             Ok(session) => {
+                let startup_memory = session.startup_memory_report().clone();
                 *self.inner.session.lock()
                     .map_err(|_| "Runtime session is unavailable.".to_owned())? = Some(session);
+                {
+                    let mut snapshot = self.inner.status.lock()
+                        .map_err(|_| "Runtime status is unavailable.".to_owned())?;
+                    snapshot.startup_memory = Some(startup_memory);
+                }
                 self.set_status(RuntimeStatus::Ready, None)
             }
             Err(error) => {

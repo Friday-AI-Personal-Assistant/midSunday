@@ -426,3 +426,14 @@ The sampler is request-scoped: it does not run in the background while idle, doe
 **Interpretation limits:** this is the maximum value observed at the sampling points, not a guaranteed true peak. A short-lived spike between 250 ms samples may be missed. The values cover the entire llama-server process and do not isolate model weights, KV cache, compute buffers, or GPU memory. Sampling overhead is expected to be small but must be checked on real devices. This diagnostic does not alter inference settings, reserve memory, select a model, or guarantee model fit.
 
 Regression tests verify maximum tracking, interval sample counting, and unavailable field handling.
+
+
+## 28. Model-startup peak memory sampling (2026-11-26)
+
+When the user starts the local inference engine, the runtime records targeted memory samples for only the exact managed `llama-server` child while the server is becoming ready and loading the selected GGUF model. It captures an initial sample, samples during readiness polling at no more than the configured poll frequency, and takes a final sample once readiness succeeds. The report retains the maximum observed resident and virtual memory, the number of valid samples, the sampling interval, an explicit detected/unavailable status, and a local capture timestamp.
+
+The sample query uses the already-known child PID and does not enumerate unrelated processes. No PID is returned to the frontend. Sampling is bounded by the existing startup timeout and readiness polling; there is no idle/background monitor, persistent history, or network telemetry. The latest successful startup report is retained in the in-memory runtime status for display in Settings and is replaced on the next successful start.
+
+**Interpretation limits:** the report describes the whole llama-server process, not model weights alone. It is the maximum observed at sample points, not a guaranteed true peak; spikes between polls may be missed. It excludes GPU allocations and does not prove the model is fully resident in physical RAM, guarantee model fit, or establish runtime compatibility. A failed startup does not produce a completed startup report. Real-device comparison against operating-system process monitors remains required before using these values for recommendations or adaptive resource management.
+
+Regression coverage for sample aggregation and real-device validation remain follow-up work.

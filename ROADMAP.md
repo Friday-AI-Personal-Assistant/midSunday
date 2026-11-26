@@ -1360,3 +1360,16 @@ This is a pair of process-wide boundary readings, not peak memory or model-only 
 - [ ] Evaluate sampler overhead and missed short-lived spikes across short/long generations and multiple model sizes before using results for adaptive resource recommendations.
 
 The reported peak is the maximum observed at the sample points, not a guaranteed true peak. A short spike between 250 ms samples may be missed. It remains process-wide and does not measure GPU allocations or guarantee model fit. See docs/HARDWARE-INTELLIGENCE.md section 27.
+
+
+### 2026-11-26 — Model-startup peak memory sampling (Batch #124)
+
+- [x] Sample only the known managed llama-server child while the local server is becoming ready and loading the selected model.
+- [x] Capture initial, readiness-poll, and final samples; retain maximum observed resident and virtual memory with valid sample count and sampling interval.
+- [x] Expose the latest successful startup report through runtime status and display it in Settings.
+- [x] Keep the probe local and bounded by startup readiness: no process enumeration, PID exposure, idle monitoring, persistent telemetry history, or network transfer.
+- [x] Report unavailable measurements explicitly and label the values as process-wide observed maxima rather than model-only or guaranteed peaks.
+- [ ] Compare startup peaks against operating-system process monitors on real Windows, Linux, and macOS devices across representative model sizes and quantisations.
+- [ ] Evaluate whether startup sampling cadence and overhead are suitable for future measured resource profiles; do not enable automatic model selection or resource changes from this report alone.
+
+This report measures the whole managed inference process during startup. It may miss short spikes between readiness polls and excludes GPU memory. It does not guarantee model fit or runtime compatibility. See docs/HARDWARE-INTELLIGENCE.md section 28.

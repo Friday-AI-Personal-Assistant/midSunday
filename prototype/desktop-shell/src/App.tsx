@@ -5,7 +5,8 @@ import { open } from "@tauri-apps/plugin-dialog";
 type BackendState = "checking" | "connected" | "error";
 type Section = "chat" | "characters" | "settings";
 type Message = { id: number; role: "user" | "assistant" | "system"; text: string };
-type RuntimeStatusSnapshot = { status: string; detail: string | null };
+type RuntimeStartupMemoryReport = { status: string; peakResidentBytes: number | null; peakVirtualBytes: number | null; sampleCount: number; samplingIntervalMs: number; capturedAtUnixSeconds: number };
+type RuntimeStatusSnapshot = { status: string; detail: string | null; startupMemory: RuntimeStartupMemoryReport | null };
 type RuntimeProcessMemorySnapshot = { status: string; residentBytes: number | null; virtualBytes: number | null };
 type RuntimeGenerationMemoryReport = {
   status: string;
@@ -173,7 +174,7 @@ export default function App() {
   const [userProfileBusy, setUserProfileBusy] = useState(false);
   const [userProfileNotice, setUserProfileNotice] = useState("");
   const [startWithWindows, setStartWithWindows] = useState(false);
-  const [runtimeStatus, setRuntimeStatus] = useState<RuntimeStatusSnapshot>({ status: "notInstalled", detail: null });
+  const [runtimeStatus, setRuntimeStatus] = useState<RuntimeStatusSnapshot>({ status: "notInstalled", detail: null, startupMemory: null });
   const [runtimeBusy, setRuntimeBusy] = useState(false);
   const [runtimeError, setRuntimeError] = useState("");
   const [runtimeProcessMemory, setRuntimeProcessMemory] = useState<RuntimeProcessMemorySnapshot | null>(null);
@@ -1247,6 +1248,19 @@ export default function App() {
             </section>
             <section className="settings-section runtime-settings"><div className="settings-section-title"><div><h2>Local AI engine</h2><p>Connect an existing llama.cpp server executable and a GGUF model stored on this device.</p></div><span className="settings-symbol">◈</span></div>
               <div className="runtime-status-line"><span className={runtimeStatus.status === "ready" ? "core-dot good" : runtimeStatus.status === "failed" ? "core-dot bad" : "core-dot"} />Engine status: <strong>{runtimeStatus.status}</strong></div>
+              {runtimeStatus.startupMemory && <div className="model-kv-estimate">
+                <strong>Model startup memory · observed peak</strong>
+                <p className="settings-footnote">Measured while the managed llama-server process was starting and loading the selected model.</p>
+                <div className="model-kv-grid">
+                  <span>Status<strong>{runtimeStatus.startupMemory.status}</strong></span>
+                  <span>Peak resident<strong>{runtimeStatus.startupMemory.peakResidentBytes === null ? "Unavailable" : formatModelSize(runtimeStatus.startupMemory.peakResidentBytes)}</strong></span>
+                  <span>Peak virtual<strong>{runtimeStatus.startupMemory.peakVirtualBytes === null ? "Unavailable" : formatModelSize(runtimeStatus.startupMemory.peakVirtualBytes)}</strong></span>
+                  <span>Valid samples<strong>{runtimeStatus.startupMemory.sampleCount}</strong></span>
+                  <span>Sampling interval<strong>{runtimeStatus.startupMemory.samplingIntervalMs} ms</strong></span>
+                </div>
+                <p className="settings-footnote">Captured: {new Date(runtimeStatus.startupMemory.capturedAtUnixSeconds * 1000).toLocaleString()}</p>
+                <p className="settings-footnote">This is the highest process-wide memory value observed during startup, not a guaranteed true peak or model-only allocation. Short spikes between samples and GPU memory may be missed.</p>
+              </div>}
               <div className="model-kv-estimate">
                 <strong>Inference process memory</strong>
                 <p className="settings-footnote">Measures only the llama-server process started by midSunday. Refresh while the engine is running for a point-in-time snapshot.</p>
