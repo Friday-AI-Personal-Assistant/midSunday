@@ -191,3 +191,4 @@ All notable project changes are recorded here. The project is in foundation/prot
 - Added preflight checks for fixed-width numeric and boolean GGUF metadata arrays so declared payloads that cross the 64 MiB section budget are rejected before seeking or reading; added cursor-boundary regression tests.
 
 - Hardened GGUF string parsing so the complete 8-byte string-length prefix must fit inside the remaining aggregate metadata-section budget before it is read; added cursor-boundary regression tests for metadata keys and scalar strings.
+- Corrected the existing GGUF string-array section-budget regression test to expect the length prefix to remain unread when it crosses the metadata boundary; parser behavior unchanged.

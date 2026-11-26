@@ -629,3 +629,8 @@ Before skipping fixed-width numeric metadata arrays or scanning boolean arrays, 
 ## 58. GGUF string-length-prefix section-boundary preflight (2026-11-26)
 
 The shared GGUF string reader now verifies that the complete 8-byte string-length prefix fits inside the remaining 64 MiB metadata-section budget before reading that prefix. Previously, the declared string payload was correctly preflighted before allocation or reading, but a length prefix positioned within the final seven bytes of the section could itself be consumed across the boundary. Metadata keys, scalar string values, and unknown string-array elements all use the shared reader, so the guard applies consistently. Regression tests verify that both key and scalar-string length prefixes remain unread when they would cross the section boundary. Existing payload, per-string, aggregate-key, and opened-file bounds remain unchanged; tensor weights remain unread.
+
+
+## 59. GGUF string-array boundary regression fixture alignment (2026-11-26)
+
+Updated the existing mid-entry string-array regression test to reflect the stricter shared string-reader contract: when fewer than eight metadata-section bytes remain, the length prefix is rejected before it is consumed. The fixture now asserts the cursor remains at the start of that prefix, not after it. This is a test expectation correction; the Batch #167 parser guard remains unchanged.

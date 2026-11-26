@@ -663,9 +663,9 @@ mod tests{
         file.seek(SeekFrom::Start(start)).unwrap();
         let error=skip_value(&mut file,9,0).unwrap_err();
         assert!(error.contains("metadata section exceeds"));
-        // The declared string is rejected immediately after its length field;
-        // its payload is neither read nor allocated.
-        assert_eq!(file.stream_position().unwrap(),start+12+8);
+        // The length prefix itself crosses the metadata-section boundary,
+        // so it remains unread along with the string payload.
+        assert_eq!(file.stream_position().unwrap(),start+12);
         let _=std::fs::remove_file(p);
     }
     #[test]fn rejects_truncated_string_before_allocating_declared_payload(){

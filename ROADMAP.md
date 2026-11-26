@@ -1710,3 +1710,11 @@ This prevents array parsing from crossing the 64 MiB metadata boundary before th
 - [x] Preserve existing string-payload, aggregate-key, per-string, and opened-file preflight checks.
 
 This closes the final-seven-byte boundary gap for GGUF string-length prefixes without changing ordinary metadata parsing or tensor handling. See docs/HARDWARE-INTELLIGENCE.md section 58.
+
+
+### 2026-11-26 — GGUF string-array boundary regression fixture correction (Batch #167 follow-up)
+
+- [x] Update the existing mid-entry string-array test to assert that an out-of-section 8-byte length prefix remains unread.
+- [x] Keep the Batch #167 shared-reader preflight unchanged; this follow-up corrects the older test's cursor expectation only.
+
+See docs/HARDWARE-INTELLIGENCE.md section 59.
