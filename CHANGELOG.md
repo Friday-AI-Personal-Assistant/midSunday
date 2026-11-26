@@ -194,3 +194,5 @@ All notable project changes are recorded here. The project is in foundation/prot
 - Corrected the existing GGUF string-array section-budget regression test to expect the length prefix to remain unread when it crosses the metadata boundary; parser behavior unchanged.
 
 - Hardened GGUF metadata-section accounting further: both inspectors now preflight metadata value-type tags, fixed-width scalar payloads, and complete array headers before reading bytes that would cross the 64 MiB boundary; added sparse-file cursor-boundary regression coverage.
+
+- Corrected the Batch #169 sparse-file regression fixture to restore its intended cursor position after reopening; parser changes remain unchanged.

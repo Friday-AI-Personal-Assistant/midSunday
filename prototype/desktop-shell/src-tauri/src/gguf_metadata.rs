@@ -664,6 +664,7 @@ mod tests{
         file.seek(SeekFrom::Start(MAX_METADATA_SECTION_BYTES-3)).unwrap();
         drop(file);
         let mut file=File::options().read(true).write(true).open(&p).unwrap();
+        file.seek(SeekFrom::Start(MAX_METADATA_SECTION_BYTES-3)).unwrap();
         let before=file.stream_position().unwrap();
         assert!(read_metadata_type(&mut file,0).unwrap_err().contains("aggregate safe inspection limit"));
         assert_eq!(file.stream_position().unwrap(),before);
@@ -675,6 +676,7 @@ mod tests{
         file.seek(SeekFrom::Start(MAX_METADATA_SECTION_BYTES-4)).unwrap();
         drop(file);
         let mut file=File::options().read(true).write(true).open(&p).unwrap();
+        file.seek(SeekFrom::Start(MAX_METADATA_SECTION_BYTES-4)).unwrap();
         let before=file.stream_position().unwrap();
         assert!(scalar(&mut file,10,0).unwrap_err().contains("aggregate safe inspection limit"));
         assert_eq!(file.stream_position().unwrap(),before);

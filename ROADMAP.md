@@ -1728,3 +1728,12 @@ See docs/HARDWARE-INTELLIGENCE.md section 59.
 - [x] Add sparse-file regression coverage proving boundary-crossing type tags and scalar payloads remain unread.
 
 This extends the aggregate metadata-section boundary to the remaining fixed-size metadata headers and scalar values. Existing string and array payload protections remain in place. See docs/HARDWARE-INTELLIGENCE.md section 60.
+
+
+### 2026-11-26 — GGUF metadata boundary regression fixture cursor correction (Batch #169 follow-up)
+
+- [x] Seek to the intended metadata boundary after reopening each sparse regression file.
+- [x] Preserve the Batch #169 parser checks; correct fixture cursor setup only.
+- [x] Re-run the complete cross-platform Rust test workflow.
+
+See docs/HARDWARE-INTELLIGENCE.md section 61.

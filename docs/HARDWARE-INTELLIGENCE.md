@@ -639,3 +639,8 @@ Updated the existing mid-entry string-array regression test to reflect the stric
 ## 60. GGUF metadata field and scalar section-boundary preflight (2026-11-26)
 
 Both metadata inspection paths now preflight the four-byte metadata value-type tag before reading it. Scalar numeric and boolean payloads are checked against the remaining 64 MiB metadata-section budget before consumption, and array element-type/count headers are checked as a complete 12-byte unit before either field is read. String values retain their dedicated prefix and payload checks; array payload checks remain unchanged. Sparse-file regression coverage proves a type tag and an eight-byte scalar payload remain unread when they would cross the section boundary. Existing file truncation, value validation, array-count, and memory limits remain in force; tensor weights remain unread.
+
+
+## 61. GGUF metadata boundary regression fixture cursor correction (2026-11-26)
+
+Corrected the Batch #169 sparse-file regression fixture to seek to the tested boundary after reopening each file handle. Reopening a file resets its cursor to byte zero; the prior fixture therefore exercised an ordinary in-range read instead of the intended boundary. The production parser checks are unchanged. The regression now positions the reopened handle explicitly before asserting that the metadata type tag and scalar payload remain unread.
