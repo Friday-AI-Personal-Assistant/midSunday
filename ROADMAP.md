@@ -1634,3 +1634,13 @@ This bounds parser-side retained collection memory; it is not a GGUF file-size o
 - [x] Add regression coverage for a truncated string declaration that must fail before buffer allocation.
 
 This reduces avoidable allocations for malformed/truncated input and ties reported file size to the parsed handle; concurrent external file mutation remains outside this guarantee. See `docs/HARDWARE-INTELLIGENCE.md` section 52.
+
+
+### 2026-11-26 — GGUF string-array aggregate work preflight (Batch #159)
+
+- [x] Pass the metadata-section start position into unknown-value array skipping.
+- [x] Enforce the aggregate 64 MiB metadata-section budget after each string in a string array.
+- [x] Preserve the per-string cap, array-item cap, boolean validation, and efficient fixed-width array skipping.
+- [x] Add sparse-file regression coverage proving a single oversized string-array entry is stopped mid-entry.
+
+This closes a per-entry accounting gap for string arrays; it does not change tensor parsing or load model weights. See docs/HARDWARE-INTELLIGENCE.md section 53.

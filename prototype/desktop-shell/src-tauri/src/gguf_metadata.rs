@@ -98,7 +98,7 @@ fn skip_boolean_array(f:&mut File,count:u64)->Result<(),String>{
     }
     Ok(())
 }
-fn skip_value(f:&mut File,kind:u32)->Result<(),String>{
+fn skip_value(f:&mut File,kind:u32,metadata_section_start:u64)->Result<(),String>{
     if kind!=9{let _=scalar(f,kind)?;return Ok(());}
     let element=read_u32(f)?;let count=read_u64(f)?;
     if count>MAX_ARRAY_ITEMS{return Err("A GGUF metadata array exceeds the safe inspection limit.".to_owned());}
@@ -110,7 +110,15 @@ fn skip_value(f:&mut File,kind:u32)->Result<(),String>{
     }
     match element{
         7=>skip_boolean_array(f,count),
-        8=>{for _ in 0..count{let _=read_string(f)?;}Ok(())},
+        // A single string array can otherwise exceed the aggregate metadata-section
+        // budget before the caller reaches its normal end-of-entry check.
+        8=>{
+            for _ in 0..count{
+                let _=read_string(f)?;
+                enforce_metadata_section_limit(f,metadata_section_start)?;
+            }
+            Ok(())
+        },
         _=>Err(format!("The GGUF file uses unsupported array element type {element}.")),
     }
 }
@@ -258,7 +266,7 @@ pub fn analyse_tensor_storage(input:&str)->Result<TensorStorageAnalysis,String>{
             alignment=value;
         }else if key=="general.parameter_count"{
             reported_parameter_count=Some(required_unsigned(scalar(&mut f,kind)?,&key)?);
-        }else{skip_value(&mut f,kind)?;}
+        }else{skip_value(&mut f,kind,metadata_section_start)?;}
         enforce_metadata_section_limit(&mut f,metadata_section_start)?;
     }
     if alignment==0 || alignment>4096 || !alignment.is_power_of_two(){return Err("GGUF tensor alignment must be a power of two from 1 to 4096 bytes.".to_owned());}
@@ -390,7 +398,7 @@ pub fn inspect(input:&str)->Result<GgufMetadata,String>{
         if !metadata_keys.insert(key.clone()){return Err("The GGUF file contains a duplicate metadata key.".to_owned());}
         let kind=read_u32(&mut f)?;
         let Some(field)=selected_metadata_field(&key) else{
-            skip_value(&mut f,kind)?;
+            skip_value(&mut f,kind,metadata_section_start)?;
             enforce_metadata_section_limit(&mut f,metadata_section_start)?;
             continue;
         };
@@ -594,6 +602,21 @@ mod tests{
         let aligned=((b.len()+31)/32)*32;b.resize(aligned,0);b
     }
     fn temp(bytes:&[u8],ext:&str)->std::path::PathBuf{let p=std::env::temp_dir().join(format!("midsunday-gguf-{}-{}.{}",std::process::id(),NEXT.fetch_add(1,Ordering::Relaxed),ext));let mut f=File::create(&p).unwrap();f.write_all(bytes).unwrap();p}
+    #[test]fn rejects_string_array_that_exceeds_metadata_section_budget_mid_entry(){
+        let p=std::env::temp_dir().join(format!("midsunday-gguf-array-budget-{}-{}.gguf",std::process::id(),NEXT.fetch_add(1,Ordering::Relaxed)));
+        let mut file=File::create(&p).unwrap();
+        let start=MAX_METADATA_SECTION_BYTES-16;
+        file.set_len(start+8+8+MAX_STRING_BYTES).unwrap();
+        file.seek(SeekFrom::Start(start)).unwrap();
+        file.write_all(&8u32.to_le_bytes()).unwrap();
+        file.write_all(&1u64.to_le_bytes()).unwrap();
+        file.write_all(&MAX_STRING_BYTES.to_le_bytes()).unwrap();
+        file.write_all(&vec![b'x';MAX_STRING_BYTES as usize]).unwrap();
+        file.seek(SeekFrom::Start(start)).unwrap();
+        let error=skip_value(&mut file,9,0).unwrap_err();
+        assert!(error.contains("metadata section exceeds"));
+        let _=std::fs::remove_file(p);
+    }
     #[test]fn rejects_truncated_string_before_allocating_declared_payload(){
         let mut bytes=Vec::new();
         bytes.extend_from_slice(&1024u64.to_le_bytes());

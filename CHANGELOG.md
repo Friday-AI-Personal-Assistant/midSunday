@@ -1,3 +1,4 @@
+- Added mid-entry aggregate metadata-section enforcement for GGUF string arrays, with sparse-file regression coverage.
 - Added GGUF string-payload boundary preflight before allocating string buffers, and tied metadata-only file-size reporting to the opened parser handle.
 - Added a 64 MiB aggregate GGUF metadata-section work budget in both inspection paths, with checked per-entry accounting and sparse-file regression coverage.
 - Reduced GGUF tensor-descriptor allocation overhead with inline fixed-size dimensions, incremental collection growth, and an 8 MiB aggregate tensor-name storage budget; added regression coverage.
