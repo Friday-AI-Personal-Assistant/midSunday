@@ -1,4 +1,5 @@
 # Changelog
+- Extended GGUF tensor overlap validation to check known payload ends against every next descriptor start, including unsupported tensor types whose payload sizes remain unknown.
 - Reject overlapping known GGUF tensor payload ranges and check aggregate counters with checked arithmetic; descriptor storage order is validated independently of descriptor listing order.
 - Fixed unsupported GGML tensor types to return an unknown payload size safely instead of entering block arithmetic with a zero block size.
 

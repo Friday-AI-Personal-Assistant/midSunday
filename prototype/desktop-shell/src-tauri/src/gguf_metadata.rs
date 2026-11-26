@@ -175,12 +175,14 @@ pub fn analyse_tensor_storage(input:&str)->Result<TensorStorageAnalysis,String>{
         summary.tensor_count=summary.tensor_count.checked_add(1).ok_or_else(||"Tensor count overflowed.".to_owned())?;
         let absolute=data_start.checked_add(tensor.offset).ok_or_else(||"GGUF tensor offset overflowed.".to_owned())?;
         if absolute>file_size{return Err("A GGUF tensor offset points beyond the file.".to_owned());}
+        // The next descriptor's start is known even when its type has an unknown
+        // payload size, so it must still not begin inside a preceding known payload.
+        if previous_known_end.is_some_and(|previous_end| absolute<previous_end){
+            return Err("A known GGUF tensor payload overlaps the next tensor offset.".to_owned());
+        }
         if let Some(bytes)=tensor_payload_bytes(&tensor.dimensions,block,block_bytes){
             let end=absolute.checked_add(bytes).ok_or_else(||"GGUF tensor payload size overflowed.".to_owned())?;
             if end>file_size{return Err("A GGUF tensor payload extends beyond the file.".to_owned());}
-            if previous_known_end.is_some_and(|previous_end| absolute<previous_end){
-                return Err("Known GGUF tensor payload ranges overlap.".to_owned());
-            }
             previous_known_end=Some(end);
             summary.known_payload_bytes=summary.known_payload_bytes.checked_add(bytes).ok_or_else(||"Tensor payload total overflowed.".to_owned())?;
             known_total=known_total.checked_add(bytes).ok_or_else(||"Tensor payload total overflowed.".to_owned())?;
@@ -364,6 +366,12 @@ mod tests{
         let p=temp(&tensor_fixture_many(&[(2,32,0),(2,32,0)],&[0;18]),"gguf");
         let error=analyse_tensor_storage(p.to_str().unwrap()).unwrap_err();
         assert!(error.contains("overlap"));let _=std::fs::remove_file(p);
+    }
+    #[test]fn rejects_known_payload_overlapping_unknown_tensor_start(){
+        // F32[16] occupies 64 bytes; the unsupported tensor begins 32 bytes later.
+        let p=temp(&tensor_fixture_many(&[(0,16,0),(99,32,32)],&[0;70]),"gguf");
+        let error=analyse_tensor_storage(p.to_str().unwrap()).unwrap_err();
+        assert!(error.contains("overlaps the next tensor offset"));let _=std::fs::remove_file(p);
     }
     #[test]fn accepts_non_overlapping_known_tensor_payload_ranges_in_offset_order(){
         let p=temp(&tensor_fixture_many(&[(2,32,32),(2,32,0)],&[0;50]),"gguf");

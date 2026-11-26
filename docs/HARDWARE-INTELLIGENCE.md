@@ -466,3 +466,12 @@ Before reporting known tensor payload totals, the analyser orders descriptors by
 This is a structural integrity check, not a complete proof of the file's contents. Unsupported tensor types have unknown payload lengths, so their ranges cannot be checked for overlap with known or other unknown tensors. Inter-tensor padding is still excluded from the known payload total. The analyser remains local, user-triggered, read-only, and does not load tensor weights.
 
 Regression fixtures cover overlapping known ranges and valid non-overlapping ranges whose descriptor order differs from their storage order.
+
+
+## 32. GGUF known-payload overlap against unknown tensor starts (2026-11-26)
+
+The tensor analyser now compares each known-size payload end with the next descriptor's starting offset even when that next tensor type is unsupported or has an invalid/unknown block layout. A known tensor payload that extends into the next tensor's declared start is rejected. This closes a gap where the next descriptor's start was known but its payload length was not.
+
+Unknown tensor payload lengths remain unmeasurable, so the analyser cannot establish their ending boundaries or prove non-overlap with later tensors. The check is deliberately one-sided: it protects known payload ranges against every following descriptor start without inventing sizes for unsupported formats. It remains local, read-only, and does not load tensor weights.
+
+Regression coverage includes a known F32 payload overlapping the start of an unsupported tensor.

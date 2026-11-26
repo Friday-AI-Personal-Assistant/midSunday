@@ -1412,3 +1412,14 @@ The reported known payload total excludes inter-tensor alignment padding and lea
 - [ ] Validate overlap and offset behaviour against a representative real-world GGUF corpus across architectures, quantisations, and exporter versions.
 
 Unknown tensor types still have unknown payload lengths, so their ranges cannot be included in overlap checks. The validation is structural and does not read weights, calculate runtime memory, or guarantee model compatibility. See docs/HARDWARE-INTELLIGENCE.md section 31.
+
+
+### 2026-11-26 — GGUF overlap checks include unknown tensor starts (Batch #132)
+
+- [x] Compare each known tensor payload end with the next descriptor offset, regardless of whether the next tensor type has a known payload layout.
+- [x] Reject a known payload that reaches into an unsupported tensor's declared start.
+- [x] Keep unsupported payload sizes unknown; do not guess their lengths or claim complete overlap validation.
+- [x] Add regression coverage for a known F32 payload overlapping an unsupported tensor start.
+- [ ] Validate descriptor offsets and overlap behaviour against a representative real-world GGUF corpus across architectures, quantisations, and exporter versions.
+
+See docs/HARDWARE-INTELLIGENCE.md section 32.
