@@ -312,5 +312,45 @@ mod tests{
         metadata.block_count=Some(u64::MAX); assert!(estimate_kv_cache(&metadata, 32768).is_err());
         let _=std::fs::remove_file(p);
     }
+    fn tensor_fixture(type_code:u32,dimension:u64,offset:u64,payload:&[u8])->Vec<u8>{
+        let mut b=b"GGUF".to_vec();b.extend_from_slice(&3u32.to_le_bytes());
+        b.extend_from_slice(&1u64.to_le_bytes());b.extend_from_slice(&1u64.to_le_bytes());
+        entry_u32(&mut b,"general.alignment",32);
+        push_string(&mut b,"test.tensor");b.extend_from_slice(&1u32.to_le_bytes());
+        b.extend_from_slice(&dimension.to_le_bytes());b.extend_from_slice(&type_code.to_le_bytes());
+        b.extend_from_slice(&offset.to_le_bytes());
+        let aligned=((b.len()+31)/32)*32;b.resize(aligned,0);
+        b.extend_from_slice(payload);b
+    }
+    #[test]fn analyses_known_q4_0_tensor_payload_without_reading_weights(){
+        let p=temp(&tensor_fixture(2,32,0,&[0;18]),"gguf");
+        let report=analyse_tensor_storage(p.to_str().unwrap()).unwrap();
+        assert_eq!(report.status,"complete");assert_eq!(report.tensor_count,1);
+        assert_eq!(report.analysed_tensor_count,1);assert_eq!(report.unknown_size_tensor_count,0);
+        assert_eq!(report.known_payload_bytes,18);assert_eq!(report.types[0].type_name,"Q4_0");
+        assert_eq!(report.types[0].known_payload_bytes,18);
+        let _=std::fs::remove_file(p);
+    }
+    #[test]fn keeps_unsupported_tensor_types_unknown(){
+        let p=temp(&tensor_fixture(99,32,0,&[0;18]),"gguf");
+        let report=analyse_tensor_storage(p.to_str().unwrap()).unwrap();
+        assert_eq!(report.status,"unknown");assert_eq!(report.analysed_tensor_count,0);
+        assert_eq!(report.unknown_size_tensor_count,1);assert_eq!(report.known_payload_bytes,0);
+        let _=std::fs::remove_file(p);
+    }
+    #[test]fn rejects_tensor_payloads_outside_file_and_bad_offsets(){
+        let p=temp(&tensor_fixture(2,32,32,&[0;18]),"gguf");
+        assert!(analyse_tensor_storage(p.to_str().unwrap()).unwrap_err().contains("beyond the file"));
+        let _=std::fs::remove_file(p);
+        let p=temp(&tensor_fixture(2,32,1,&[0;18]),"gguf");
+        assert!(analyse_tensor_storage(p.to_str().unwrap()).unwrap_err().contains("not aligned"));
+        let _=std::fs::remove_file(p);
+    }
+    #[test]fn rejects_tensor_dimensions_that_break_known_block_layout(){
+        let p=temp(&tensor_fixture(2,31,0,&[0;18]),"gguf");
+        let report=analyse_tensor_storage(p.to_str().unwrap()).unwrap();
+        assert_eq!(report.status,"unknown");assert_eq!(report.unknown_size_tensor_count,1);
+        let _=std::fs::remove_file(p);
+    }
     #[test]fn rejects_non_gguf_extensions(){let p=temp(&fixture(),"bin");assert!(inspect(p.to_str().unwrap()).unwrap_err().contains(".gguf"));let _=std::fs::remove_file(p);}
 }

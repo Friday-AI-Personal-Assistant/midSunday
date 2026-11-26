@@ -564,8 +564,9 @@ pub fn run() {
             analyze_conversation_for_awareness,
             cancel_local_generation,
             stop_local_runtime,
-            recover_local_runtime
-        , analyse_gguf_tensor_storage])
+            recover_local_runtime,
+            analyse_gguf_tensor_storage
+        ])
         .run(tauri::generate_context!())
         .expect("error while running midSunday");
 }
