@@ -60,17 +60,34 @@ fn scalar(f:&mut File,kind:u32)->Result<Value,String>{
         _=>Err(format!("The GGUF file uses unsupported metadata value type {kind}.")),
     }
 }
+fn skip_boolean_array(f:&mut File,count:u64)->Result<(),String>{
+    let mut remaining=count;
+    let mut buffer=[0u8;8192];
+    while remaining>0{
+        let take=remaining.min(buffer.len() as u64) as usize;
+        f.read_exact(&mut buffer[..take]).map_err(|_|"The GGUF metadata is truncated.".to_owned())?;
+        if buffer[..take].iter().any(|value|*value>1){
+            return Err("GGUF boolean metadata must be encoded as 0 or 1.".to_owned());
+        }
+        remaining-=take as u64;
+    }
+    Ok(())
+}
 fn skip_value(f:&mut File,kind:u32)->Result<(),String>{
     if kind!=9{let _=scalar(f,kind)?;return Ok(());}
     let element=read_u32(f)?;let count=read_u64(f)?;
     if count>MAX_ARRAY_ITEMS{return Err("A GGUF metadata array exceeds the safe inspection limit.".to_owned());}
     if element==9{return Err("Nested GGUF metadata arrays are not supported.".to_owned());}
-    for _ in 0..count{match element{
-        0|1=>skip_bytes(f,1)?,7=>skip_bool(f)?,2|3=>skip_bytes(f,2)?,4|5|6=>skip_bytes(f,4)?,
-        10|11|12=>skip_bytes(f,8)?,8=>{let _=read_string(f)?;},
-        _=>return Err(format!("The GGUF file uses unsupported array element type {element}.")),
-    }}
-    Ok(())
+    let width=match element{0|1=>Some(1u64),2|3=>Some(2),4|5|6=>Some(4),10|11|12=>Some(8),_=>None};
+    if let Some(width)=width{
+        let bytes=count.checked_mul(width).ok_or_else(||"GGUF metadata array byte length overflowed.".to_owned())?;
+        return skip_bytes(f,bytes);
+    }
+    match element{
+        7=>skip_boolean_array(f,count),
+        8=>{for _ in 0..count{let _=read_string(f)?;}Ok(())},
+        _=>Err(format!("The GGUF file uses unsupported array element type {element}.")),
+    }
 }
 fn unsigned(v:Value)->Option<u64>{match v{Value::Unsigned(n)=>Some(n),Value::Signed(n) if n>=0=>Some(n as u64),_=>None}}
 fn file_type_description(code:u32)->Option<String>{
@@ -489,6 +506,27 @@ mod tests{
     #[test]fn rejects_invalid_magic_and_versions(){let p=temp(b"NOPE","gguf");assert!(inspect(p.to_str().unwrap()).is_err());let _=std::fs::remove_file(p);let mut b=fixture();b[4..8].copy_from_slice(&99u32.to_le_bytes());let p=temp(&b,"gguf");assert!(inspect(p.to_str().unwrap()).unwrap_err().contains("version 99"));let _=std::fs::remove_file(p);}
     #[test]fn rejects_truncated_metadata_and_unreasonable_counts(){let mut b=fixture();b.truncate(35);let p=temp(&b,"gguf");assert!(inspect(p.to_str().unwrap()).is_err());let _=std::fs::remove_file(p);let mut b=fixture();b[20..28].copy_from_slice(&(MAX_METADATA_ENTRIES+1).to_le_bytes());let p=temp(&b,"gguf");assert!(inspect(p.to_str().unwrap()).unwrap_err().contains("too many metadata"));let _=std::fs::remove_file(p);}
     #[test]fn skips_unknown_string_and_array_metadata(){let mut b=b"GGUF".to_vec();b.extend_from_slice(&3u32.to_le_bytes());b.extend_from_slice(&0u64.to_le_bytes());b.extend_from_slice(&2u64.to_le_bytes());push_string(&mut b,"unknown.string");b.extend_from_slice(&8u32.to_le_bytes());push_string(&mut b,"ignored");push_string(&mut b,"unknown.array");b.extend_from_slice(&9u32.to_le_bytes());b.extend_from_slice(&4u32.to_le_bytes());b.extend_from_slice(&3u64.to_le_bytes());for n in [1u32,2,3]{b.extend_from_slice(&n.to_le_bytes());}let p=temp(&b,"gguf");assert_eq!(inspect(p.to_str().unwrap()).unwrap().tensor_count,0);let _=std::fs::remove_file(p);}
+    #[test]fn skips_fixed_width_arrays_in_bounded_bulk_and_rejects_truncation(){
+        let mut valid=b"GGUF".to_vec();valid.extend_from_slice(&3u32.to_le_bytes());
+        valid.extend_from_slice(&0u64.to_le_bytes());valid.extend_from_slice(&1u64.to_le_bytes());
+        push_string(&mut valid,"unknown.numeric_array");
+        valid.extend_from_slice(&9u32.to_le_bytes());valid.extend_from_slice(&4u32.to_le_bytes());
+        valid.extend_from_slice(&3u64.to_le_bytes());valid.extend_from_slice(&[1u8,0,0,0,2,0,0,0,3,0,0,0]);
+        let p=temp(&valid,"gguf");
+        assert!(inspect(p.to_str().unwrap()).is_ok());
+        assert!(analyse_tensor_storage(p.to_str().unwrap()).is_ok());
+        let _=std::fs::remove_file(p);
+
+        let mut truncated=b"GGUF".to_vec();truncated.extend_from_slice(&3u32.to_le_bytes());
+        truncated.extend_from_slice(&0u64.to_le_bytes());truncated.extend_from_slice(&1u64.to_le_bytes());
+        push_string(&mut truncated,"unknown.numeric_array");
+        truncated.extend_from_slice(&9u32.to_le_bytes());truncated.extend_from_slice(&4u32.to_le_bytes());
+        truncated.extend_from_slice(&3u64.to_le_bytes());truncated.extend_from_slice(&[1u8,0,0,0,2,0,0,0]);
+        let p=temp(&truncated,"gguf");
+        assert!(inspect(p.to_str().unwrap()).unwrap_err().contains("truncated"));
+        assert!(analyse_tensor_storage(p.to_str().unwrap()).unwrap_err().contains("truncated"));
+        let _=std::fs::remove_file(p);
+    }
     #[test]fn estimates_fp16_kv_cache_from_architecture_dimensions(){
         let p=temp(&fixture(), "gguf"); let metadata=inspect(p.to_str().unwrap()).unwrap();
         let estimate=estimate_kv_cache(&metadata, 8192).unwrap();

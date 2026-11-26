@@ -523,3 +523,8 @@ Regression coverage verifies duplicate-key rejection in both inspectors and conf
 ## 38. GGUF metadata key and boolean encoding validation (2026-11-26)
 
 Both GGUF inspection paths now reject empty metadata keys. Scalar boolean values and boolean-array elements must use the GGUF-defined canonical byte encodings 0 or 1; other byte values are rejected instead of being silently accepted as truthy or false-like data. Valid scalar and array booleans remain supported. These checks validate container encoding only and do not establish model compatibility. Regression coverage exercises valid and invalid scalar/array booleans and empty keys in both inspectors. Tensor weights remain unread and no metadata is transmitted.
+
+
+## 39. GGUF metadata array scanning efficiency and bounds (2026-11-26)
+
+Unknown fixed-width metadata arrays are now skipped in one checked byte-range operation rather than seeking once per element. The element-count limit remains in force, multiplication is checked for overflow, and the file boundary is validated before accepting the array. Boolean arrays are scanned in fixed-size chunks so every value is validated as canonical 0 or 1 without allocating memory proportional to the declared count. String arrays retain per-string length and UTF-8 validation. Truncated arrays fail cleanly in both inspection paths. This improves malformed-file resilience without reading tensor weights or changing model/runtime settings.

@@ -147,3 +147,5 @@ All notable project changes are recorded here. The project is in foundation/prot
 - Added GGUF metadata-key uniqueness checks to both inspection paths, rejecting duplicate known or unknown keys while preserving distinct unknown metadata and adding regression coverage.
 
 - Hardened GGUF metadata parsing in both inspection paths: reject empty metadata keys and non-canonical boolean encodings (only 0/1 accepted) for scalar values and array elements; added valid/invalid regression coverage. Tensor weights remain unread.
+
+- Improved GGUF metadata array handling: fixed-width arrays now use checked bulk skipping, boolean arrays are validated in bounded chunks, and truncated numeric arrays are rejected with regression coverage in both inspector paths.

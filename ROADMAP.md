@@ -1493,3 +1493,13 @@ This is a structural GGUF metadata check. It does not validate architecture-spec
 - [x] Preserve valid scalar and array booleans and add malformed/valid regression fixtures for both inspector paths.
 
 This is structural container validation only; it does not establish model compatibility or runtime support. See docs/HARDWARE-INTELLIGENCE.md section 38.
+
+
+### 2026-11-26 — GGUF metadata array scanning efficiency and bounds (Batch #143)
+
+- [x] Replace per-element seeks for fixed-width numeric arrays with checked aggregate byte-length calculation and a single bounded skip.
+- [x] Keep the maximum array-item limit and reject multiplication overflow or truncated payloads.
+- [x] Validate boolean arrays in fixed-size chunks, avoiding allocations proportional to untrusted array counts.
+- [x] Preserve bounded per-string validation for string arrays and add regression coverage for valid and truncated numeric arrays in both inspection paths.
+
+This is parser resilience and efficiency work only; it does not load model weights or establish runtime compatibility. See docs/HARDWARE-INTELLIGENCE.md section 39.
