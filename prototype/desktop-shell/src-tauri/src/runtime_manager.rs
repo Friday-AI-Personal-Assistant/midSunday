@@ -5,7 +5,7 @@
 //! signalling cancellation. This module never downloads assets or uses a
 //! network endpoint other than the validated loopback runtime.
 
-use std::{path::Path, sync::{Arc, Mutex}, time::Duration};
+use std::{path::Path, sync::{Arc, Mutex}, time::{Duration, SystemTime, UNIX_EPOCH}};
 
 use serde::Serialize;
 
@@ -19,6 +19,26 @@ use crate::system_info::ProcessMemorySnapshot;
 pub struct RuntimeStatusSnapshot {
     pub status: String,
     pub detail: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeGenerationMemoryReport {
+    pub status: String,
+    pub before: ProcessMemorySnapshot,
+    pub after: ProcessMemorySnapshot,
+    pub resident_delta_bytes: Option<i64>,
+    pub virtual_delta_bytes: Option<i64>,
+    pub captured_at_unix_seconds: u64,
+}
+
+fn memory_delta_bytes(before: Option<u64>, after: Option<u64>) -> Option<i64> {
+    let (before, after) = (before?, after?);
+    if after >= before {
+        i64::try_from(after - before).ok()
+    } else {
+        i64::try_from(before - after).ok().map(|delta| -delta)
+    }
 }
 
 struct RuntimeManagerInner {
@@ -125,7 +145,7 @@ impl RuntimeManager {
         &self,
         request: GenerationRequest,
         mut on_delta: F,
-    ) -> Result<(), String>
+    ) -> Result<RuntimeGenerationMemoryReport, String>
     where
         F: FnMut(&str),
     {
@@ -142,9 +162,27 @@ impl RuntimeManager {
             Some(cancellation.clone());
         self.set_status(RuntimeStatus::Generating, None)?;
 
+        // These are targeted boundary readings, not a peak-memory monitor.
+        let before_memory = session.process_memory_snapshot();
         let result = session.generate_streaming(&request, &cancellation, |delta| {
             on_delta(delta);
         });
+        let after_memory = session.process_memory_snapshot();
+        let report = RuntimeGenerationMemoryReport {
+            status: if before_memory.status == "detected" && after_memory.status == "detected" {
+                "complete".to_owned()
+            } else {
+                "partial".to_owned()
+            },
+            resident_delta_bytes: memory_delta_bytes(before_memory.resident_bytes, after_memory.resident_bytes),
+            virtual_delta_bytes: memory_delta_bytes(before_memory.virtual_bytes, after_memory.virtual_bytes),
+            before: before_memory,
+            after: after_memory,
+            captured_at_unix_seconds: SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs(),
+        };
 
         if let Ok(mut active) = self.inner.active_cancellation.lock() {
             *active = None;
@@ -152,7 +190,8 @@ impl RuntimeManager {
 
         match result {
             Ok(()) => {
-                self.set_status(session.status(), None)
+                self.set_status(session.status(), None)?;
+                Ok(report)
             }
             Err(RuntimeSessionError::Cancelled) => {
                 self.set_status(session.status(), Some("Generation cancelled.".to_owned()))?;
@@ -253,6 +292,20 @@ mod tests {
     use super::*;
     use std::sync::mpsc;
     use std::thread;
+
+    #[test]
+    fn memory_delta_reports_positive_negative_zero_and_missing_samples() {
+        assert_eq!(memory_delta_bytes(Some(100), Some(150)), Some(50));
+        assert_eq!(memory_delta_bytes(Some(150), Some(100)), Some(-50));
+        assert_eq!(memory_delta_bytes(Some(100), Some(100)), Some(0));
+        assert_eq!(memory_delta_bytes(None, Some(100)), None);
+        assert_eq!(memory_delta_bytes(Some(100), None), None);
+    }
+
+    #[test]
+    fn memory_delta_rejects_values_outside_signed_range() {
+        assert_eq!(memory_delta_bytes(Some(0), Some(u64::MAX)), None);
+    }
 
     #[test]
     fn new_manager_reports_not_installed() {

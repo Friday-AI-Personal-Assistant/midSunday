@@ -1334,3 +1334,16 @@ Batch #116 is an informational estimate only. It is not a total RAM/VRAM predict
 - [ ] Compare before-load, after-load, and sustained-inference samples across representative model/runtime configurations before using measurements for recommendations.
 
 This is a process-wide diagnostic measurement only. It does not predict model fit, separate model weights from KV cache, report GPU allocations, alter runtime settings, or select/stop models.
+
+### 2026-11-26 — Inference-generation memory boundary report (Batch #121)
+
+- [x] Take a targeted memory sample for the managed llama-server child immediately before each local generation request.
+- [x] Take a second targeted sample immediately after a successful generation completes, without enumerating unrelated processes.
+- [x] Report resident and virtual memory at both boundaries and calculate signed end-minus-start deltas only when both values are available.
+- [x] Label incomplete samples explicitly and keep timestamps local; do not create background polling or a persistent telemetry history.
+- [x] Display the latest successful generation's boundary readings and deltas in Settings, with clear interpretation limits.
+- [x] Add regression tests for positive, negative, zero, missing, and out-of-range memory deltas.
+- [ ] Compare boundary readings with operating-system process monitors during real model generation on Windows, Linux, and macOS.
+- [ ] Collect representative repeated measurements across models, context lengths, and workloads before using memory changes for hardware recommendations.
+
+This is a pair of process-wide boundary readings, not peak memory or model-only allocation measurement. It does not identify weights/KV cache/compute buffers, measure GPU allocations, guarantee model fit, or change runtime settings. See docs/HARDWARE-INTELLIGENCE.md section 26.

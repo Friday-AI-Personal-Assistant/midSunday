@@ -14,7 +14,7 @@ use tauri::{ipc::Channel, State};
 use system_info::HardwareSnapshot;
 use serde::Deserialize;
 use runtime::{ConversationMessage, GenerationRequest, RuntimeConfig};
-use runtime_manager::{RuntimeManager, RuntimeStatusSnapshot};
+use runtime_manager::{RuntimeGenerationMemoryReport, RuntimeManager, RuntimeStatusSnapshot};
 use conversation_store::{AwarenessHistoryEntry, AwarenessItem, AwarenessSettings, AwarenessSuggestion, AwarenessSuppression, ConversationStore, ConversationSummary, ImportResult, MemoryImportResult, MemorySearchPage, SavedMemory, StoredMessage, UserProfile};
 use engine_settings::{EngineSettings, EngineSettingsStore};
 use gguf_metadata::{GgufMetadata, KvCacheEstimate};
@@ -377,7 +377,7 @@ async fn generate_local_response(
     temperature: f32,
     top_p: f32,
     on_delta: Channel<String>,
-) -> Result<(), String> {
+) -> Result<RuntimeGenerationMemoryReport, String> {
     let manager = manager.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
         manager.generate_with_callback(GenerationRequest { system_prompt, prompt, history, max_tokens, temperature, top_p }, |delta| {

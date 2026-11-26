@@ -7,6 +7,14 @@ type Section = "chat" | "characters" | "settings";
 type Message = { id: number; role: "user" | "assistant" | "system"; text: string };
 type RuntimeStatusSnapshot = { status: string; detail: string | null };
 type RuntimeProcessMemorySnapshot = { status: string; residentBytes: number | null; virtualBytes: number | null };
+type RuntimeGenerationMemoryReport = {
+  status: string;
+  before: RuntimeProcessMemorySnapshot;
+  after: RuntimeProcessMemorySnapshot;
+  residentDeltaBytes: number | null;
+  virtualDeltaBytes: number | null;
+  capturedAtUnixSeconds: number;
+};
 type HardwareDisk = { mountPoint: string; totalBytes: number; availableBytes: number; freePercent: number; status: "healthy" | "low" | "critical" | "unknown" };
 type GpuMemorySegment = { budgetBytes: number; currentUsageBytes: number; availableForReservationBytes: number; currentReservationBytes: number };
 type GpuMemoryBudget = { status: string; nodeIndex: number; local: GpuMemorySegment | null; localErrorCode: number | null; nonLocal: GpuMemorySegment | null; nonLocalErrorCode: number | null };
@@ -165,6 +173,7 @@ export default function App() {
   const [runtimeProcessMemory, setRuntimeProcessMemory] = useState<RuntimeProcessMemorySnapshot | null>(null);
   const [runtimeMemoryBusy, setRuntimeMemoryBusy] = useState(false);
   const [runtimeMemoryCheckedAt, setRuntimeMemoryCheckedAt] = useState<number | null>(null);
+  const [generationMemoryReport, setGenerationMemoryReport] = useState<RuntimeGenerationMemoryReport | null>(null);
   const [hardwareSnapshot, setHardwareSnapshot] = useState<HardwareSnapshot | null>(null);
   const [hardwareBusy, setHardwareBusy] = useState(false);
   const [hardwareError, setHardwareError] = useState("");
@@ -932,7 +941,8 @@ export default function App() {
     };
 
     try {
-      await invoke<void>("generate_local_response", {
+      setGenerationMemoryReport(null);
+      const memoryReport = await invoke<RuntimeGenerationMemoryReport>("generate_local_response", {
         systemPrompt,
         prompt: text,
         history,
@@ -941,6 +951,7 @@ export default function App() {
         topP: 0.9,
         onDelta: channel,
       });
+      setGenerationMemoryReport(memoryReport);
     } catch (error) {
       const detail = String(error);
       setMessages((current) => current.map((message) =>
@@ -1085,6 +1096,8 @@ export default function App() {
       setRuntimeStatus(snapshot);
       setRuntimeProcessMemory(null);
       setRuntimeMemoryCheckedAt(null);
+      setGenerationMemoryReport(null);
+      setGenerationMemoryReport(null);
     } catch (error) {
       setRuntimeError(String(error));
       const snapshot = await invoke<RuntimeStatusSnapshot>("get_runtime_status").catch(() => null);
@@ -1238,6 +1251,19 @@ export default function App() {
                   <span>Virtual memory<strong>{runtimeProcessMemory.virtualBytes === null ? "Unavailable" : formatModelSize(runtimeProcessMemory.virtualBytes)}</strong></span>
                 </div>}
                 {runtimeMemoryCheckedAt !== null && <p className="settings-footnote">Last checked: {new Date(runtimeMemoryCheckedAt).toLocaleString()}</p>}
+                {generationMemoryReport && <div className="model-kv-estimate">
+                  <strong>Last generation memory change</strong>
+                  <p className="settings-footnote">Boundary samples taken immediately before and after the most recent successful response.</p>
+                  <div className="model-kv-grid">
+                    <span>Sample status<strong>{generationMemoryReport.status}</strong></span>
+                    <span>Resident before<strong>{generationMemoryReport.before.residentBytes === null ? "Unavailable" : formatModelSize(generationMemoryReport.before.residentBytes)}</strong></span>
+                    <span>Resident after<strong>{generationMemoryReport.after.residentBytes === null ? "Unavailable" : formatModelSize(generationMemoryReport.after.residentBytes)}</strong></span>
+                    <span>Resident change<strong>{generationMemoryReport.residentDeltaBytes === null ? "Unavailable" : `${generationMemoryReport.residentDeltaBytes > 0 ? "+" : generationMemoryReport.residentDeltaBytes < 0 ? "−" : ""}${formatModelSize(Math.abs(generationMemoryReport.residentDeltaBytes))}`}</strong></span>
+                    <span>Virtual change<strong>{generationMemoryReport.virtualDeltaBytes === null ? "Unavailable" : `${generationMemoryReport.virtualDeltaBytes > 0 ? "+" : generationMemoryReport.virtualDeltaBytes < 0 ? "−" : ""}${formatModelSize(Math.abs(generationMemoryReport.virtualDeltaBytes))}`}</strong></span>
+                  </div>
+                  <p className="settings-footnote">Captured: {new Date(generationMemoryReport.capturedAtUnixSeconds * 1000).toLocaleString()}</p>
+                  <p className="settings-footnote">A positive value means memory was higher at the end than at the start. This is not peak usage, model-only memory, or proof that the generation caused every change.</p>
+                </div>}
                 <p className="settings-footnote">This is process-wide memory, not model-only memory. Virtual memory is not physical RAM use. GPU allocations are outside this snapshot; it does not prove accelerator use.</p>
               </div>
               <div className="path-field"><label htmlFor="server-path">llama-server executable</label><div className="path-input-row"><input id="server-path" value={executablePath} onChange={(event) => setExecutablePath(event.target.value)} placeholder="Choose the llama-server file…" spellCheck={false} /><button type="button" className="browse-button" onClick={browseForExecutable}>Browse</button></div></div>

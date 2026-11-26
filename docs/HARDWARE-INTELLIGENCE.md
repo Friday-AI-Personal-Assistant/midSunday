@@ -406,3 +406,13 @@ Settings can explicitly sample resident and virtual memory for the single `llama
 The snapshot is user-triggered and point-in-time. If no managed child is active, or the process has exited or cannot be inspected, the result is reported as not running or unavailable rather than guessed. Resident memory is the process's current physical-memory footprint; virtual memory is address-space size and must not be interpreted as physical RAM consumption.
 
 This measurement covers the whole llama-server process, not model weights alone. It may include runtime allocations, mapped files, buffers, and other process memory. It does not report GPU allocations, separate model weights from KV cache, measure peak memory, or prove the selected backend is using a particular accelerator. It does not change runtime settings, terminate processes, or trigger model selection. The query remains local and read-only.
+
+## 26. Inference-generation memory boundary report (2026-11-26)
+
+After each successful local text generation, the runtime manager takes two additional targeted memory samples for the same managed llama-server child: one immediately before the request and one immediately after it completes. The report includes both resident/virtual readings, signed end-minus-start deltas where both readings are available, a complete/partial status, and a local capture timestamp.
+
+Only the already-known managed child PID is queried. No process enumeration, PID exposure, background polling, persistent telemetry history, or network transfer is introduced. If either boundary sample is unavailable, the corresponding delta remains unavailable rather than being inferred. The UI displays the most recent successful generation report and clears it when the runtime is restarted or stopped.
+
+**Interpretation limits:** these are two point-in-time boundary samples, not continuous monitoring or peak-memory measurements. A positive resident delta means the process ended the request with more resident memory than it had immediately before; it does not prove that the request caused every change or identify model weights, KV cache, compute buffers, or individual allocations. Memory may rise and fall between samples. Virtual-memory delta is address-space change, not physical RAM use. GPU allocations remain outside this report. The report is diagnostic only and does not alter runtime settings, choose a model, or claim model-fit compatibility.
+
+Regression tests cover positive, negative, zero, missing, and out-of-range signed deltas.
