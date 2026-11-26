@@ -12,7 +12,6 @@ use serde::Serialize;
 use crate::llama_client::GenerationCancellation;
 use crate::llama_runtime::{LlamaRuntimeSession, RecoveryPolicy, RuntimeSessionError};
 use crate::runtime::{GenerationRequest, RuntimeConfig, RuntimeStatus};
-use crate::system_info::ProcessMemorySnapshot;
 
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -54,18 +53,6 @@ impl RuntimeManager {
         self.inner.status.lock()
             .map(|status| status.clone())
             .map_err(|_| "Runtime status is unavailable.".to_owned())
-    }
-
-    /// Samples only the managed llama-server process.
-    pub fn process_memory_snapshot(&self) -> Result<ProcessMemorySnapshot, String> {
-        let mut slot = self.inner.session.lock()
-            .map_err(|_| "Runtime session is unavailable.".to_owned())?;
-        match slot.as_mut() {
-            Some(session) => Ok(session.process_memory_snapshot()),
-            None => Ok(ProcessMemorySnapshot {
-                status: "not_running".to_owned(), resident_bytes: None, virtual_bytes: None,
-            }),
-        }
     }
 
     fn set_status(&self, status: RuntimeStatus, detail: Option<String>) -> Result<(), String> {

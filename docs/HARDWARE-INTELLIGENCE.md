@@ -397,3 +397,12 @@ The estimate assumes one sequence and FP16 K/V values (2 bytes per element). It 
 **Important limitations:** this is only a theoretical KV-cache estimate, not total model RAM or VRAM. It excludes model weights, runtime/allocator overhead, compute buffers, graph/workspace memory, batching or parallel sequences, padding, and backend-specific behaviour. Actual cache precision may differ from FP16. It does not determine CPU/GPU placement, prove backend support, guarantee that a model fits, select a model, or change settings. GGUF metadata remains untrusted and real-world multi-architecture/runtime validation is still required.
 
 Regression tests cover the arithmetic with a synthetic fixture, missing metadata, invalid context, zero dimensions, and overflow.
+
+
+## 25. Managed inference-process memory snapshot (2026-11-26)
+
+Settings can explicitly sample resident and virtual memory for the single `llama-server` child process launched and owned by the current midSunday runtime session. The process supervisor supplies its child PID internally; the resource monitor refreshes only that exact PID and does not enumerate unrelated processes. The PID is not returned to the frontend or persisted.
+
+The snapshot is user-triggered and point-in-time. If no managed child is active, or the process has exited or cannot be inspected, the result is reported as not running or unavailable rather than guessed. Resident memory is the process's current physical-memory footprint; virtual memory is address-space size and must not be interpreted as physical RAM consumption.
+
+This measurement covers the whole llama-server process, not model weights alone. It may include runtime allocations, mapped files, buffers, and other process memory. It does not report GPU allocations, separate model weights from KV cache, measure peak memory, or prove the selected backend is using a particular accelerator. It does not change runtime settings, terminate processes, or trigger model selection. The query remains local and read-only.

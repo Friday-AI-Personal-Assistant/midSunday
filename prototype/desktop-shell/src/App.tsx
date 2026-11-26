@@ -6,6 +6,7 @@ type BackendState = "checking" | "connected" | "error";
 type Section = "chat" | "characters" | "settings";
 type Message = { id: number; role: "user" | "assistant" | "system"; text: string };
 type RuntimeStatusSnapshot = { status: string; detail: string | null };
+type RuntimeProcessMemorySnapshot = { status: string; residentBytes: number | null; virtualBytes: number | null };
 type HardwareDisk = { mountPoint: string; totalBytes: number; availableBytes: number; freePercent: number; status: "healthy" | "low" | "critical" | "unknown" };
 type GpuMemorySegment = { budgetBytes: number; currentUsageBytes: number; availableForReservationBytes: number; currentReservationBytes: number };
 type GpuMemoryBudget = { status: string; nodeIndex: number; local: GpuMemorySegment | null; localErrorCode: number | null; nonLocal: GpuMemorySegment | null; nonLocalErrorCode: number | null };
@@ -161,6 +162,9 @@ export default function App() {
   const [runtimeStatus, setRuntimeStatus] = useState<RuntimeStatusSnapshot>({ status: "notInstalled", detail: null });
   const [runtimeBusy, setRuntimeBusy] = useState(false);
   const [runtimeError, setRuntimeError] = useState("");
+  const [runtimeProcessMemory, setRuntimeProcessMemory] = useState<RuntimeProcessMemorySnapshot | null>(null);
+  const [runtimeMemoryBusy, setRuntimeMemoryBusy] = useState(false);
+  const [runtimeMemoryCheckedAt, setRuntimeMemoryCheckedAt] = useState<number | null>(null);
   const [hardwareSnapshot, setHardwareSnapshot] = useState<HardwareSnapshot | null>(null);
   const [hardwareBusy, setHardwareBusy] = useState(false);
   const [hardwareError, setHardwareError] = useState("");
@@ -1038,6 +1042,20 @@ export default function App() {
     }
   }
 
+  async function refreshRuntimeProcessMemory() {
+    setRuntimeMemoryBusy(true);
+    try {
+      const snapshot = await invoke<RuntimeProcessMemorySnapshot>("get_runtime_process_memory");
+      setRuntimeProcessMemory(snapshot);
+      setRuntimeMemoryCheckedAt(Date.now());
+    } catch (error) {
+      setRuntimeProcessMemory({ status: "unavailable", residentBytes: null, virtualBytes: null });
+      setRuntimeError("Could not inspect inference process memory: " + String(error));
+    } finally {
+      setRuntimeMemoryBusy(false);
+    }
+  }
+
   async function startLocalRuntime() {
     if (!executablePath.trim() || !modelPath.trim()) {
       setRuntimeError("Enter both the llama-server executable path and the GGUF model path.");
@@ -1065,6 +1083,8 @@ export default function App() {
         cpuThreads: parsedThreads,
       });
       setRuntimeStatus(snapshot);
+      setRuntimeProcessMemory(null);
+      setRuntimeMemoryCheckedAt(null);
     } catch (error) {
       setRuntimeError(String(error));
       const snapshot = await invoke<RuntimeStatusSnapshot>("get_runtime_status").catch(() => null);
@@ -1080,6 +1100,8 @@ export default function App() {
     try {
       const snapshot = await invoke<RuntimeStatusSnapshot>("stop_local_runtime");
       setRuntimeStatus(snapshot);
+      setRuntimeProcessMemory(null);
+      setRuntimeMemoryCheckedAt(null);
     } catch (error) {
       setRuntimeError(String(error));
     } finally {
@@ -1206,6 +1228,18 @@ export default function App() {
             </section>
             <section className="settings-section runtime-settings"><div className="settings-section-title"><div><h2>Local AI engine</h2><p>Connect an existing llama.cpp server executable and a GGUF model stored on this device.</p></div><span className="settings-symbol">◈</span></div>
               <div className="runtime-status-line"><span className={runtimeStatus.status === "ready" ? "core-dot good" : runtimeStatus.status === "failed" ? "core-dot bad" : "core-dot"} />Engine status: <strong>{runtimeStatus.status}</strong></div>
+              <div className="model-kv-estimate">
+                <strong>Inference process memory</strong>
+                <p className="settings-footnote">Measures only the llama-server process started by midSunday. Refresh while the engine is running for a point-in-time snapshot.</p>
+                <div className="runtime-actions"><button className="secondary-action" type="button" onClick={() => void refreshRuntimeProcessMemory()} disabled={runtimeMemoryBusy || runtimeStatus.status !== "ready"}>{runtimeMemoryBusy ? "Measuring…" : "Refresh process memory"}</button></div>
+                {runtimeProcessMemory && <div className="model-kv-grid">
+                  <span>Status<strong>{runtimeProcessMemory.status}</strong></span>
+                  <span>Resident memory<strong>{runtimeProcessMemory.residentBytes === null ? "Unavailable" : formatModelSize(runtimeProcessMemory.residentBytes)}</strong></span>
+                  <span>Virtual memory<strong>{runtimeProcessMemory.virtualBytes === null ? "Unavailable" : formatModelSize(runtimeProcessMemory.virtualBytes)}</strong></span>
+                </div>}
+                {runtimeMemoryCheckedAt !== null && <p className="settings-footnote">Last checked: {new Date(runtimeMemoryCheckedAt).toLocaleString()}</p>}
+                <p className="settings-footnote">This is process-wide memory, not model-only memory. Virtual memory is not physical RAM use. GPU allocations are outside this snapshot; it does not prove accelerator use.</p>
+              </div>
               <div className="path-field"><label htmlFor="server-path">llama-server executable</label><div className="path-input-row"><input id="server-path" value={executablePath} onChange={(event) => setExecutablePath(event.target.value)} placeholder="Choose the llama-server file…" spellCheck={false} /><button type="button" className="browse-button" onClick={browseForExecutable}>Browse</button></div></div>
               <div className="path-field"><label htmlFor="model-path">GGUF model file</label><div className="path-input-row"><input id="model-path" value={modelPath} onChange={(event) => setModelPath(event.target.value)} placeholder="Choose a .gguf model…" spellCheck={false} /><button type="button" className="browse-button" onClick={browseForModel}>Browse</button></div></div>
               <div className="path-field"><label htmlFor="context-tokens">Context length (tokens)</label><input id="context-tokens" type="number" min="512" max="32768" step="256" value={contextTokens} onChange={(event) => setContextTokens(event.target.value)} disabled={runtimeBusy || runtimeStatus.status === "ready"} /></div>

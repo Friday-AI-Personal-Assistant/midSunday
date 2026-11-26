@@ -1321,3 +1321,16 @@ This batch extends descriptive metadata only. It does not claim runtime compatib
 - [ ] Extend the resource model to measured model-weight residency, runtime overhead, compute buffers, CPU/GPU offload, and real hardware headroom.
 
 Batch #116 is an informational estimate only. It is not a total RAM/VRAM prediction or model-fit guarantee, does not select a model, and does not change context or runtime settings. See `docs/HARDWARE-INTELLIGENCE.md` section 24.
+
+
+### 2026-11-26 — Managed llama-server process memory snapshot (Batch #117)
+
+- [x] Expose the PID of the managed child process internally through the process supervisor without returning it to the UI.
+- [x] Add a targeted sysinfo query for that one known child PID; do not enumerate or expose unrelated processes.
+- [x] Add an explicit Settings action to refresh resident and virtual memory for the running inference process.
+- [x] Report not-running and unavailable states without guessing; keep the measurement local, read-only, and on demand.
+- [x] Document that process memory is not model-only memory, virtual memory is not physical RAM, and GPU allocations are outside this snapshot.
+- [ ] Validate measurements against operating-system process monitors on real Windows, Linux, and macOS machines.
+- [ ] Compare before-load, after-load, and sustained-inference samples across representative model/runtime configurations before using measurements for recommendations.
+
+This is a process-wide diagnostic measurement only. It does not predict model fit, separate model weights from KV cache, report GPU allocations, alter runtime settings, or select/stop models.

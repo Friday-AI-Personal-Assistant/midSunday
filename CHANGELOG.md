@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-11-26
+- Added an explicit, local-only memory snapshot for the single managed llama-server child process, reporting resident and virtual memory without enumerating unrelated processes. The snapshot is informational and does not represent model-only or GPU memory.
+
 All notable project changes are recorded here. The project is in foundation/prototype development; no application release has been made.
 
 ## 2026-11-25
