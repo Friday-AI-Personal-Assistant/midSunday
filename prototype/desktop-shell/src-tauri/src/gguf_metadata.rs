@@ -512,6 +512,7 @@ mod tests{
         push_string(&mut valid,"unknown.numeric_array");
         valid.extend_from_slice(&9u32.to_le_bytes());valid.extend_from_slice(&4u32.to_le_bytes());
         valid.extend_from_slice(&3u64.to_le_bytes());valid.extend_from_slice(&[1u8,0,0,0,2,0,0,0,3,0,0,0]);
+        while valid.len()%32!=0{valid.push(0);}
         let p=temp(&valid,"gguf");
         assert!(inspect(p.to_str().unwrap()).is_ok());
         assert!(analyse_tensor_storage(p.to_str().unwrap()).is_ok());
