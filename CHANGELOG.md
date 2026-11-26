@@ -181,3 +181,5 @@ All notable project changes are recorded here. The project is in foundation/prot
 - Corrected the GGUF string-array metadata-budget sparse-file regression fixture to include the full array header and string-length field; production parser limits and behaviour are unchanged.
 
 - Fixed the GGUF string-array metadata-budget regression fixture to reopen its sparse test file read-only before parser inspection; production parser behaviour is unchanged.
+
+- Hardened GGUF string-array scanning so a declared string payload that would exceed the aggregate 64 MiB metadata-section budget is rejected before allocating or reading that payload; added regression coverage for the preflight.

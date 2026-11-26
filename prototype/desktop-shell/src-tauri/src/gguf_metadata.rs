@@ -41,11 +41,23 @@ fn skip_bool(f:&mut File)->Result<(),String>{
 fn read_u32(f:&mut File)->Result<u32,String>{let mut b=[0;4];f.read_exact(&mut b).map_err(|_|"The GGUF metadata is truncated.".to_owned())?;Ok(u32::from_le_bytes(b))}
 fn read_u64(f:&mut File)->Result<u64,String>{let mut b=[0;8];f.read_exact(&mut b).map_err(|_|"The GGUF metadata is truncated.".to_owned())?;Ok(u64::from_le_bytes(b))}
 fn read_string(f:&mut File)->Result<String,String>{
+    read_string_with_end(f,None)
+}
+fn read_string_with_metadata_section_limit(f:&mut File,start:u64)->Result<String,String>{
+    let section_end=start.checked_add(MAX_METADATA_SECTION_BYTES)
+        .ok_or_else(||"GGUF metadata section limit position overflowed.".to_owned())?;
+    read_string_with_end(f,Some(section_end))
+}
+fn read_string_with_end(f:&mut File,section_end:Option<u64>)->Result<String,String>{
     let len=read_u64(f)?;
     if len>MAX_STRING_BYTES{return Err("A GGUF metadata string exceeds the safe inspection limit.".to_owned());}
-    // Verify the declared payload fits in the opened file before allocating its buffer.
-    // This avoids allocating even a bounded 1 MiB string for a truncated declaration.
+    // Check both the opened file boundary and, when scanning a string array, the
+    // aggregate metadata-section boundary before allocating or reading the payload.
     let position=f.stream_position().map_err(|_|"Could not locate GGUF string payload.".to_owned())?;
+    if let Some(end)=section_end{
+        let remaining=end.checked_sub(position).ok_or_else(||"GGUF metadata section exceeds the aggregate safe inspection limit.".to_owned())?;
+        if len>remaining{return Err("GGUF metadata section exceeds the aggregate safe inspection limit.".to_owned());}
+    }
     let file_len=f.metadata().map_err(|_|"Could not inspect GGUF file length.".to_owned())?.len();
     let remaining=file_len.checked_sub(position).ok_or_else(||"The GGUF metadata is truncated.".to_owned())?;
     if len>remaining{return Err("The GGUF metadata is truncated.".to_owned());}
@@ -114,7 +126,7 @@ fn skip_value(f:&mut File,kind:u32,metadata_section_start:u64)->Result<(),String
         // budget before the caller reaches its normal end-of-entry check.
         8=>{
             for _ in 0..count{
-                let _=read_string(f)?;
+                let _=read_string_with_metadata_section_limit(f,metadata_section_start)?;
                 enforce_metadata_section_limit(f,metadata_section_start)?;
             }
             Ok(())
@@ -619,6 +631,9 @@ mod tests{
         file.seek(SeekFrom::Start(start)).unwrap();
         let error=skip_value(&mut file,9,0).unwrap_err();
         assert!(error.contains("metadata section exceeds"));
+        // The declared string is rejected immediately after its length field;
+        // its payload is neither read nor allocated.
+        assert_eq!(file.stream_position().unwrap(),start+12+8);
         let _=std::fs::remove_file(p);
     }
     #[test]fn rejects_truncated_string_before_allocating_declared_payload(){

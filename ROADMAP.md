@@ -1662,3 +1662,12 @@ The previous fixture was eight bytes too short and therefore triggered the corre
 - [x] Re-run the Rust core tests on Windows, Linux, and macOS.
 
 The previous fixture correction fixed the encoded byte count but left the test reading through a write-only file handle. See docs/HARDWARE-INTELLIGENCE.md section 53.
+
+
+### 2026-11-26 — GGUF string-array section-budget allocation preflight (Batch #162)
+
+- [x] Check each string-array payload length against the remaining 64 MiB metadata-section budget before allocating its buffer.
+- [x] Preserve the existing per-string cap and same-handle file-boundary preflight.
+- [x] Add regression coverage proving an over-budget payload is rejected before the parser reads it.
+
+This prevents a single bounded string allocation from temporarily overshooting the aggregate metadata-section limit. See docs/HARDWARE-INTELLIGENCE.md section 54.
