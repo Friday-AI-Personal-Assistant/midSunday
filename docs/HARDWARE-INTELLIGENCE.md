@@ -581,3 +581,8 @@ Both GGUF inspection paths now enforce an 8 MiB aggregate budget for metadata-ke
 ## 48. GGUF tensor-descriptor collection memory bounds (2026-11-26)
 
 Tensor-storage analysis now avoids allocating a separate dimensions vector for every tensor: each descriptor stores up to four dimensions in a fixed-size inline array. Descriptor and tensor-name collections grow incrementally rather than reserving capacity directly from the untrusted header count. Retained tensor-name text is additionally limited to 8 MiB with checked accounting, complementing the existing one-million tensor-count cap and minimum-descriptor file-size preflight. A regression fixture verifies that analysis rejects an aggregate tensor-name set that exceeds the budget. These limits bound parser-owned descriptor/name data; they are not a total process-memory guarantee and do not load tensor weights.
+
+
+## 49. Aggregate GGUF metadata-section work budget (2026-11-26)
+
+Both GGUF inspection paths now cap the total encoded metadata section at 64 MiB, measured with checked file-position accounting after each metadata entry. Existing per-string, array-item, entry-count, and aggregate key limits remain in force. This additional bound prevents a file from multiplying individually bounded arrays and values across many entries into an arbitrarily large metadata scan. The cap is intentionally generous for ordinary model metadata; files exceeding it are rejected before tensor descriptor processing. A sparse-file regression test exercises the limit in both inspectors without allocating a matching in-memory fixture. This is a parser-work bound, not a maximum GGUF file-size limit.

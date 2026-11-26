@@ -7,6 +7,7 @@ const MAX_METADATA_ENTRIES: u64 = 100_000;
 const MAX_METADATA_KEY_BYTES: u64 = 8 * 1024 * 1024;
 const MAX_TENSORS: u64 = 1_000_000;
 const MAX_TENSOR_NAME_BYTES: u64 = 8 * 1024 * 1024;
+const MAX_METADATA_SECTION_BYTES: u64 = 64 * 1024 * 1024;
 const MIN_TENSOR_DESCRIPTOR_BYTES: u64 = 33;
 const MAX_STRING_BYTES: u64 = 1_048_576;
 const MAX_ARRAY_ITEMS: u64 = 10_000_000;
@@ -45,6 +46,14 @@ fn skip_bytes(f:&mut File,count:u64)->Result<(),String>{
     let count=i64::try_from(count).map_err(|_|"GGUF metadata field is too large.".to_owned())?;
     let pos=f.seek(SeekFrom::Current(count)).map_err(|_|"The GGUF metadata is truncated.".to_owned())?;
     if pos>f.metadata().map_err(|_|"Could not inspect GGUF file length.".to_owned())?.len(){return Err("The GGUF metadata is truncated.".to_owned());}
+    Ok(())
+}
+fn enforce_metadata_section_limit(f:&mut File,start:u64)->Result<(),String>{
+    let current=f.stream_position().map_err(|_|"Could not measure GGUF metadata section length.".to_owned())?;
+    let consumed=current.checked_sub(start).ok_or_else(||"GGUF metadata position moved before its section start.".to_owned())?;
+    if consumed>MAX_METADATA_SECTION_BYTES{
+        return Err("GGUF metadata section exceeds the aggregate safe inspection limit.".to_owned());
+    }
     Ok(())
 }
 fn scalar(f:&mut File,kind:u32)->Result<Value,String>{
@@ -205,6 +214,7 @@ pub fn analyse_tensor_storage(input:&str)->Result<TensorStorageAnalysis,String>{
     let version=read_u32(&mut f)?;
     if !(2..=3).contains(&version){return Err(format!("GGUF version {version} is not supported."));}
     let tensor_count=read_u64(&mut f)?;let metadata_count=read_u64(&mut f)?;
+    let metadata_section_start=f.stream_position().map_err(|_|"Could not locate GGUF metadata section.".to_owned())?;
     if metadata_count>MAX_METADATA_ENTRIES{return Err("The GGUF file declares too many metadata entries.".to_owned());}
     if tensor_count>MAX_TENSORS{return Err("The GGUF file declares too many tensors for safe inspection.".to_owned());}
     let mut alignment=32u32;
@@ -227,6 +237,7 @@ pub fn analyse_tensor_storage(input:&str)->Result<TensorStorageAnalysis,String>{
         }else if key=="general.parameter_count"{
             reported_parameter_count=Some(required_unsigned(scalar(&mut f,kind)?,&key)?);
         }else{skip_value(&mut f,kind)?;}
+        enforce_metadata_section_limit(&mut f,metadata_section_start)?;
     }
     if alignment==0 || alignment>4096 || !alignment.is_power_of_two(){return Err("GGUF tensor alignment must be a power of two from 1 to 4096 bytes.".to_owned());}
     // A descriptor needs at least: u64 name length, one UTF-8 name byte,
@@ -335,6 +346,7 @@ pub fn inspect(input:&str)->Result<GgufMetadata,String>{
     if &magic!=b"GGUF"{return Err("The selected file does not have a valid GGUF header.".to_owned());}
     let version=read_u32(&mut f)?;if !(2..=3).contains(&version){return Err(format!("GGUF version {version} is not supported by this metadata inspector (supported: 2 and 3)."));}
     let tensors=read_u64(&mut f)?;let entries=read_u64(&mut f)?;
+    let metadata_section_start=f.stream_position().map_err(|_|"Could not locate GGUF metadata section.".to_owned())?;
     if tensors>MAX_TENSORS{return Err("The GGUF file declares too many tensors for safe inspection.".to_owned());}
     if entries>MAX_METADATA_ENTRIES{return Err("The GGUF file declares too many metadata entries for safe inspection.".to_owned());}
     let(mut architecture,mut model_name,mut file_type_code,mut parameter_count,mut context_length,mut block_count,mut embedding_length,mut attention_head_count)=(None,None,None,None,None,None,None,None);
@@ -352,7 +364,11 @@ pub fn inspect(input:&str)->Result<GgufMetadata,String>{
         if metadata_key_bytes>MAX_METADATA_KEY_BYTES{return Err("GGUF metadata keys exceed the aggregate safe inspection limit.".to_owned());}
         if !metadata_keys.insert(key.clone()){return Err("The GGUF file contains a duplicate metadata key.".to_owned());}
         let kind=read_u32(&mut f)?;
-        let Some(field)=selected_metadata_field(&key) else{skip_value(&mut f,kind)?;continue;};
+        let Some(field)=selected_metadata_field(&key) else{
+            skip_value(&mut f,kind)?;
+            enforce_metadata_section_limit(&mut f,metadata_section_start)?;
+            continue;
+        };
         if !selected_fields.insert(field){
             return Err(format!("The GGUF file contains multiple metadata keys for the same recognised field ({field}); the value is ambiguous."));
         }
@@ -926,6 +942,19 @@ mod tests{
 
         let p=temp(&tensor_fixture_with_names(&[b"layer.0.weight",b"layer.1.weight"]), "gguf");
         assert_eq!(analyse_tensor_storage(p.to_str().unwrap()).unwrap().tensor_count,2);
+        let _=std::fs::remove_file(p);
+    }
+    #[test]fn rejects_aggregate_metadata_section_budget_in_both_inspectors(){
+        let p=std::env::temp_dir().join(format!("midsunday-gguf-large-metadata-{}-{}.gguf",std::process::id(),NEXT.fetch_add(1,Ordering::Relaxed)));
+        let mut f=File::create(&p).unwrap();
+        f.write_all(b"GGUF").unwrap();f.write_all(&3u32.to_le_bytes()).unwrap();
+        f.write_all(&0u64.to_le_bytes()).unwrap();f.write_all(&1u64.to_le_bytes()).unwrap();
+        let mut key=Vec::new();push_string(&mut key,"vendor.large_array");f.write_all(&key).unwrap();
+        f.write_all(&9u32.to_le_bytes()).unwrap();f.write_all(&0u32.to_le_bytes()).unwrap();
+        let count=MAX_METADATA_SECTION_BYTES+1;f.write_all(&count.to_le_bytes()).unwrap();
+        let end=f.metadata().unwrap().len().checked_add(count).unwrap();f.set_len(end).unwrap();drop(f);
+        assert!(inspect(p.to_str().unwrap()).unwrap_err().contains("aggregate safe inspection limit"));
+        assert!(analyse_tensor_storage(p.to_str().unwrap()).unwrap_err().contains("aggregate safe inspection limit"));
         let _=std::fs::remove_file(p);
     }
     #[test]fn rejects_non_gguf_extensions(){let p=temp(&fixture(),"bin");assert!(inspect(p.to_str().unwrap()).unwrap_err().contains(".gguf"));let _=std::fs::remove_file(p);}

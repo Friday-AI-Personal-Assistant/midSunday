@@ -1594,3 +1594,13 @@ This bounds retained key text; it is not a complete cap on all metadata bytes or
 - [x] Add regression coverage for aggregate tensor-name storage exhaustion.
 
 These are parser-owned collection bounds, not a total process-memory guarantee; the existing one-million descriptor cap and file-size preflight remain in force. See `docs/HARDWARE-INTELLIGENCE.md` section 48.
+
+
+### 2026-11-26 — Aggregate GGUF metadata-section work budget (Batch #154)
+
+- [x] Add a shared 64 MiB cap for the encoded metadata section in both GGUF inspection paths.
+- [x] Measure consumed metadata bytes with checked file-position accounting after each entry, including skipped unknown values and arrays.
+- [x] Preserve existing per-string, array-item, metadata-entry, and aggregate metadata-key limits.
+- [x] Add a sparse-file regression test proving both inspectors reject an over-budget metadata section without allocating a matching in-memory fixture.
+
+This limits parser work across the complete metadata section; it is not a maximum GGUF file-size limit. See docs/HARDWARE-INTELLIGENCE.md section 49.
