@@ -1525,3 +1525,14 @@ This validates metadata representation only; it does not prove that metadata val
 - [x] Add regression coverage for competing architecture aliases and unrelated unknown suffixes.
 
 This prevents ambiguous metadata from silently changing the displayed dimensions. It does not verify architecture truthfulness or runtime compatibility. See docs/HARDWARE-INTELLIGENCE.md section 41.
+
+
+### 2026-11-26 — GGUF tensor data-offset uniqueness (Batch #147)
+
+- [x] Reject duplicate tensor data offsets after sorting descriptors, before payload-size evaluation.
+- [x] Apply the rule to known and unsupported tensor types, including mixed known/unknown pairs.
+- [x] Add regression coverage proving an unsupported tensor cannot share its offset with a known tensor.
+- [x] Preserve a separate regression test for genuinely overlapping, distinct known payload ranges.
+- [x] Document that descriptor integrity is validated without reading model weights or guessing unsupported payload sizes.
+
+See `docs/HARDWARE-INTELLIGENCE.md` section 42.

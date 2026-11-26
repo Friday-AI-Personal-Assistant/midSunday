@@ -1,3 +1,4 @@
+- Hardened GGUF tensor descriptor integrity by rejecting duplicate tensor data offsets, including mixed known and unsupported tensor types, before payload-size analysis; retained separate coverage for overlapping ranges at distinct offsets.
 - Hardened GGUF metadata inspection against competing architecture-specific aliases: multiple keys that map to the same recognised field now fail explicitly instead of silently allowing the last value to win; unrelated vendor metadata remains supported.
 # Changelog
 - Fixed GGUF tensor element-count comparison compilation by storing an owned status string and updating all existing tensor-analysis evidence fixtures with the new fields.

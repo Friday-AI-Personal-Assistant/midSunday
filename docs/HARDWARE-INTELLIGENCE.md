@@ -542,3 +542,8 @@ Regression tests cover wrong string/integer encodings in both inspection paths, 
 The metadata inspector now maps recognised architecture-specific suffixes to one semantic field and rejects files that provide multiple competing keys for that field (for example, both llama.block_count and mistral.block_count). This prevents the parser from silently allowing whichever matching key appears last to overwrite the earlier value. Recognised suffixes must also have a non-empty namespace prefix. Unrelated vendor-specific keys remain supported and are skipped through the existing bounded parser.
 
 Regression coverage verifies that competing architecture aliases are rejected while unrelated namespaced metadata with the same unrecognised suffix remains accepted. This is an ambiguity check, not proof that the selected architecture metadata is truthful or that the model is runtime-compatible. Tensor weights remain unread and no data is transmitted.
+
+
+## 42. GGUF tensor data-offset uniqueness (2026-11-26)
+
+Tensor descriptors are sorted by their relative data offsets before payload-range analysis. The inspector now rejects duplicate offsets before evaluating tensor sizes, including when one or both tensor types have unknown payload layouts. Two descriptors cannot legitimately identify the same start of tensor data; accepting that structure could otherwise double-count or ambiguously interpret the same bytes. This check remains metadata/descriptor-only: tensor weights are not read, and unknown payload sizes remain unknown.

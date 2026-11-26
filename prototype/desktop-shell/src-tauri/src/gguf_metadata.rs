@@ -243,7 +243,12 @@ pub fn analyse_tensor_storage(input:&str)->Result<TensorStorageAnalysis,String>{
     // ranges can be checked for overlap without reading tensor weights.
     descriptors.sort_unstable_by_key(|tensor| tensor.offset);
     let mut previous_known_end:Option<u64>=None;
+    let mut previous_descriptor_offset:Option<u64>=None;
     for tensor in descriptors{
+        if previous_descriptor_offset==Some(tensor.offset){
+            return Err("The GGUF file contains multiple tensor descriptors with the same data offset.".to_owned());
+        }
+        previous_descriptor_offset=Some(tensor.offset);
         let elements=tensor_element_count(&tensor.dimensions)?;
         total_tensor_elements=total_tensor_elements.checked_add(elements)
             .ok_or_else(||"Aggregate GGUF tensor element count overflowed.".to_owned())?;
@@ -740,8 +745,13 @@ mod tests{
         assert!(analyse_tensor_storage(p.to_str().unwrap()).unwrap_err().contains("not aligned"));
         let _=std::fs::remove_file(p);
     }
+    #[test]fn rejects_duplicate_tensor_data_offsets_even_for_unknown_types(){
+        let p=temp(&tensor_fixture_many(&[(999,32,0),(0,1,0)],&[0;64]),"gguf");
+        let error=analyse_tensor_storage(p.to_str().unwrap()).unwrap_err();
+        assert!(error.contains("same data offset"));let _=std::fs::remove_file(p);
+    }
     #[test]fn rejects_overlapping_known_tensor_payload_ranges(){
-        let p=temp(&tensor_fixture_many(&[(2,32,0),(2,32,0)],&[0;18]),"gguf");
+        let p=temp(&tensor_fixture_many(&[(2,64,0),(2,32,32)],&[0;64]),"gguf");
         let error=analyse_tensor_storage(p.to_str().unwrap()).unwrap_err();
         assert!(error.contains("overlap"));let _=std::fs::remove_file(p);
     }
