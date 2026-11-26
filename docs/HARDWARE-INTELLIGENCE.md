@@ -569,3 +569,10 @@ Regression coverage confirms that a tiny file declaring a tensor descriptor is r
 ## 46. Aggregate GGUF metadata-key memory budget (2026-11-26)
 
 Both GGUF inspection paths now enforce an 8 MiB aggregate budget for metadata-key bytes retained by duplicate-key tracking. The existing per-string limit remains in place, but a per-string limit alone could still permit many individually valid large keys to accumulate substantial memory. The key sets now grow incrementally rather than reserving capacity directly from the untrusted metadata-entry count. Checked accounting rejects a file as soon as the aggregate key budget is exceeded. This is a bound on retained key text, not a total metadata-file-size limit; scalar values and arrays continue to use their existing bounded readers/skippers. Regression coverage verifies that both inspection paths reject the same over-budget fixture.
+
+
+## 47. Aggregate GGUF metadata-key memory regression fixture (Batch #152)
+
+- Corrected the aggregate metadata-key budget regression fixture so each generated key is exactly within the existing 1 MiB per-string limit while the nine distinct keys collectively exceed the 8 MiB aggregate limit.
+- This ensures the test reaches and verifies the aggregate-key guard in both metadata inspection paths, rather than stopping earlier at the individual-string guard.
+- No production limit or parser behaviour was relaxed; the change corrects test data only.

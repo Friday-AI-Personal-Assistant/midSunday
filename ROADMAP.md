@@ -5,7 +5,7 @@
 > **Roadmap version:** 0.1  
 > **Status:** Foundation / planning  
 > **Repository:** `Friday-AI-Personal-Assistant/midSunday`  
-> **Last updated:** 2026-11-25  
+> **Last updated:** 2026-11-26  
 > **Decision rule:** User-confirmed requirements are binding. Technical choices in this roadmap are proposals until validated and approved.
 
 This document is the long-term project map and recovery reference for midSunday. It is deliberately comprehensive so development can continue even if a ChatGPT conversation is lost, corrupted, or moved. Update this file whenever scope, decisions, priorities, or completion status change.
@@ -1578,3 +1578,8 @@ This is an allocation-safety preflight; detailed descriptor and payload validati
 - [x] Add regression coverage proving both inspection paths reject an over-budget file.
 
 This bounds retained key text; it is not a complete cap on all metadata bytes or the GGUF file size. See `docs/HARDWARE-INTELLIGENCE.md` section 46.
+
+
+## 2026-11-26 — Batch #152
+
+- Corrected the GGUF aggregate metadata-key memory regression fixture: each generated key now remains within the existing 1 MiB individual string limit, while nine distinct keys collectively exceed the 8 MiB aggregate budget. This makes the test exercise the intended aggregate guard in both inspection paths. Production safety limits and parser behaviour are unchanged.
