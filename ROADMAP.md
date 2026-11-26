@@ -1536,3 +1536,14 @@ This prevents ambiguous metadata from silently changing the displayed dimensions
 - [x] Document that descriptor integrity is validated without reading model weights or guessing unsupported payload sizes.
 
 See `docs/HARDWARE-INTELLIGENCE.md` section 42.
+
+
+### 2026-11-26 — GGUF architecture metadata namespace consistency (Batch #148)
+
+- [x] Require recognised architecture-specific metadata keys to use the namespace declared by `general.architecture`.
+- [x] Make the check independent of metadata entry order, including architecture-specific fields that appear before the general architecture entry.
+- [x] Reject architecture-specific recognised fields when `general.architecture` is missing.
+- [x] Preserve unrelated vendor-specific metadata through the existing bounded unknown-field path.
+- [x] Add regression tests for mismatched namespaces and missing architecture declarations.
+
+This checks internal metadata consistency only; it does not prove the declared architecture is truthful or that the model is runtime-compatible. See `docs/HARDWARE-INTELLIGENCE.md` section 43.

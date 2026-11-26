@@ -120,6 +120,11 @@ fn selected_metadata_field(key:&str)->Option<&'static str>{
         _=>None,
     }
 }
+fn architecture_metadata_prefix(key:&str)->Option<&str>{
+    [".context_length",".block_count",".embedding_length",".attention.head_count",".attention.head_count_kv",
+     ".attention.key_length",".attention.value_length",".rope.dimension_count",".expert_count",".expert_used_count"]
+        .iter().find_map(|suffix|key.strip_suffix(suffix).filter(|prefix|!prefix.is_empty()))
+}
 fn file_type_description(code:u32)->Option<String>{
     let label=match code{0=>"F32",1=>"F16",2=>"Q4_0",3=>"Q4_1",4=>"Q4_1 with some F16 tensors",5=>"Q8_0",6=>"Q5_0",7=>"Q5_1",8=>"Q2_K",9=>"Q3_K_S",10=>"Q3_K_M",11=>"Q3_K_L",12=>"Q4_K_S",13=>"Q4_K_M",14=>"Q5_K_S",15=>"Q5_K_M",16=>"Q6_K",17=>"Q8_K",18=>"IQ2_XXS",19=>"IQ2_XS",20=>"IQ3_XXS",21=>"IQ1_S",22=>"IQ4_NL",23=>"IQ3_S",24=>"IQ2_S",25=>"IQ4_XS",_=>return None};Some(label.to_owned())
 }
@@ -304,6 +309,7 @@ pub fn inspect(input:&str)->Result<GgufMetadata,String>{
     let(mut attention_kv_head_count,mut attention_key_length,mut attention_value_length,mut rope_dimension_count,mut expert_count,mut expert_used_count,mut quantization_version,mut alignment)=(None,None,None,None,None,None,None,None);
     let mut metadata_keys=HashSet::with_capacity(entries as usize);
     let mut selected_fields=HashSet::new();
+    let mut architecture_metadata_prefixes=HashSet::new();
     for _ in 0..entries{
         let key=read_string(&mut f)?;
         if key.is_empty(){return Err("The GGUF file contains an empty metadata key.".to_owned());}
@@ -313,6 +319,7 @@ pub fn inspect(input:&str)->Result<GgufMetadata,String>{
         if !selected_fields.insert(field){
             return Err(format!("The GGUF file contains multiple metadata keys for the same recognised field ({field}); the value is ambiguous."));
         }
+        if let Some(prefix)=architecture_metadata_prefix(&key){architecture_metadata_prefixes.insert(prefix.to_owned());}
         let value=scalar(&mut f,kind)?;
         match key.as_str(){
             "general.architecture"=>architecture=Some(required_text(value,&key)?),
@@ -332,6 +339,12 @@ pub fn inspect(input:&str)->Result<GgufMetadata,String>{
             _ if key.ends_with(".expert_count")=>expert_count=Some(required_unsigned(value,&key)?),
             _ if key.ends_with(".expert_used_count")=>expert_used_count=Some(required_unsigned(value,&key)?),
             _=>{}
+        }
+    }
+    if !architecture_metadata_prefixes.is_empty(){
+        let declared=architecture.as_deref().ok_or_else(||"The GGUF file contains architecture-specific metadata but is missing general.architecture.".to_owned())?;
+        if architecture_metadata_prefixes.iter().any(|prefix|prefix!=declared){
+            return Err("The GGUF architecture-specific metadata namespace does not match general.architecture.".to_owned());
         }
     }
     Ok(GgufMetadata{format_version:version,file_size_bytes:metadata.len(),tensor_count:tensors,metadata_entry_count:entries,architecture,model_name,file_type_code,file_type_description:file_type_code.and_then(file_type_description),parameter_count,context_length,block_count,embedding_length,attention_head_count,attention_kv_head_count,attention_key_length,attention_value_length,rope_dimension_count,expert_count,expert_used_count,quantization_version,alignment})
@@ -560,6 +573,23 @@ mod tests{
         assert!(error.contains("multiple metadata keys"));
         assert!(error.contains("block_count"));
         let _=std::fs::remove_file(p);
+    }
+    #[test]fn rejects_architecture_metadata_namespace_mismatch_when_architecture_appears_later(){
+        let mut b=b"GGUF".to_vec();b.extend_from_slice(&3u32.to_le_bytes());
+        b.extend_from_slice(&0u64.to_le_bytes());b.extend_from_slice(&2u64.to_le_bytes());
+        push_string(&mut b,"llama.block_count");b.extend_from_slice(&10u32.to_le_bytes());b.extend_from_slice(&32u64.to_le_bytes());
+        push_string(&mut b,"general.architecture");b.extend_from_slice(&8u32.to_le_bytes());push_string(&mut b,"mistral");
+        while b.len()%32!=0{b.push(0);}
+        let p=temp(&b,"gguf");let error=inspect(p.to_str().unwrap()).unwrap_err();
+        assert!(error.contains("namespace does not match"));let _=std::fs::remove_file(p);
+    }
+    #[test]fn rejects_architecture_metadata_without_declared_architecture(){
+        let mut b=b"GGUF".to_vec();b.extend_from_slice(&3u32.to_le_bytes());
+        b.extend_from_slice(&0u64.to_le_bytes());b.extend_from_slice(&1u64.to_le_bytes());
+        push_string(&mut b,"llama.block_count");b.extend_from_slice(&10u32.to_le_bytes());b.extend_from_slice(&32u64.to_le_bytes());
+        while b.len()%32!=0{b.push(0);}
+        let p=temp(&b,"gguf");let error=inspect(p.to_str().unwrap()).unwrap_err();
+        assert!(error.contains("missing general.architecture"));let _=std::fs::remove_file(p);
     }
     #[test]fn ignores_unrelated_namespaced_metadata_without_suffix_collisions(){
         let mut b=b"GGUF".to_vec();b.extend_from_slice(&3u32.to_le_bytes());

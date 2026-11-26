@@ -547,3 +547,8 @@ Regression coverage verifies that competing architecture aliases are rejected wh
 ## 42. GGUF tensor data-offset uniqueness (2026-11-26)
 
 Tensor descriptors are sorted by their relative data offsets before payload-range analysis. The inspector now rejects duplicate offsets before evaluating tensor sizes, including when one or both tensor types have unknown payload layouts. Two descriptors cannot legitimately identify the same start of tensor data; accepting that structure could otherwise double-count or ambiguously interpret the same bytes. This check remains metadata/descriptor-only: tensor weights are not read, and unknown payload sizes remain unknown.
+
+
+## 43. GGUF architecture metadata namespace consistency (2026-11-26)
+
+Recognised architecture-specific metadata fields must now use the namespace declared by `general.architecture`. For example, a file declaring `mistral` cannot supply `llama.block_count` and have that value presented as Mistral metadata. The check is order-independent: architecture-specific keys may appear before or after the general architecture entry. Files that provide architecture-specific recognised fields without declaring `general.architecture` are rejected as ambiguous. Unrelated vendor-specific keys remain on the bounded unknown-metadata path. Regression coverage exercises mismatched namespaces with reversed metadata order and missing architecture declarations. This validates internal metadata consistency only; it does not prove the architecture claim is truthful or guarantee runtime compatibility. Tensor weights remain unread and no data is transmitted.
