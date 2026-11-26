@@ -586,3 +586,8 @@ Tensor-storage analysis now avoids allocating a separate dimensions vector for e
 ## 49. Aggregate GGUF metadata-section work budget (2026-11-26)
 
 Both GGUF inspection paths now cap the total encoded metadata section at 64 MiB, measured with checked file-position accounting after each metadata entry. Existing per-string, array-item, entry-count, and aggregate key limits remain in force. This additional bound prevents a file from multiplying individually bounded arrays and values across many entries into an arbitrarily large metadata scan. The cap is intentionally generous for ordinary model metadata; files exceeding it are rejected before tensor descriptor processing. A sparse-file regression test exercises the limit in both inspectors without allocating a matching in-memory fixture. This is a parser-work bound, not a maximum GGUF file-size limit.
+
+
+## 50. GGUF tensor data-offset file-boundary validation (2026-11-26)
+
+Tensor-storage analysis now obtains the file length from the same opened file handle used to parse the GGUF container, avoiding a separate path-metadata/open race for boundary checks. Every tensor data offset must resolve to a byte strictly inside the file. An offset exactly at EOF is rejected even when the tensor type is unsupported and its payload length cannot be calculated; offsets beyond EOF remain rejected as well. Regression coverage checks both invalid boundaries and confirms that an unsupported tensor with an in-file start remains explicitly unknown rather than being assigned a guessed payload size. This validates tensor start locations only; unsupported payload lengths remain unknown, and tensor weights are never read.

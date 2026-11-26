@@ -1604,3 +1604,13 @@ These are parser-owned collection bounds, not a total process-memory guarantee; 
 - [x] Add a sparse-file regression test proving both inspectors reject an over-budget metadata section without allocating a matching in-memory fixture.
 
 This limits parser work across the complete metadata section; it is not a maximum GGUF file-size limit. See docs/HARDWARE-INTELLIGENCE.md section 49.
+
+
+### 2026-11-26 — GGUF tensor data-offset file-boundary validation (Batch #156)
+
+- [x] Read tensor-analysis file length from the opened file handle used for parsing.
+- [x] Require every tensor data offset to resolve strictly inside the file, rejecting starts at EOF as well as beyond EOF.
+- [x] Apply the boundary check to unsupported tensor types whose payload sizes remain unknown.
+- [x] Add regression coverage for at-EOF, beyond-EOF, and valid in-file unsupported tensor starts.
+
+This validates data-start locations without guessing unsupported payload sizes or reading tensor weights. See docs/HARDWARE-INTELLIGENCE.md section 50.

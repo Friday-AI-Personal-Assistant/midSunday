@@ -169,3 +169,6 @@ All notable project changes are recorded here. The project is in foundation/prot
 
 
 - Added an 8 MiB aggregate GGUF metadata-key memory budget to both inspection paths and removed metadata-entry-count-based preallocation; oversized key sets now fail safely with regression coverage.
+
+
+- Hardened GGUF tensor data-offset boundaries: tensor analysis now uses the opened file handle's length and rejects offsets at or beyond EOF, including unsupported tensor types; added regression coverage while preserving unknown payload-size reporting.

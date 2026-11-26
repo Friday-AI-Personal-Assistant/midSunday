@@ -207,8 +207,10 @@ pub fn analyse_tensor_storage(input:&str)->Result<TensorStorageAnalysis,String>{
     if !path.is_file() || !path.extension().and_then(|v|v.to_str()).is_some_and(|v|v.eq_ignore_ascii_case("gguf")){
         return Err("Tensor analysis requires an existing .gguf file.".to_owned());
     }
-    let file_size=std::fs::metadata(&path).map_err(|e|format!("Could not inspect GGUF file: {e}"))?.len();
     let mut f=File::open(&path).map_err(|e|format!("Could not open GGUF file: {e}"))?;
+    // Read the size from the same opened handle used for parsing, avoiding a
+    // path-metadata/open race when checking descriptor offsets against EOF.
+    let file_size=f.metadata().map_err(|e|format!("Could not inspect GGUF file: {e}"))?.len();
     let mut magic=[0;4];f.read_exact(&mut magic).map_err(|_|"The GGUF header is truncated.".to_owned())?;
     if &magic!=b"GGUF"{return Err("The selected file does not have a valid GGUF header.".to_owned());}
     let version=read_u32(&mut f)?;
@@ -304,7 +306,9 @@ pub fn analyse_tensor_storage(input:&str)->Result<TensorStorageAnalysis,String>{
             type_code:tensor.type_code,type_name:name.to_owned(),tensor_count:0,known_payload_bytes:0,unknown_size_tensor_count:0});
         summary.tensor_count=summary.tensor_count.checked_add(1).ok_or_else(||"Tensor count overflowed.".to_owned())?;
         let absolute=data_start.checked_add(tensor.offset).ok_or_else(||"GGUF tensor offset overflowed.".to_owned())?;
-        if absolute>file_size{return Err("A GGUF tensor offset points beyond the file.".to_owned());}
+        // Even when a tensor type has an unknown payload layout, its start
+        // must identify an actual byte in the file; EOF is not a valid data start.
+        if absolute>=file_size{return Err("A GGUF tensor offset points beyond the file or to its end.".to_owned());}
         // The next descriptor's start is known even when its type has an unknown
         // payload size, so it must still not begin inside a preceding known payload.
         if previous_known_end.is_some_and(|previous_end| absolute<previous_end){
@@ -866,6 +870,22 @@ mod tests{
         let _=std::fs::remove_file(p);
         let p=temp(&tensor_fixture(2,32,1,&[0;18]),"gguf");
         assert!(analyse_tensor_storage(p.to_str().unwrap()).unwrap_err().contains("not aligned"));
+        let _=std::fs::remove_file(p);
+    }
+    #[test]fn rejects_unknown_tensor_offsets_at_or_beyond_eof(){
+        let p=temp(&tensor_fixture(99,32,0,&[]),"gguf");
+        let error=analyse_tensor_storage(p.to_str().unwrap()).unwrap_err();
+        assert!(error.contains("beyond the file or to its end"));
+        let _=std::fs::remove_file(p);
+
+        let p=temp(&tensor_fixture(99,32,32,&[]),"gguf");
+        let error=analyse_tensor_storage(p.to_str().unwrap()).unwrap_err();
+        assert!(error.contains("beyond the file or to its end"));
+        let _=std::fs::remove_file(p);
+
+        let p=temp(&tensor_fixture(99,32,0,&[0;1]),"gguf");
+        let report=analyse_tensor_storage(p.to_str().unwrap()).unwrap();
+        assert_eq!(report.unknown_size_tensor_count,1);
         let _=std::fs::remove_file(p);
     }
     #[test]fn rejects_duplicate_tensor_data_offsets_even_for_unknown_types(){
