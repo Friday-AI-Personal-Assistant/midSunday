@@ -591,3 +591,8 @@ Both GGUF inspection paths now cap the total encoded metadata section at 64 MiB,
 ## 50. GGUF tensor data-offset file-boundary validation (2026-11-26)
 
 Tensor-storage analysis now obtains the file length from the same opened file handle used to parse the GGUF container, avoiding a separate path-metadata/open race for boundary checks. Every tensor data offset must resolve to a byte strictly inside the file. An offset exactly at EOF is rejected even when the tensor type is unsupported and its payload length cannot be calculated; offsets beyond EOF remain rejected as well. Regression coverage checks both invalid boundaries and confirms that an unsupported tensor with an in-file start remains explicitly unknown rather than being assigned a guessed payload size. This validates tensor start locations only; unsupported payload lengths remain unknown, and tensor weights are never read.
+
+
+## 51. GGUF tensor-descriptor collection memory budget (2026-11-26)
+
+Tensor-storage analysis now estimates the memory required for its retained tensor-descriptor records and duplicate-name index before allocating either collection. A conservative 192-byte bookkeeping estimate per descriptor is checked with overflow-safe arithmetic against a 64 MiB aggregate budget. Tensor-name text remains governed by its separate 8 MiB aggregate limit, and the existing one-million tensor-count ceiling remains an independent upper bound. Regression tests prove an over-budget declared count is rejected before descriptor allocation and a count at the budget boundary proceeds to the existing file-layout preflight. This is an inspection-memory bound, not a limit on GGUF file size or a claim about runtime model memory.

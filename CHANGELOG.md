@@ -172,3 +172,6 @@ All notable project changes are recorded here. The project is in foundation/prot
 
 
 - Hardened GGUF tensor data-offset boundaries: tensor analysis now uses the opened file handle's length and rejects offsets at or beyond EOF, including unsupported tensor types; added regression coverage while preserving unknown payload-size reporting.
+
+
+- Bounded GGUF tensor-storage inspection memory with a checked 64 MiB aggregate budget for descriptor records and duplicate-name indexing, applied before collection allocation; retained separate tensor-name and tensor-count limits and added boundary regression tests.

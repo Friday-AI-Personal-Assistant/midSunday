@@ -6,6 +6,10 @@ use std::{collections::HashSet, fs::File, io::{Read, Seek, SeekFrom}, path::Path
 const MAX_METADATA_ENTRIES: u64 = 100_000;
 const MAX_METADATA_KEY_BYTES: u64 = 8 * 1024 * 1024;
 const MAX_TENSORS: u64 = 1_000_000;
+// Conservative budget for retained descriptor records and duplicate-name index bookkeeping.
+// Tensor-name text has its own separate aggregate byte limit.
+const MAX_TENSOR_DESCRIPTOR_MEMORY_BYTES: u64 = 64 * 1024 * 1024;
+const ESTIMATED_TENSOR_DESCRIPTOR_BYTES: u64 = 192;
 const MAX_TENSOR_NAME_BYTES: u64 = 8 * 1024 * 1024;
 const MAX_METADATA_SECTION_BYTES: u64 = 64 * 1024 * 1024;
 const MIN_TENSOR_DESCRIPTOR_BYTES: u64 = 33;
@@ -219,6 +223,14 @@ pub fn analyse_tensor_storage(input:&str)->Result<TensorStorageAnalysis,String>{
     let metadata_section_start=f.stream_position().map_err(|_|"Could not locate GGUF metadata section.".to_owned())?;
     if metadata_count>MAX_METADATA_ENTRIES{return Err("The GGUF file declares too many metadata entries.".to_owned());}
     if tensor_count>MAX_TENSORS{return Err("The GGUF file declares too many tensors for safe inspection.".to_owned());}
+    // Bound the descriptor vector and duplicate-name index before retaining either.
+    // The estimate deliberately includes conservative per-entry bookkeeping overhead;
+    // tensor-name text is independently bounded by MAX_TENSOR_NAME_BYTES below.
+    let estimated_descriptor_bytes=tensor_count.checked_mul(ESTIMATED_TENSOR_DESCRIPTOR_BYTES)
+        .ok_or_else(||"GGUF tensor descriptor memory estimate overflowed.".to_owned())?;
+    if estimated_descriptor_bytes>MAX_TENSOR_DESCRIPTOR_MEMORY_BYTES{
+        return Err("GGUF tensor descriptors exceed the aggregate safe memory budget.".to_owned());
+    }
     let mut alignment=32u32;
     let mut reported_parameter_count=None;
     // Bound the aggregate bytes retained by the metadata-key uniqueness set.
@@ -624,6 +636,24 @@ mod tests{
         let p=temp(&b,"gguf");
         assert!(inspect(p.to_str().unwrap()).unwrap_err().contains("too many tensors"));
         assert!(analyse_tensor_storage(p.to_str().unwrap()).unwrap_err().contains("too many tensors"));
+        let _=std::fs::remove_file(p);
+    }
+    #[test]fn rejects_aggregate_tensor_descriptor_memory_budget_before_allocation(){
+        let count=MAX_TENSOR_DESCRIPTOR_MEMORY_BYTES/ESTIMATED_TENSOR_DESCRIPTOR_BYTES+1;
+        let mut bytes=b"GGUF".to_vec();bytes.extend_from_slice(&3u32.to_le_bytes());
+        bytes.extend_from_slice(&count.to_le_bytes());bytes.extend_from_slice(&0u64.to_le_bytes());
+        let p=temp(&bytes,"gguf");
+        let error=analyse_tensor_storage(p.to_str().unwrap()).unwrap_err();
+        assert!(error.contains("aggregate safe memory budget"));
+        let _=std::fs::remove_file(p);
+    }
+    #[test]fn accepts_tensor_descriptor_count_within_memory_budget_before_descriptor_validation(){
+        let count=MAX_TENSOR_DESCRIPTOR_MEMORY_BYTES/ESTIMATED_TENSOR_DESCRIPTOR_BYTES;
+        let mut bytes=b"GGUF".to_vec();bytes.extend_from_slice(&3u32.to_le_bytes());
+        bytes.extend_from_slice(&count.to_le_bytes());bytes.extend_from_slice(&0u64.to_le_bytes());
+        let p=temp(&bytes,"gguf");
+        let error=analyse_tensor_storage(p.to_str().unwrap()).unwrap_err();
+        assert!(error.contains("cannot fit within the remaining file bytes"));
         let _=std::fs::remove_file(p);
     }
     #[test]fn rejects_impossible_tensor_descriptor_count_before_allocation(){

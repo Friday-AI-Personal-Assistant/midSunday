@@ -1614,3 +1614,13 @@ This limits parser work across the complete metadata section; it is not a maximu
 - [x] Add regression coverage for at-EOF, beyond-EOF, and valid in-file unsupported tensor starts.
 
 This validates data-start locations without guessing unsupported payload sizes or reading tensor weights. See docs/HARDWARE-INTELLIGENCE.md section 50.
+
+
+### 2026-11-26 — GGUF tensor-descriptor collection memory budget (Batch #157)
+
+- [x] Add a conservative per-descriptor bookkeeping estimate for retained descriptor records and duplicate-name indexing.
+- [x] Enforce a checked 64 MiB aggregate descriptor-collection budget before allocating descriptor/name collections.
+- [x] Keep the independent 8 MiB tensor-name text budget and one-million tensor-count ceiling.
+- [x] Add regression coverage for over-budget rejection before allocation and the exact in-budget boundary.
+
+This bounds parser-side retained collection memory; it is not a GGUF file-size or model-runtime-memory limit. See docs/HARDWARE-INTELLIGENCE.md section 51.
