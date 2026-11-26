@@ -41,9 +41,17 @@ fn skip_bool(f:&mut File)->Result<(),String>{
 fn read_u32(f:&mut File)->Result<u32,String>{let mut b=[0;4];f.read_exact(&mut b).map_err(|_|"The GGUF metadata is truncated.".to_owned())?;Ok(u32::from_le_bytes(b))}
 fn read_u64(f:&mut File)->Result<u64,String>{let mut b=[0;8];f.read_exact(&mut b).map_err(|_|"The GGUF metadata is truncated.".to_owned())?;Ok(u64::from_le_bytes(b))}
 fn read_string(f:&mut File)->Result<String,String>{
-    let len=read_u64(f)?; if len>MAX_STRING_BYTES{return Err("A GGUF metadata string exceeds the safe inspection limit.".to_owned());}
+    let len=read_u64(f)?;
+    if len>MAX_STRING_BYTES{return Err("A GGUF metadata string exceeds the safe inspection limit.".to_owned());}
+    // Verify the declared payload fits in the opened file before allocating its buffer.
+    // This avoids allocating even a bounded 1 MiB string for a truncated declaration.
+    let position=f.stream_position().map_err(|_|"Could not locate GGUF string payload.".to_owned())?;
+    let file_len=f.metadata().map_err(|_|"Could not inspect GGUF file length.".to_owned())?.len();
+    let remaining=file_len.checked_sub(position).ok_or_else(||"The GGUF metadata is truncated.".to_owned())?;
+    if len>remaining{return Err("The GGUF metadata is truncated.".to_owned());}
     let size=usize::try_from(len).map_err(|_|"GGUF metadata string is too large for this device.".to_owned())?;
-    let mut bytes=vec![0;size];f.read_exact(&mut bytes).map_err(|_|"The GGUF metadata is truncated.".to_owned())?;
+    let mut bytes=vec![0;size];
+    f.read_exact(&mut bytes).map_err(|_|"The GGUF metadata is truncated.".to_owned())?;
     String::from_utf8(bytes).map_err(|_|"The GGUF metadata contains an invalid UTF-8 string.".to_owned())
 }
 fn skip_bytes(f:&mut File,count:u64)->Result<(),String>{
@@ -356,8 +364,9 @@ pub fn inspect(input:&str)->Result<GgufMetadata,String>{
     let path=Path::new(input).canonicalize().map_err(|_|"The selected GGUF file could not be found.".to_owned())?;
     if !path.is_file(){return Err("The selected GGUF path is not a file.".to_owned());}
     if !path.extension().and_then(|v|v.to_str()).is_some_and(|v|v.eq_ignore_ascii_case("gguf")){return Err("Only .gguf files can be inspected.".to_owned());}
-    let metadata=std::fs::metadata(&path).map_err(|e|format!("Could not inspect the GGUF file: {e}"))?;
     let mut f=File::open(&path).map_err(|e|format!("Could not open the GGUF file: {e}"))?;
+    // Keep the reported size tied to the same opened handle used by the parser.
+    let file_size=f.metadata().map_err(|e|format!("Could not inspect the GGUF file: {e}"))?.len();
     let mut magic=[0;4];f.read_exact(&mut magic).map_err(|_|"The selected file is too small to be a GGUF file.".to_owned())?;
     if &magic!=b"GGUF"{return Err("The selected file does not have a valid GGUF header.".to_owned());}
     let version=read_u32(&mut f)?;if !(2..=3).contains(&version){return Err(format!("GGUF version {version} is not supported by this metadata inspector (supported: 2 and 3)."));}
@@ -416,7 +425,7 @@ pub fn inspect(input:&str)->Result<GgufMetadata,String>{
             return Err("The GGUF architecture-specific metadata namespace does not match general.architecture.".to_owned());
         }
     }
-    Ok(GgufMetadata{format_version:version,file_size_bytes:metadata.len(),tensor_count:tensors,metadata_entry_count:entries,architecture,model_name,file_type_code,file_type_description:file_type_code.and_then(file_type_description),parameter_count,context_length,block_count,embedding_length,attention_head_count,attention_kv_head_count,attention_key_length,attention_value_length,rope_dimension_count,expert_count,expert_used_count,quantization_version,alignment})
+    Ok(GgufMetadata{format_version:version,file_size_bytes:file_size,tensor_count:tensors,metadata_entry_count:entries,architecture,model_name,file_type_code,file_type_description:file_type_code.and_then(file_type_description),parameter_count,context_length,block_count,embedding_length,attention_head_count,attention_kv_head_count,attention_key_length,attention_value_length,rope_dimension_count,expert_count,expert_used_count,quantization_version,alignment})
 }
 /// Conservative KV-cache estimate for the configured context, assuming FP16 (2-byte) K/V values.
 /// This excludes model weights, allocator overhead, compute buffers, graph/workspace memory, and runtime-specific padding.
@@ -585,6 +594,16 @@ mod tests{
         let aligned=((b.len()+31)/32)*32;b.resize(aligned,0);b
     }
     fn temp(bytes:&[u8],ext:&str)->std::path::PathBuf{let p=std::env::temp_dir().join(format!("midsunday-gguf-{}-{}.{}",std::process::id(),NEXT.fetch_add(1,Ordering::Relaxed),ext));let mut f=File::create(&p).unwrap();f.write_all(bytes).unwrap();p}
+    #[test]fn rejects_truncated_string_before_allocating_declared_payload(){
+        let mut bytes=Vec::new();
+        bytes.extend_from_slice(&1024u64.to_le_bytes());
+        bytes.extend_from_slice(b"short");
+        let p=temp(&bytes,"gguf");
+        let mut file=File::open(&p).unwrap();
+        let error=read_string(&mut file).unwrap_err();
+        assert!(error.contains("truncated"));
+        let _=std::fs::remove_file(p);
+    }
     #[test]fn reads_core_metadata_without_tensor_payloads(){let p=temp(&fixture(),"gguf");let m=inspect(p.to_str().unwrap()).unwrap();assert_eq!(m.format_version,3);assert_eq!(m.tensor_count,2);assert_eq!(m.architecture.as_deref(),Some("llama"));assert_eq!(m.model_name.as_deref(),Some("Tiny test model"));assert_eq!(m.file_type_code,Some(2));assert_eq!(m.file_type_description.as_deref(),Some("Q4_0"));assert_eq!(m.parameter_count,Some(7_000_000_000));assert_eq!(m.context_length,Some(8192));assert_eq!(m.block_count,Some(32));assert_eq!(m.embedding_length,Some(4096));assert_eq!(m.attention_head_count,Some(32));assert_eq!(m.attention_kv_head_count,Some(8));assert_eq!(m.attention_key_length,Some(128));assert_eq!(m.attention_value_length,Some(128));assert_eq!(m.rope_dimension_count,Some(128));assert_eq!(m.expert_count,Some(8));assert_eq!(m.expert_used_count,Some(2));assert_eq!(m.quantization_version,Some(2));assert_eq!(m.alignment,Some(32));let _=std::fs::remove_file(p);}
     #[test]fn rejects_aggregate_metadata_key_storage_limit_in_both_inspectors(){
         let long_key="k".repeat(MAX_STRING_BYTES as usize-1);

@@ -1624,3 +1624,13 @@ This validates data-start locations without guessing unsupported payload sizes o
 - [x] Add regression coverage for over-budget rejection before allocation and the exact in-budget boundary.
 
 This bounds parser-side retained collection memory; it is not a GGUF file-size or model-runtime-memory limit. See docs/HARDWARE-INTELLIGENCE.md section 51.
+
+
+### 2026-11-26 — GGUF metadata string file-boundary preflight (Batch #158)
+
+- [x] Check each declared GGUF string length against the remaining bytes in the opened file before allocating its buffer.
+- [x] Apply the shared preflight to metadata keys, selected and unknown string values, string arrays, and tensor names.
+- [x] Read metadata-only inspector file size from the same opened handle used for parsing.
+- [x] Add regression coverage for a truncated string declaration that must fail before buffer allocation.
+
+This reduces avoidable allocations for malformed/truncated input and ties reported file size to the parsed handle; concurrent external file mutation remains outside this guarantee. See `docs/HARDWARE-INTELLIGENCE.md` section 52.
