@@ -1690,3 +1690,13 @@ See docs/HARDWARE-INTELLIGENCE.md section 55.
 - [x] Add regression tests proving over-budget metadata-key and scalar-string payloads are rejected while their payload bytes remain unread.
 
 This closes the remaining single-string allocation gap in the metadata-section work budget. It does not change tensor parsing, load model weights, or transmit data. See docs/HARDWARE-INTELLIGENCE.md section 56.
+
+
+### 2026-11-26 — GGUF array-payload section-budget preflight (Batch #166)
+
+- [x] Check fixed-width numeric array payload lengths against the remaining metadata-section budget before seeking.
+- [x] Check boolean-array payload lengths against the same budget before chunked reads.
+- [x] Preserve checked array-size arithmetic, array-item caps, boolean validation, and file-boundary checks.
+- [x] Add regression tests proving over-budget numeric and boolean array payloads remain untouched.
+
+This prevents array parsing from crossing the 64 MiB metadata boundary before the normal end-of-entry check. See docs/HARDWARE-INTELLIGENCE.md section 57.

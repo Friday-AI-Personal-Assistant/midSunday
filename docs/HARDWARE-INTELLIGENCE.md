@@ -620,3 +620,7 @@ Metadata keys now check their declared byte length against the remaining aggrega
 ## 56. GGUF metadata string section-budget preflight (2026-11-26)
 
 Metadata keys and scalar string values now check the remaining 64 MiB metadata-section budget immediately after reading their length prefixes. A declared key or string payload that would cross the section boundary is rejected before allocating or reading the payload. This complements the aggregate 8 MiB metadata-key budget, per-string limit, opened-file boundary check, and the existing string-array preflight. Regression tests verify both metadata-key and scalar-string payloads remain unread when the section budget would be exceeded. Tensor weights remain unread and no data is transmitted.
+
+## 57. GGUF array-payload section-budget preflight (2026-11-26)
+
+Before skipping fixed-width numeric metadata arrays or scanning boolean arrays, the parser now checks the entire declared payload against the remaining 64 MiB metadata-section budget. An array that would cross the boundary is rejected while the file cursor is still at the start of its payload. This prevents numeric-array seeks from crossing into later GGUF structures and prevents boolean-array reads from consuming bytes beyond the metadata budget. Existing checked multiplication, array-item limits, boolean-value validation, and file truncation checks remain in force. Regression tests cover both numeric and boolean arrays. Tensor weights remain unread and no data is transmitted.

@@ -72,6 +72,15 @@ fn read_string_with_limits(f:&mut File,section_end:Option<u64>,max_bytes:u64,lim
     f.read_exact(&mut bytes).map_err(|_|"The GGUF metadata is truncated.".to_owned())?;
     String::from_utf8(bytes).map_err(|_|"The GGUF metadata contains an invalid UTF-8 string.".to_owned())
 }
+fn ensure_metadata_section_bytes(f:&mut File,start:u64,count:u64)->Result<(),String>{
+    let position=f.stream_position().map_err(|_|"Could not locate GGUF metadata payload.".to_owned())?;
+    let section_end=start.checked_add(MAX_METADATA_SECTION_BYTES)
+        .ok_or_else(||"GGUF metadata section limit position overflowed.".to_owned())?;
+    let remaining=section_end.checked_sub(position)
+        .ok_or_else(||"GGUF metadata section exceeds the aggregate safe inspection limit.".to_owned())?;
+    if count>remaining{return Err("GGUF metadata section exceeds the aggregate safe inspection limit.".to_owned());}
+    Ok(())
+}
 fn skip_bytes(f:&mut File,count:u64)->Result<(),String>{
     let count=i64::try_from(count).map_err(|_|"GGUF metadata field is too large.".to_owned())?;
     let pos=f.seek(SeekFrom::Current(count)).map_err(|_|"The GGUF metadata is truncated.".to_owned())?;
@@ -124,10 +133,14 @@ fn skip_value(f:&mut File,kind:u32,metadata_section_start:u64)->Result<(),String
     let width=match element{0|1=>Some(1u64),2|3=>Some(2),4|5|6=>Some(4),10|11|12=>Some(8),_=>None};
     if let Some(width)=width{
         let bytes=count.checked_mul(width).ok_or_else(||"GGUF metadata array byte length overflowed.".to_owned())?;
+        ensure_metadata_section_bytes(f,metadata_section_start,bytes)?;
         return skip_bytes(f,bytes);
     }
     match element{
-        7=>skip_boolean_array(f,count),
+        7=>{
+            ensure_metadata_section_bytes(f,metadata_section_start,count)?;
+            skip_boolean_array(f,count)
+        },
         // A single string array can otherwise exceed the aggregate metadata-section
         // budget before the caller reaches its normal end-of-entry check.
         8=>{
@@ -657,6 +670,38 @@ mod tests{
         let _=std::fs::remove_file(p);
     }
     #[test]fn reads_core_metadata_without_tensor_payloads(){let p=temp(&fixture(),"gguf");let m=inspect(p.to_str().unwrap()).unwrap();assert_eq!(m.format_version,3);assert_eq!(m.tensor_count,2);assert_eq!(m.architecture.as_deref(),Some("llama"));assert_eq!(m.model_name.as_deref(),Some("Tiny test model"));assert_eq!(m.file_type_code,Some(2));assert_eq!(m.file_type_description.as_deref(),Some("Q4_0"));assert_eq!(m.parameter_count,Some(7_000_000_000));assert_eq!(m.context_length,Some(8192));assert_eq!(m.block_count,Some(32));assert_eq!(m.embedding_length,Some(4096));assert_eq!(m.attention_head_count,Some(32));assert_eq!(m.attention_kv_head_count,Some(8));assert_eq!(m.attention_key_length,Some(128));assert_eq!(m.attention_value_length,Some(128));assert_eq!(m.rope_dimension_count,Some(128));assert_eq!(m.expert_count,Some(8));assert_eq!(m.expert_used_count,Some(2));assert_eq!(m.quantization_version,Some(2));assert_eq!(m.alignment,Some(32));let _=std::fs::remove_file(p);}
+    #[test]fn rejects_fixed_width_array_crossing_section_budget_before_skipping_payload(){
+        let path=std::env::temp_dir().join(format!("midsunday-gguf-fixed-array-section-preflight-{}-{}.gguf",std::process::id(),NEXT.fetch_add(1,Ordering::Relaxed)));
+        let header_position=MAX_METADATA_SECTION_BYTES-16;
+        let mut writer=File::create(&path).unwrap();
+        writer.set_len(MAX_METADATA_SECTION_BYTES+16).unwrap();
+        writer.seek(SeekFrom::Start(header_position)).unwrap();
+        writer.write_all(&10u32.to_le_bytes()).unwrap();
+        writer.write_all(&1u64.to_le_bytes()).unwrap();
+        drop(writer);
+        let mut reader=File::open(&path).unwrap();
+        reader.seek(SeekFrom::Start(header_position)).unwrap();
+        let error=skip_value(&mut reader,9,0).unwrap_err();
+        assert!(error.contains("metadata section exceeds the aggregate safe inspection limit"));
+        assert_eq!(reader.stream_position().unwrap(),header_position+12);
+        let _=std::fs::remove_file(path);
+    }
+    #[test]fn rejects_boolean_array_crossing_section_budget_before_reading_payload(){
+        let path=std::env::temp_dir().join(format!("midsunday-gguf-bool-array-section-preflight-{}-{}.gguf",std::process::id(),NEXT.fetch_add(1,Ordering::Relaxed)));
+        let header_position=MAX_METADATA_SECTION_BYTES-16;
+        let mut writer=File::create(&path).unwrap();
+        writer.set_len(MAX_METADATA_SECTION_BYTES+16).unwrap();
+        writer.seek(SeekFrom::Start(header_position)).unwrap();
+        writer.write_all(&7u32.to_le_bytes()).unwrap();
+        writer.write_all(&8u64.to_le_bytes()).unwrap();
+        drop(writer);
+        let mut reader=File::open(&path).unwrap();
+        reader.seek(SeekFrom::Start(header_position)).unwrap();
+        let error=skip_value(&mut reader,9,0).unwrap_err();
+        assert!(error.contains("metadata section exceeds the aggregate safe inspection limit"));
+        assert_eq!(reader.stream_position().unwrap(),header_position+12);
+        let _=std::fs::remove_file(path);
+    }
     #[test]fn rejects_metadata_key_payload_crossing_section_budget_before_reading(){
         let path=std::env::temp_dir().join(format!("midsunday-gguf-key-section-preflight-{}-{}.gguf",std::process::id(),NEXT.fetch_add(1,Ordering::Relaxed)));
         let prefix_position=MAX_METADATA_SECTION_BYTES-4;
