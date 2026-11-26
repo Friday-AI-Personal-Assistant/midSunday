@@ -457,3 +457,12 @@ The model library can explicitly inspect GGUF tensor descriptors without loading
 Known payload totals exclude inter-tensor alignment padding and do not claim to represent every byte of the GGUF file. This is stored tensor payload size only—not total file size, runtime RAM, VRAM, KV cache, allocator overhead, compute buffers, or a model-fit guarantee. The action is user-triggered, local, and read-only; it does not load weights, change settings, select a model, or contact a network service. The supported type list is intentionally conservative and must be expanded only with verified upstream layouts and regression fixtures.
 
 Regression coverage includes supported block-size calculations, unknown types, invalid alignment, malformed descriptors, offsets, truncated files, and overflow boundaries.
+
+
+## 31. GGUF tensor payload range integrity (2026-11-26)
+
+Before reporting known tensor payload totals, the analyser orders descriptors by their relative data offsets and verifies that every calculable, supported payload range ends before the next calculable supported range begins. Overlapping known ranges are rejected as malformed rather than double-counted. Descriptor order in the file is not assumed to be storage order. Checked arithmetic remains in place for range ends and aggregate counts.
+
+This is a structural integrity check, not a complete proof of the file's contents. Unsupported tensor types have unknown payload lengths, so their ranges cannot be checked for overlap with known or other unknown tensors. Inter-tensor padding is still excluded from the known payload total. The analyser remains local, user-triggered, read-only, and does not load tensor weights.
+
+Regression fixtures cover overlapping known ranges and valid non-overlapping ranges whose descriptor order differs from their storage order.

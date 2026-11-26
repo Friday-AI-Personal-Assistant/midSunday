@@ -164,6 +164,10 @@ pub fn analyse_tensor_storage(input:&str)->Result<TensorStorageAnalysis,String>{
     if data_start>file_size{return Err("GGUF tensor descriptors extend beyond the file.".to_owned());}
     let mut grouped:std::collections::BTreeMap<u32,TensorTypeSummary>=std::collections::BTreeMap::new();
     let mut known_total=0u64;let mut unknown_total=0u64;let mut analysed=0u64;
+    // Descriptor order is not trusted. Sort by relative data offset so known payload
+    // ranges can be checked for overlap without reading tensor weights.
+    descriptors.sort_unstable_by_key(|tensor| tensor.offset);
+    let mut previous_known_end:Option<u64>=None;
     for tensor in descriptors{
         let (name,block,block_bytes)=tensor_type_layout(tensor.type_code).unwrap_or(("UNKNOWN",0,0));
         let summary=grouped.entry(tensor.type_code).or_insert_with(||TensorTypeSummary{
@@ -174,11 +178,16 @@ pub fn analyse_tensor_storage(input:&str)->Result<TensorStorageAnalysis,String>{
         if let Some(bytes)=tensor_payload_bytes(&tensor.dimensions,block,block_bytes){
             let end=absolute.checked_add(bytes).ok_or_else(||"GGUF tensor payload size overflowed.".to_owned())?;
             if end>file_size{return Err("A GGUF tensor payload extends beyond the file.".to_owned());}
+            if previous_known_end.is_some_and(|previous_end| absolute<previous_end){
+                return Err("Known GGUF tensor payload ranges overlap.".to_owned());
+            }
+            previous_known_end=Some(end);
             summary.known_payload_bytes=summary.known_payload_bytes.checked_add(bytes).ok_or_else(||"Tensor payload total overflowed.".to_owned())?;
             known_total=known_total.checked_add(bytes).ok_or_else(||"Tensor payload total overflowed.".to_owned())?;
-            analysed+=1;
+            analysed=analysed.checked_add(1).ok_or_else(||"Analysed tensor count overflowed.".to_owned())?;
         }else{
-            summary.unknown_size_tensor_count+=1;unknown_total+=1;
+            summary.unknown_size_tensor_count=summary.unknown_size_tensor_count.checked_add(1).ok_or_else(||"Unknown tensor count overflowed.".to_owned())?;
+            unknown_total=unknown_total.checked_add(1).ok_or_else(||"Unknown tensor count overflowed.".to_owned())?;
         }
     }
     let status=if unknown_total==0{"complete"}else if analysed==0{"unknown"}else{"partial"};
@@ -312,15 +321,20 @@ mod tests{
         metadata.block_count=Some(u64::MAX); assert!(estimate_kv_cache(&metadata, 32768).is_err());
         let _=std::fs::remove_file(p);
     }
-    fn tensor_fixture(type_code:u32,dimension:u64,offset:u64,payload:&[u8])->Vec<u8>{
+    fn tensor_fixture_many(tensors:&[(u32,u64,u64)],payload:&[u8])->Vec<u8>{
         let mut b=b"GGUF".to_vec();b.extend_from_slice(&3u32.to_le_bytes());
-        b.extend_from_slice(&1u64.to_le_bytes());b.extend_from_slice(&1u64.to_le_bytes());
+        b.extend_from_slice(&(tensors.len() as u64).to_le_bytes());b.extend_from_slice(&1u64.to_le_bytes());
         entry_u32(&mut b,"general.alignment",32);
-        push_string(&mut b,"test.tensor");b.extend_from_slice(&1u32.to_le_bytes());
-        b.extend_from_slice(&dimension.to_le_bytes());b.extend_from_slice(&type_code.to_le_bytes());
-        b.extend_from_slice(&offset.to_le_bytes());
+        for (index,(type_code,dimension,offset)) in tensors.iter().enumerate(){
+            push_string(&mut b,&format!("test.tensor.{index}"));b.extend_from_slice(&1u32.to_le_bytes());
+            b.extend_from_slice(&dimension.to_le_bytes());b.extend_from_slice(&type_code.to_le_bytes());
+            b.extend_from_slice(&offset.to_le_bytes());
+        }
         let aligned=((b.len()+31)/32)*32;b.resize(aligned,0);
         b.extend_from_slice(payload);b
+    }
+    fn tensor_fixture(type_code:u32,dimension:u64,offset:u64,payload:&[u8])->Vec<u8>{
+        tensor_fixture_many(&[(type_code,dimension,offset)],payload)
     }
     #[test]fn analyses_known_q4_0_tensor_payload_without_reading_weights(){
         let p=temp(&tensor_fixture(2,32,0,&[0;18]),"gguf");
@@ -345,6 +359,17 @@ mod tests{
         let p=temp(&tensor_fixture(2,32,1,&[0;18]),"gguf");
         assert!(analyse_tensor_storage(p.to_str().unwrap()).unwrap_err().contains("not aligned"));
         let _=std::fs::remove_file(p);
+    }
+    #[test]fn rejects_overlapping_known_tensor_payload_ranges(){
+        let p=temp(&tensor_fixture_many(&[(2,32,0),(2,32,0)],&[0;18]),"gguf");
+        let error=analyse_tensor_storage(p.to_str().unwrap()).unwrap_err();
+        assert!(error.contains("overlap"));let _=std::fs::remove_file(p);
+    }
+    #[test]fn accepts_non_overlapping_known_tensor_payload_ranges_in_offset_order(){
+        let p=temp(&tensor_fixture_many(&[(2,32,32),(2,32,0)],&[0;50]),"gguf");
+        let report=analyse_tensor_storage(p.to_str().unwrap()).unwrap();
+        assert_eq!(report.status,"complete");assert_eq!(report.analysed_tensor_count,2);
+        assert_eq!(report.known_payload_bytes,36);let _=std::fs::remove_file(p);
     }
     #[test]fn rejects_tensor_dimensions_that_break_known_block_layout(){
         let p=temp(&tensor_fixture(2,31,0,&[0;18]),"gguf");

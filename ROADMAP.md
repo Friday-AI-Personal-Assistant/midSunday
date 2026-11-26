@@ -1401,3 +1401,14 @@ Startup duration includes process launch, server initialisation, model loading, 
 - [ ] Expand supported GGML types only after verifying upstream block layouts and adding fixtures for each.
 
 The reported known payload total excludes inter-tensor alignment padding and leaves unsupported tensor types unknown. It is not a RAM/VRAM estimate or a model-fit guarantee. See docs/HARDWARE-INTELLIGENCE.md section 30.
+
+
+### 2026-11-26 — GGUF tensor payload range integrity (Batch #131)
+
+- [x] Sort tensor descriptors by their relative data offsets for payload-range validation without assuming descriptor listing order is storage order.
+- [x] Reject overlapping payload ranges when both tensor layouts have known, verified sizes.
+- [x] Preserve checked file-boundary arithmetic and use checked arithmetic for analysed/unknown aggregate counters.
+- [x] Add regression fixtures for overlapping known ranges and valid non-overlapping ranges with descriptors listed out of storage order.
+- [ ] Validate overlap and offset behaviour against a representative real-world GGUF corpus across architectures, quantisations, and exporter versions.
+
+Unknown tensor types still have unknown payload lengths, so their ranges cannot be included in overlap checks. The validation is structural and does not read weights, calculate runtime memory, or guarantee model compatibility. See docs/HARDWARE-INTELLIGENCE.md section 31.

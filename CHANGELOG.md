@@ -1,4 +1,5 @@
 # Changelog
+- Reject overlapping known GGUF tensor payload ranges and check aggregate counters with checked arithmetic; descriptor storage order is validated independently of descriptor listing order.
 - Fixed unsupported GGML tensor types to return an unknown payload size safely instead of entering block arithmetic with a zero block size.
 
 ## 2026-11-26
