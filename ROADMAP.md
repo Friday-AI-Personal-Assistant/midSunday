@@ -1818,3 +1818,47 @@ See docs/HARDWARE-INTELLIGENCE.md section 67.
 - [x] Explicitly avoid claims about free VRAM, model fit, or inference-backend offload support.
 
 See docs/HARDWARE-INTELLIGENCE.md section 68.
+
+## Planned feature — Live System Monitor (HIARM companion)
+
+**Status:** Approved for implementation after Batch #177. This is a planned live-observation feature; it is not yet implemented. Keep it distinct from the existing on-demand hardware inventory and model-memory evidence panels.
+
+**Goal:** Give users a clean, understandable, continuously refreshed view of how their computer is performing, similar to a lightweight system-monitor dashboard, while keeping measurements local and honest about platform/driver limitations.
+
+### User experience
+
+- [ ] Add a dedicated **System Monitor** view reachable from Settings → System & hardware (or its own clearly labelled navigation entry if the UX design supports it better).
+- [ ] Present clear summary cards for CPU, RAM, GPU, storage, network, and battery (battery only where applicable), with current values and readable units.
+- [ ] Show live history graphs/sparklines for supported metrics, with sensible time windows and no distracting visual noise.
+- [ ] Show total system resource usage and midSunday's own process usage as separate measurements; never confuse the two.
+- [ ] RAM: show total, used, available, and percentage, with definitions consistent across operating systems.
+- [ ] CPU: show overall utilisation and, where reliable, per-core utilisation; explain that readings are sampled over an interval.
+- [ ] GPU: show per-physical-adapter utilisation and memory usage/budget where reliable APIs expose them; show temperature, engine breakdown, and vendor details only when supported.
+- [ ] Storage: show volume capacity/used/free space, and add read/write activity rates where reliable and useful.
+- [ ] Network: show upload/download throughput and clearly identify whether readings are system-wide or process-specific.
+- [ ] Battery: show charge percentage, charging/discharging state, and remaining-time estimate only when the OS provides a trustworthy value.
+- [ ] Provide clear unavailable/unsupported/permission-limited states instead of fabricated, stale, or misleading zero values.
+- [ ] Keep the layout responsive, accessible, keyboard-friendly, and readable at different window sizes and display scales.
+
+### Measurement and architecture
+
+- [ ] Implement a Rust-side, cross-platform metrics provider with a stable serializable snapshot schema and explicit per-metric availability/source metadata.
+- [ ] Use appropriate native operating-system interfaces: Windows system/performance and graphics APIs; Linux procfs, sysfs, and supported graphics interfaces; macOS system-statistics and supported graphics interfaces.
+- [ ] Treat GPU monitoring as capability-dependent: adapters, vendors, drivers, and OS versions expose different metrics. Do not assume a single portable GPU utilisation/temperature API exists.
+- [ ] Sample at a conservative interval (initial target around 1–2 seconds, subject to profiling); avoid expensive polling and suspend or reduce sampling when the monitor is not visible.
+- [ ] Keep collection asynchronous and bounded so monitoring cannot freeze the UI or interfere with local model inference.
+- [ ] Calculate rate-based metrics from timestamped counter deltas, handle counter resets/overflow, and identify first-sample or unavailable states correctly.
+- [ ] Keep system-wide metrics, per-process metrics, and GPU adapter metrics clearly separated; do not infer GPU model-loading or inference support from utilisation readings.
+- [ ] Make monitoring read-only. It must not kill processes, change power plans, alter system settings, close applications, or automatically change model/runtime configuration.
+
+### Privacy, performance, and validation
+
+- [ ] Keep monitoring local by default; do not transmit hardware metrics or usage history to a server.
+- [ ] Do not enumerate or expose other applications' process names/details unless a separate, explicitly approved feature requires it.
+- [ ] Bound in-memory graph history and avoid persistent collection by default; any future export must be user-initiated and clearly explained.
+- [ ] Add Rust unit tests for metric calculations, counter deltas, missing values, invalid readings, and platform-independent snapshot handling.
+- [ ] Add frontend tests for unavailable states, unit formatting, graph history bounds, and separation of system versus midSunday process readings.
+- [ ] Build and test on Windows, Linux, and macOS; validate real readings on physical machines where possible because hosted CI cannot prove hardware sensor support or accuracy.
+- [ ] Document per-platform limitations and distinguish measured values from estimates or OS-reported budgets.
+
+**Relationship to HIARM:** The System Monitor observes current resource usage. HIARM may later consume selected, validated measurements to improve advisory workload/model recommendations, but monitoring and adaptation remain separate. No automatic system changes are permitted without a separately designed, user-approved control.

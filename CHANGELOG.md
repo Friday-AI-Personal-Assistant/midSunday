@@ -208,3 +208,6 @@ All notable project changes are recorded here. The project is in foundation/prot
 
 
 - Added a derived GPU inventory assessment to HIARM snapshots, distinguishing hardware adapters from software renderers and reporting conservative per-adapter memory summaries without claiming inference compatibility or pooling GPU memory.
+
+
+- Added the approved Live System Monitor feature to the roadmap: a local-first, cross-platform dashboard for CPU, RAM, GPU, storage, network, battery, and midSunday process usage, with bounded sampling, honest unsupported states, privacy safeguards, and real-hardware validation requirements. Implementation is scheduled after Batch #177.
