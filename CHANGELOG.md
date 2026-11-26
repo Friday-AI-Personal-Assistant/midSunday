@@ -177,3 +177,5 @@ All notable project changes are recorded here. The project is in foundation/prot
 
 
 - Bounded GGUF tensor-storage inspection memory with a checked 64 MiB aggregate budget for descriptor records and duplicate-name indexing, applied before collection allocation; retained separate tensor-name and tensor-count limits and added boundary regression tests.
+
+- Corrected the GGUF string-array metadata-budget sparse-file regression fixture to include the full array header and string-length field; production parser limits and behaviour are unchanged.

@@ -606,7 +606,8 @@ mod tests{
         let p=std::env::temp_dir().join(format!("midsunday-gguf-array-budget-{}-{}.gguf",std::process::id(),NEXT.fetch_add(1,Ordering::Relaxed)));
         let mut file=File::create(&p).unwrap();
         let start=MAX_METADATA_SECTION_BYTES-16;
-        file.set_len(start+8+8+MAX_STRING_BYTES).unwrap();
+        // Array header (12 bytes), string length (8 bytes), then the full payload.
+        file.set_len(start+12+8+MAX_STRING_BYTES).unwrap();
         file.seek(SeekFrom::Start(start)).unwrap();
         file.write_all(&8u32.to_le_bytes()).unwrap();
         file.write_all(&1u64.to_le_bytes()).unwrap();

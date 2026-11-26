@@ -1644,3 +1644,12 @@ This reduces avoidable allocations for malformed/truncated input and ties report
 - [x] Add sparse-file regression coverage proving a single oversized string-array entry is stopped mid-entry.
 
 This closes a per-entry accounting gap for string arrays; it does not change tensor parsing or load model weights. See docs/HARDWARE-INTELLIGENCE.md section 53.
+
+
+### 2026-11-26 — GGUF string-array budget fixture correction (Batch #160)
+
+- [x] Correct the sparse-file regression fixture to include the complete array header, string-length field, and declared string payload.
+- [x] Keep the production 64 MiB mid-entry enforcement unchanged; this batch corrects test-fixture sizing only.
+- [x] Re-run the shared Rust test suite on Windows, Linux, and macOS.
+
+The previous fixture was eight bytes too short and therefore triggered the correct truncated-string guard before reaching the aggregate metadata-section guard. See docs/HARDWARE-INTELLIGENCE.md section 53.
