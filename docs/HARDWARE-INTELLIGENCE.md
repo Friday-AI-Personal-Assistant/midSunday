@@ -634,3 +634,8 @@ The shared GGUF string reader now verifies that the complete 8-byte string-lengt
 ## 59. GGUF string-array boundary regression fixture alignment (2026-11-26)
 
 Updated the existing mid-entry string-array regression test to reflect the stricter shared string-reader contract: when fewer than eight metadata-section bytes remain, the length prefix is rejected before it is consumed. The fixture now asserts the cursor remains at the start of that prefix, not after it. This is a test expectation correction; the Batch #167 parser guard remains unchanged.
+
+
+## 60. GGUF metadata field and scalar section-boundary preflight (2026-11-26)
+
+Both metadata inspection paths now preflight the four-byte metadata value-type tag before reading it. Scalar numeric and boolean payloads are checked against the remaining 64 MiB metadata-section budget before consumption, and array element-type/count headers are checked as a complete 12-byte unit before either field is read. String values retain their dedicated prefix and payload checks; array payload checks remain unchanged. Sparse-file regression coverage proves a type tag and an eight-byte scalar payload remain unread when they would cross the section boundary. Existing file truncation, value validation, array-count, and memory limits remain in force; tensor weights remain unread.

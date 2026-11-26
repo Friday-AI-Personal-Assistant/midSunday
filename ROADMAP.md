@@ -1718,3 +1718,13 @@ This closes the final-seven-byte boundary gap for GGUF string-length prefixes wi
 - [x] Keep the Batch #167 shared-reader preflight unchanged; this follow-up corrects the older test's cursor expectation only.
 
 See docs/HARDWARE-INTELLIGENCE.md section 59.
+
+
+### 2026-11-26 — GGUF metadata field and scalar section-boundary preflight (Batch #169)
+
+- [x] Preflight the four-byte metadata value-type tag before reading it in both metadata inspection paths.
+- [x] Preflight fixed-width numeric and boolean scalar payloads against the remaining 64 MiB metadata-section budget.
+- [x] Preflight the complete 12-byte array element-type/count header before consuming either field.
+- [x] Add sparse-file regression coverage proving boundary-crossing type tags and scalar payloads remain unread.
+
+This extends the aggregate metadata-section boundary to the remaining fixed-size metadata headers and scalar values. Existing string and array payload protections remain in place. See docs/HARDWARE-INTELLIGENCE.md section 60.

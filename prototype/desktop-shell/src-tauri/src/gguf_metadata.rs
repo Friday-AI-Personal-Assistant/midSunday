@@ -104,7 +104,15 @@ fn enforce_metadata_section_limit(f:&mut File,start:u64)->Result<(),String>{
     }
     Ok(())
 }
+fn read_metadata_type(f:&mut File,metadata_section_start:u64)->Result<u32,String>{
+    ensure_metadata_section_bytes(f,metadata_section_start,4)?;
+    read_u32(f)
+}
 fn scalar(f:&mut File,kind:u32,metadata_section_start:u64)->Result<Value,String>{
+    // Preflight fixed-width scalar payloads before consuming any bytes. Strings
+    // use their dedicated length-prefix and payload checks below.
+    let width=match kind{0|1|7=>Some(1),2|3=>Some(2),4|5|6=>Some(4),10|11|12=>Some(8),_=>None};
+    if let Some(width)=width{ensure_metadata_section_bytes(f,metadata_section_start,width)?;}
     match kind {
         0=>Ok(Value::Unsigned(read_u8(f)? as u64)),
         1=>Ok(Value::Signed(read_u8(f)? as i8 as i64)),
@@ -136,6 +144,9 @@ fn skip_boolean_array(f:&mut File,count:u64)->Result<(),String>{
 }
 fn skip_value(f:&mut File,kind:u32,metadata_section_start:u64)->Result<(),String>{
     if kind!=9{let _=scalar(f,kind,metadata_section_start)?;return Ok(());}
+    // The array element-type and item-count fields are part of the bounded
+    // metadata section just like the array payload itself.
+    ensure_metadata_section_bytes(f,metadata_section_start,12)?;
     let element=read_u32(f)?;let count=read_u64(f)?;
     if count>MAX_ARRAY_ITEMS{return Err("A GGUF metadata array exceeds the safe inspection limit.".to_owned());}
     if element==9{return Err("Nested GGUF metadata arrays are not supported.".to_owned());}
@@ -302,7 +313,7 @@ pub fn analyse_tensor_storage(input:&str)->Result<TensorStorageAnalysis,String>{
             .ok_or_else(||"GGUF metadata key byte count overflowed.".to_owned())?;
         if metadata_key_bytes>MAX_METADATA_KEY_BYTES{return Err("GGUF metadata keys exceed the aggregate safe inspection limit.".to_owned());}
         if !metadata_keys.insert(key.clone()){return Err("The GGUF file contains a duplicate metadata key.".to_owned());}
-        let kind=read_u32(&mut f)?;
+        let kind=read_metadata_type(&mut f,metadata_section_start)?;
         if key=="general.alignment"{
             let value=required_u32(scalar(&mut f,kind,metadata_section_start)?,&key)?;
             alignment=value;
@@ -440,7 +451,7 @@ pub fn inspect(input:&str)->Result<GgufMetadata,String>{
             .ok_or_else(||"GGUF metadata key byte count overflowed.".to_owned())?;
         if metadata_key_bytes>MAX_METADATA_KEY_BYTES{return Err("GGUF metadata keys exceed the aggregate safe inspection limit.".to_owned());}
         if !metadata_keys.insert(key.clone()){return Err("The GGUF file contains a duplicate metadata key.".to_owned());}
-        let kind=read_u32(&mut f)?;
+        let kind=read_metadata_type(&mut f,metadata_section_start)?;
         let Some(field)=selected_metadata_field(&key) else{
             skip_value(&mut f,kind,metadata_section_start)?;
             enforce_metadata_section_limit(&mut f,metadata_section_start)?;
@@ -646,6 +657,29 @@ mod tests{
         let aligned=((b.len()+31)/32)*32;b.resize(aligned,0);b
     }
     fn temp(bytes:&[u8],ext:&str)->std::path::PathBuf{let p=std::env::temp_dir().join(format!("midsunday-gguf-{}-{}.{}",std::process::id(),NEXT.fetch_add(1,Ordering::Relaxed),ext));let mut f=File::create(&p).unwrap();f.write_all(bytes).unwrap();p}
+    #[test]fn preflights_metadata_type_and_scalar_payload_boundaries(){
+        let p=std::env::temp_dir().join(format!("midsunday-gguf-scalar-boundary-{}-{}.gguf",std::process::id(),NEXT.fetch_add(1,Ordering::Relaxed)));
+        let mut file=File::create(&p).unwrap();
+        file.set_len(MAX_METADATA_SECTION_BYTES).unwrap();
+        file.seek(SeekFrom::Start(MAX_METADATA_SECTION_BYTES-3)).unwrap();
+        drop(file);
+        let mut file=File::options().read(true).write(true).open(&p).unwrap();
+        let before=file.stream_position().unwrap();
+        assert!(read_metadata_type(&mut file,0).unwrap_err().contains("aggregate safe inspection limit"));
+        assert_eq!(file.stream_position().unwrap(),before);
+        let _=std::fs::remove_file(&p);
+
+        let p=std::env::temp_dir().join(format!("midsunday-gguf-scalar-payload-{}-{}.gguf",std::process::id(),NEXT.fetch_add(1,Ordering::Relaxed)));
+        let mut file=File::create(&p).unwrap();
+        file.set_len(MAX_METADATA_SECTION_BYTES).unwrap();
+        file.seek(SeekFrom::Start(MAX_METADATA_SECTION_BYTES-4)).unwrap();
+        drop(file);
+        let mut file=File::options().read(true).write(true).open(&p).unwrap();
+        let before=file.stream_position().unwrap();
+        assert!(scalar(&mut file,10,0).unwrap_err().contains("aggregate safe inspection limit"));
+        assert_eq!(file.stream_position().unwrap(),before);
+        let _=std::fs::remove_file(&p);
+    }
     #[test]fn rejects_string_array_that_exceeds_metadata_section_budget_mid_entry(){
         let p=std::env::temp_dir().join(format!("midsunday-gguf-array-budget-{}-{}.gguf",std::process::id(),NEXT.fetch_add(1,Ordering::Relaxed)));
         let mut file=File::create(&p).unwrap();
