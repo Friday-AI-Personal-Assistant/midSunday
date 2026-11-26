@@ -486,3 +486,12 @@ The result is deliberately not a compatibility verdict. If the estimated KV cach
 Missing GGUF dimensions and unavailable hardware readings produce explicit unknown states rather than guessed values. The check runs locally on a blocking worker, does not load model weights, does not enumerate unrelated processes, does not transmit paths or hardware information, and does not select a model or change settings. Its snapshot can become stale immediately as system memory changes.
 
 Regression tests cover KV-cache-above-available-RAM, KV-cache-below-available-RAM without a fit guarantee, missing metadata, and unavailable hardware memory.
+
+
+## 34. GGUF-reported context-length advisory (2026-11-26)
+
+KV-cache estimates and host-memory evidence now compare the configured context length with the GGUF-reported `.context_length` value when it is present. The report distinguishes a configured context within the reported value, one that exceeds it, a missing value, and an unusable zero value. The KV-cache arithmetic is still shown when its required dimensions are available; exceeding the reported context does not silently block the estimate.
+
+This comparison is deliberately advisory. GGUF metadata is file-supplied and may be inaccurate or incomplete; the reported context value is not treated as a verified runtime maximum. Some inference runtimes support RoPE scaling or context extension, while actual support depends on the model, runtime, and configuration. Being within the reported value does not guarantee runtime support or model fit. No context setting is changed, and no compatibility verdict is produced.
+
+Regression tests cover configured context within, above, and without a reported context value, including preservation of the arithmetic estimate when the configured context exceeds the reported value.

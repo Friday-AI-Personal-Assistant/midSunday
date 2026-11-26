@@ -249,17 +249,35 @@ pub fn inspect(input:&str)->Result<GgufMetadata,String>{
 pub struct KvCacheEstimate {
     pub status: String, pub context_tokens: u64, pub bytes_per_element: u64,
     pub key_cache_bytes: Option<u64>, pub value_cache_bytes: Option<u64>, pub total_bytes: Option<u64>,
+    pub reported_context_length: Option<u64>, pub context_limit_status: String, pub context_limit_note: String,
     pub assumptions: String,
+}
+
+fn context_limit_advisory(metadata: &GgufMetadata, context_tokens: u64) -> (String, String) {
+    match metadata.context_length {
+        Some(reported) if reported > 0 && context_tokens > reported => (
+            "exceeds_reported_context".to_owned(),
+            format!("The configured context ({context_tokens} tokens) exceeds the GGUF-reported context length ({reported} tokens). This is advisory only: some runtimes support RoPE scaling or context extension, and GGUF metadata is not a verified runtime limit.")
+        ),
+        Some(reported) if reported > 0 => (
+            "within_reported_context".to_owned(),
+            format!("The configured context ({context_tokens} tokens) is within the GGUF-reported context length ({reported} tokens). This does not prove that the runtime supports this context.")
+        ),
+        Some(_) => ("reported_context_unusable".to_owned(), "The GGUF file reports a zero context length, so it cannot provide a useful context comparison.".to_owned()),
+        None => ("not_provided".to_owned(), "The GGUF file does not provide a context length for comparison.".to_owned()),
+    }
 }
 
 pub fn estimate_kv_cache(metadata: &GgufMetadata, context_tokens: u64) -> Result<KvCacheEstimate, String> {
     if !(512..=32_768).contains(&context_tokens) { return Err("Context length must be between 512 and 32,768 tokens.".to_owned()); }
     const BYTES_PER_ELEMENT: u64 = 2;
+    let (context_limit_status, context_limit_note) = context_limit_advisory(metadata, context_tokens);
     let (Some(layers), Some(kv_heads), Some(key_length), Some(value_length)) = (
         metadata.block_count, metadata.attention_kv_head_count, metadata.attention_key_length, metadata.attention_value_length,
     ) else {
         return Ok(KvCacheEstimate { status: "insufficient_metadata".to_owned(), context_tokens, bytes_per_element: BYTES_PER_ELEMENT,
             key_cache_bytes: None, value_cache_bytes: None, total_bytes: None,
+            reported_context_length: metadata.context_length, context_limit_status, context_limit_note,
             assumptions: "Requires layer count, KV-head count, and key/value head lengths from GGUF metadata.".to_owned() });
     };
     if layers == 0 || kv_heads == 0 || key_length == 0 || value_length == 0 {
@@ -272,6 +290,7 @@ pub fn estimate_kv_cache(metadata: &GgufMetadata, context_tokens: u64) -> Result
     let total_bytes = key_bytes.checked_add(value_bytes).ok_or_else(|| "Total KV-cache estimate exceeded the safe numeric range.".to_owned())?;
     Ok(KvCacheEstimate { status: "estimated".to_owned(), context_tokens, bytes_per_element: BYTES_PER_ELEMENT,
         key_cache_bytes: Some(key_bytes), value_cache_bytes: Some(value_bytes), total_bytes: Some(total_bytes),
+        reported_context_length: metadata.context_length, context_limit_status, context_limit_note,
         assumptions: "FP16 K/V cache (2 bytes per element), one sequence, using the configured context length and GGUF-reported dimensions. Actual runtime cache type, batching, parallel sequences, padding, and implementation overhead can change memory use.".to_owned() })
 }
 
@@ -287,6 +306,9 @@ pub struct ModelMemoryEvidence {
     pub known_tensor_payload_bytes: u64,
     pub unknown_size_tensor_count: u64,
     pub context_tokens: u64,
+    pub reported_context_length: Option<u64>,
+    pub context_limit_status: String,
+    pub context_limit_note: String,
     pub kv_cache_estimate_bytes: Option<u64>,
     pub total_system_memory_bytes: u64,
     pub available_system_memory_bytes: u64,
@@ -333,7 +355,10 @@ pub fn assess_memory_evidence(
         tensor_analysis_status: tensor_analysis.status.clone(),
         known_tensor_payload_bytes: tensor_analysis.known_payload_bytes,
         unknown_size_tensor_count: tensor_analysis.unknown_size_tensor_count,
-        context_tokens, kv_cache_estimate_bytes: kv_bytes,
+        context_tokens, reported_context_length: estimate.reported_context_length,
+        context_limit_status: estimate.context_limit_status,
+        context_limit_note: estimate.context_limit_note,
+        kv_cache_estimate_bytes: kv_bytes,
         total_system_memory_bytes: total_memory_bytes,
         available_system_memory_bytes: available,
         kv_cache_percent_of_available_memory: percentage,
@@ -375,6 +400,19 @@ mod tests{
         assert_eq!(estimate.key_cache_bytes, Some(536_870_912));
         assert_eq!(estimate.value_cache_bytes, Some(536_870_912));
         assert_eq!(estimate.total_bytes, Some(1_073_741_824));
+        let _=std::fs::remove_file(p);
+    }
+    #[test]fn reports_context_length_advisory_without_rejecting_estimate(){
+        let p=temp(&fixture(), "gguf"); let metadata=inspect(p.to_str().unwrap()).unwrap();
+        let within=estimate_kv_cache(&metadata, 8192).unwrap();
+        assert_eq!(within.context_limit_status, "within_reported_context");
+        assert_eq!(within.reported_context_length, Some(8192));
+        let above=estimate_kv_cache(&metadata, 16384).unwrap();
+        assert_eq!(above.status, "estimated");
+        assert_eq!(above.context_limit_status, "exceeds_reported_context");
+        assert!(above.context_limit_note.contains("RoPE scaling"));
+        let mut missing=metadata.clone(); missing.context_length=None;
+        assert_eq!(estimate_kv_cache(&missing, 4096).unwrap().context_limit_status, "not_provided");
         let _=std::fs::remove_file(p);
     }
     #[test]fn reports_missing_dimensions_without_guessing(){

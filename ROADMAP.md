@@ -1437,3 +1437,16 @@ See docs/HARDWARE-INTELLIGENCE.md section 32.
 - [ ] Build a full compatibility engine only after representative real-device measurements establish reliable model-weight, runtime, compute-buffer, and accelerator requirements.
 
 The Batch #133 report is informational evidence only. It does not select models, alter context or resource settings, load weights, or claim CPU/GPU compatibility. See docs/HARDWARE-INTELLIGENCE.md section 33.
+
+
+### 2026-11-26 — GGUF-reported context-length advisory (Batch #135)
+
+- [x] Compare the configured context length with the GGUF-reported context length when available.
+- [x] Distinguish within-reported, exceeds-reported, missing, and unusable context metadata states.
+- [x] Preserve the theoretical KV-cache calculation when the configured context exceeds the reported value, while displaying a clear advisory.
+- [x] Explain that the GGUF value is not a verified runtime maximum and that RoPE scaling/context extension may be runtime-dependent.
+- [x] Include the advisory in both per-model KV-cache estimates and host-memory evidence.
+- [x] Add regression tests for within, above, and missing reported context values.
+- [ ] Validate reported-context interpretation against a representative GGUF corpus and supported llama.cpp runtime configurations.
+
+This is an informational metadata comparison only. It does not reject a context, change settings, prove runtime support, or guarantee model fit. See docs/HARDWARE-INTELLIGENCE.md section 34.

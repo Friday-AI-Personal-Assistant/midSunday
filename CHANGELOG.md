@@ -135,3 +135,5 @@ All notable project changes are recorded here. The project is in foundation/prot
 - Extended the GGUF inspector with selected GQA, key/value head, RoPE, MoE expert, quantisation-version, and alignment metadata; added UI fields and synthetic regression coverage.
 
 - Fixed the startup-memory diagnostics test fixture to initialize the new report field and removed the resulting Rust warnings; the runtime behaviour is unchanged.
+
+- Added a GGUF-reported context-length advisory to KV-cache and host-memory evidence reports, distinguishing within/above/missing metadata without treating file metadata as a hard runtime limit; added regression coverage.
