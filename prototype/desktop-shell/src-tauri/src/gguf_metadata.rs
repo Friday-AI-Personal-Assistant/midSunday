@@ -5,6 +5,7 @@ use std::{collections::HashSet, fs::File, io::{Read, Seek, SeekFrom}, path::Path
 
 const MAX_METADATA_ENTRIES: u64 = 100_000;
 const MAX_TENSORS: u64 = 1_000_000;
+const MIN_TENSOR_DESCRIPTOR_BYTES: u64 = 33;
 const MAX_STRING_BYTES: u64 = 1_048_576;
 const MAX_ARRAY_ITEMS: u64 = 10_000_000;
 
@@ -220,6 +221,18 @@ pub fn analyse_tensor_storage(input:&str)->Result<TensorStorageAnalysis,String>{
         }else{skip_value(&mut f,kind)?;}
     }
     if alignment==0 || alignment>4096 || !alignment.is_power_of_two(){return Err("GGUF tensor alignment must be a power of two from 1 to 4096 bytes.".to_owned());}
+    // A descriptor needs at least: u64 name length, one UTF-8 name byte,
+    // u32 dimension count, one u64 dimension, u32 type, and u64 data offset.
+    // Check this lower bound against the actual remaining file before allocating
+    // descriptor vectors or the duplicate-name set from an untrusted header.
+    let descriptor_start=f.stream_position().map_err(|e|format!("Could not locate GGUF tensor descriptors: {e}"))?;
+    let minimum_descriptor_bytes=tensor_count.checked_mul(MIN_TENSOR_DESCRIPTOR_BYTES)
+        .ok_or_else(||"GGUF tensor descriptor byte count overflowed.".to_owned())?;
+    let remaining_file_bytes=file_size.checked_sub(descriptor_start)
+        .ok_or_else(||"GGUF tensor descriptor position exceeds the file length.".to_owned())?;
+    if minimum_descriptor_bytes>remaining_file_bytes{
+        return Err("The declared GGUF tensor descriptors cannot fit within the remaining file bytes.".to_owned());
+    }
     let count=usize::try_from(tensor_count).map_err(|_|"Tensor count is too large for this device.".to_owned())?;
     let mut descriptors=Vec::with_capacity(count);
     let mut tensor_names=HashSet::with_capacity(count);
@@ -559,6 +572,14 @@ mod tests{
         let p=temp(&b,"gguf");
         assert!(inspect(p.to_str().unwrap()).unwrap_err().contains("too many tensors"));
         assert!(analyse_tensor_storage(p.to_str().unwrap()).unwrap_err().contains("too many tensors"));
+        let _=std::fs::remove_file(p);
+    }
+    #[test]fn rejects_impossible_tensor_descriptor_count_before_allocation(){
+        let mut b=metadata_keys_fixture(&[]);
+        b[8..16].copy_from_slice(&1u64.to_le_bytes());
+        let p=temp(&b,"gguf");
+        let error=analyse_tensor_storage(p.to_str().unwrap()).unwrap_err();
+        assert!(error.contains("cannot fit within the remaining file bytes"));
         let _=std::fs::remove_file(p);
     }
     #[test]fn rejects_truncated_metadata_and_unreasonable_counts(){let mut b=fixture();b.truncate(35);let p=temp(&b,"gguf");assert!(inspect(p.to_str().unwrap()).is_err());let _=std::fs::remove_file(p);let mut b=fixture();b[20..28].copy_from_slice(&(MAX_METADATA_ENTRIES+1).to_le_bytes());let p=temp(&b,"gguf");assert!(inspect(p.to_str().unwrap()).unwrap_err().contains("too many metadata"));let _=std::fs::remove_file(p);}

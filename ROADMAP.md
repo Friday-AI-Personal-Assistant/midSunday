@@ -1557,3 +1557,13 @@ This checks internal metadata consistency only; it does not prove the declared a
 - [x] Add a regression test proving both inspection paths reject the same over-limit file.
 
 This is a defensive parser bound, not a model-loadability guarantee. See `docs/HARDWARE-INTELLIGENCE.md` section 44.
+
+
+### 2026-11-26 — GGUF tensor-descriptor allocation preflight (Batch #150)
+
+- [x] Define the minimum byte length of a valid tensor descriptor.
+- [x] Check the declared descriptor count against remaining file bytes using checked arithmetic before count-sized allocations.
+- [x] Reject impossible/truncated descriptor declarations before allocating descriptor vectors or tensor-name sets.
+- [x] Add a regression test using a tiny file with an impossible declared tensor count.
+
+This is an allocation-safety preflight; detailed descriptor and payload validation remains in place. See `docs/HARDWARE-INTELLIGENCE.md` section 45.

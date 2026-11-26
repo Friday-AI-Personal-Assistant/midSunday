@@ -160,3 +160,6 @@ All notable project changes are recorded here. The project is in foundation/prot
 - Hardened GGUF architecture metadata consistency: recognised architecture-specific fields must match the declared `general.architecture` namespace regardless of metadata order, and are rejected when the declaration is missing. Added regression coverage; tensor weights remain unread.
 
 - Unified the GGUF tensor-count safety limit across metadata inspection and tensor-storage analysis using a shared one-million-descriptor cap, with regression coverage for both entry points.
+
+
+- Hardened GGUF tensor-storage analysis with a checked minimum-descriptor-size preflight, rejecting impossible header counts before allocating descriptor and tensor-name collections; added regression coverage.
