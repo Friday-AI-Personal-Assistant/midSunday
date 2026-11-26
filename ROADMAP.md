@@ -1700,3 +1700,13 @@ This closes the remaining single-string allocation gap in the metadata-section w
 - [x] Add regression tests proving over-budget numeric and boolean array payloads remain untouched.
 
 This prevents array parsing from crossing the 64 MiB metadata boundary before the normal end-of-entry check. See docs/HARDWARE-INTELLIGENCE.md section 57.
+
+
+### 2026-11-26 — GGUF string-length-prefix section-boundary preflight (Batch #167)
+
+- [x] Check that a complete 8-byte GGUF string-length prefix fits inside the remaining 64 MiB metadata-section budget before reading it.
+- [x] Apply the guard through the shared reader used by metadata keys, scalar strings, and unknown string-array elements.
+- [x] Add regression tests proving metadata-key and scalar-string length prefixes remain unread when they cross the section boundary.
+- [x] Preserve existing string-payload, aggregate-key, per-string, and opened-file preflight checks.
+
+This closes the final-seven-byte boundary gap for GGUF string-length prefixes without changing ordinary metadata parsing or tensor handling. See docs/HARDWARE-INTELLIGENCE.md section 58.

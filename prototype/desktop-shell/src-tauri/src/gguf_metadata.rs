@@ -54,6 +54,15 @@ fn read_metadata_key(f:&mut File,remaining_key_budget:u64,metadata_section_start
     read_string_with_limits(f,Some(section_end),remaining_key_budget,"GGUF metadata keys exceed the aggregate safe inspection limit.")
 }
 fn read_string_with_limits(f:&mut File,section_end:Option<u64>,max_bytes:u64,limit_error:&str)->Result<String,String>{
+    // The 8-byte length prefix is part of the encoded metadata section too.
+    // Reject a prefix that would cross the section boundary before consuming it.
+    if let Some(end)=section_end{
+        let position=f.stream_position().map_err(|_|"Could not locate GGUF string length prefix.".to_owned())?;
+        let remaining=end.checked_sub(position).ok_or_else(||"GGUF metadata section exceeds the aggregate safe inspection limit.".to_owned())?;
+        if remaining<std::mem::size_of::<u64>() as u64{
+            return Err("GGUF metadata section exceeds the aggregate safe inspection limit.".to_owned());
+        }
+    }
     let len=read_u64(f)?;
     if len>MAX_STRING_BYTES{return Err("A GGUF metadata string exceeds the safe inspection limit.".to_owned());}
     if len>max_bytes{return Err(limit_error.to_owned());}
@@ -702,7 +711,7 @@ mod tests{
         assert_eq!(reader.stream_position().unwrap(),header_position+12);
         let _=std::fs::remove_file(path);
     }
-    #[test]fn rejects_metadata_key_payload_crossing_section_budget_before_reading(){
+    #[test]fn rejects_metadata_key_length_prefix_crossing_section_budget_before_reading(){
         let path=std::env::temp_dir().join(format!("midsunday-gguf-key-section-preflight-{}-{}.gguf",std::process::id(),NEXT.fetch_add(1,Ordering::Relaxed)));
         let prefix_position=MAX_METADATA_SECTION_BYTES-4;
         let mut writer=File::create(&path).unwrap();
@@ -714,10 +723,10 @@ mod tests{
         reader.seek(SeekFrom::Start(prefix_position)).unwrap();
         let error=read_metadata_key(&mut reader,MAX_METADATA_KEY_BYTES,0).unwrap_err();
         assert!(error.contains("metadata section exceeds the aggregate safe inspection limit"));
-        assert_eq!(reader.stream_position().unwrap(),prefix_position+8);
+        assert_eq!(reader.stream_position().unwrap(),prefix_position);
         let _=std::fs::remove_file(path);
     }
-    #[test]fn rejects_scalar_string_payload_crossing_section_budget_before_reading(){
+    #[test]fn rejects_scalar_string_length_prefix_crossing_section_budget_before_reading(){
         let path=std::env::temp_dir().join(format!("midsunday-gguf-value-section-preflight-{}-{}.gguf",std::process::id(),NEXT.fetch_add(1,Ordering::Relaxed)));
         let prefix_position=MAX_METADATA_SECTION_BYTES-4;
         let mut writer=File::create(&path).unwrap();
@@ -729,7 +738,7 @@ mod tests{
         reader.seek(SeekFrom::Start(prefix_position)).unwrap();
         let error=scalar(&mut reader,8,0).unwrap_err();
         assert!(error.contains("metadata section exceeds the aggregate safe inspection limit"));
-        assert_eq!(reader.stream_position().unwrap(),prefix_position+8);
+        assert_eq!(reader.stream_position().unwrap(),prefix_position);
         let _=std::fs::remove_file(path);
     }
     #[test]fn rejects_metadata_key_payload_before_reading_past_aggregate_budget(){
