@@ -1758,3 +1758,12 @@ This prevents the metadata-only inspector from presenting a malformed declared a
 - [x] Add regression tests for zero-valued fields, valid relationships, invalid relationships, and blank architecture identifiers.
 
 These checks reject internally contradictory model metadata before HIARM uses it for hardware and context recommendations. Optional fields remain optional. See docs/HARDWARE-INTELLIGENCE.md section 63.
+
+
+### 2026-11-26 — GGUF architecture semantic regression fixture correction (Batch #173)
+
+- [x] Include `general.architecture = "llama"` in the fixture that exercises `llama.*` metadata keys.
+- [x] Preserve strict architecture namespace validation and all positive-dimension/count relationship assertions.
+- [x] Keep production parser behaviour unchanged; correct the incomplete synthetic fixture only.
+
+See docs/HARDWARE-INTELLIGENCE.md section 64.

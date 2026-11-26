@@ -654,3 +654,10 @@ The metadata-only inspector now validates a declared `general.alignment` value u
 ## 63. GGUF architecture metadata semantic validation (2026-11-26)
 
 Recognised architecture-specific dimensions and counts are now required to be positive when present: context length, block count, embedding length, attention head counts and key/value lengths, RoPE dimensions, and expert counts. The inspector also rejects a blank `general.architecture` identifier, a key/value head count greater than the total attention head count, and an expert-used count greater than the total expert count. These checks are order-independent and do not require optional metadata fields to be present. Regression coverage exercises zero values for every recognised positive field, valid paired counts, both inconsistent pairings, and blank architecture identifiers. Tensor weights remain unread.
+
+
+### Section 64 — GGUF architecture semantic test-fixture correction
+
+- Corrected the positive-dimension and count-relationship regression fixture to include the required `general.architecture = "llama"` metadata entry.
+- Preserved the parser rule that architecture-specific metadata must match a declared architecture, independent of metadata ordering.
+- Kept the production validation rules unchanged; this is a test-fixture correction, not a relaxation of GGUF validation.

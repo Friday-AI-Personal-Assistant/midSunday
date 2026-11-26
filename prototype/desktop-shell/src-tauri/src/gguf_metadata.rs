@@ -1236,8 +1236,10 @@ mod tests{
     }
     #[test]fn rejects_non_gguf_extensions(){let p=temp(&fixture(),"bin");assert!(inspect(p.to_str().unwrap()).unwrap_err().contains(".gguf"));let _=std::fs::remove_file(p);}
     fn semantic_metadata_fixture(entries:&[(&str,u64)])->Vec<u8>{
+        // Architecture-specific GGUF keys require the matching architecture identifier.
         let mut b=b"GGUF".to_vec();b.extend_from_slice(&3u32.to_le_bytes());
-        b.extend_from_slice(&0u64.to_le_bytes());b.extend_from_slice(&(entries.len() as u64).to_le_bytes());
+        b.extend_from_slice(&0u64.to_le_bytes());b.extend_from_slice(&((entries.len()+1) as u64).to_le_bytes());
+        push_string(&mut b,"general.architecture");b.extend_from_slice(&8u32.to_le_bytes());push_string(&mut b,"llama");
         for (key,value) in entries{push_string(&mut b,key);b.extend_from_slice(&10u32.to_le_bytes());b.extend_from_slice(&value.to_le_bytes());}
         while b.len()%32!=0{b.push(0);}b
     }
