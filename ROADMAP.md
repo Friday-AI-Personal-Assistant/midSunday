@@ -1547,3 +1547,13 @@ See `docs/HARDWARE-INTELLIGENCE.md` section 42.
 - [x] Add regression tests for mismatched namespaces and missing architecture declarations.
 
 This checks internal metadata consistency only; it does not prove the declared architecture is truthful or that the model is runtime-compatible. See `docs/HARDWARE-INTELLIGENCE.md` section 43.
+
+
+### 2026-11-26 — Consistent GGUF tensor-count safety limit (Batch #149)
+
+- [x] Centralise the maximum supported inspection count as `MAX_TENSORS = 1,000,000`.
+- [x] Enforce the same tensor-count limit in metadata-only inspection and tensor-storage analysis.
+- [x] Reject excessive header counts before metadata interpretation or descriptor allocation.
+- [x] Add a regression test proving both inspection paths reject the same over-limit file.
+
+This is a defensive parser bound, not a model-loadability guarantee. See `docs/HARDWARE-INTELLIGENCE.md` section 44.

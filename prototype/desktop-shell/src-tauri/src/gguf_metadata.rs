@@ -4,6 +4,7 @@ use serde::Serialize;
 use std::{collections::HashSet, fs::File, io::{Read, Seek, SeekFrom}, path::Path};
 
 const MAX_METADATA_ENTRIES: u64 = 100_000;
+const MAX_TENSORS: u64 = 1_000_000;
 const MAX_STRING_BYTES: u64 = 1_048_576;
 const MAX_ARRAY_ITEMS: u64 = 10_000_000;
 
@@ -202,7 +203,7 @@ pub fn analyse_tensor_storage(input:&str)->Result<TensorStorageAnalysis,String>{
     if !(2..=3).contains(&version){return Err(format!("GGUF version {version} is not supported."));}
     let tensor_count=read_u64(&mut f)?;let metadata_count=read_u64(&mut f)?;
     if metadata_count>MAX_METADATA_ENTRIES{return Err("The GGUF file declares too many metadata entries.".to_owned());}
-    if tensor_count>1_000_000{return Err("The GGUF file declares too many tensors for safe inspection.".to_owned());}
+    if tensor_count>MAX_TENSORS{return Err("The GGUF file declares too many tensors for safe inspection.".to_owned());}
     let mut alignment=32u32;
     let mut reported_parameter_count=None;
     let mut metadata_keys=HashSet::with_capacity(metadata_count as usize);
@@ -304,6 +305,7 @@ pub fn inspect(input:&str)->Result<GgufMetadata,String>{
     if &magic!=b"GGUF"{return Err("The selected file does not have a valid GGUF header.".to_owned());}
     let version=read_u32(&mut f)?;if !(2..=3).contains(&version){return Err(format!("GGUF version {version} is not supported by this metadata inspector (supported: 2 and 3)."));}
     let tensors=read_u64(&mut f)?;let entries=read_u64(&mut f)?;
+    if tensors>MAX_TENSORS{return Err("The GGUF file declares too many tensors for safe inspection.".to_owned());}
     if entries>MAX_METADATA_ENTRIES{return Err("The GGUF file declares too many metadata entries for safe inspection.".to_owned());}
     let(mut architecture,mut model_name,mut file_type_code,mut parameter_count,mut context_length,mut block_count,mut embedding_length,mut attention_head_count)=(None,None,None,None,None,None,None,None);
     let(mut attention_kv_head_count,mut attention_key_length,mut attention_value_length,mut rope_dimension_count,mut expert_count,mut expert_used_count,mut quantization_version,mut alignment)=(None,None,None,None,None,None,None,None);
@@ -552,6 +554,13 @@ mod tests{
         }
     }
     #[test]fn rejects_invalid_magic_and_versions(){let p=temp(b"NOPE","gguf");assert!(inspect(p.to_str().unwrap()).is_err());let _=std::fs::remove_file(p);let mut b=fixture();b[4..8].copy_from_slice(&99u32.to_le_bytes());let p=temp(&b,"gguf");assert!(inspect(p.to_str().unwrap()).unwrap_err().contains("version 99"));let _=std::fs::remove_file(p);}
+    #[test]fn rejects_excessive_tensor_count_in_both_inspectors(){
+        let mut b=fixture();b[8..16].copy_from_slice(&(MAX_TENSORS+1).to_le_bytes());
+        let p=temp(&b,"gguf");
+        assert!(inspect(p.to_str().unwrap()).unwrap_err().contains("too many tensors"));
+        assert!(analyse_tensor_storage(p.to_str().unwrap()).unwrap_err().contains("too many tensors"));
+        let _=std::fs::remove_file(p);
+    }
     #[test]fn rejects_truncated_metadata_and_unreasonable_counts(){let mut b=fixture();b.truncate(35);let p=temp(&b,"gguf");assert!(inspect(p.to_str().unwrap()).is_err());let _=std::fs::remove_file(p);let mut b=fixture();b[20..28].copy_from_slice(&(MAX_METADATA_ENTRIES+1).to_le_bytes());let p=temp(&b,"gguf");assert!(inspect(p.to_str().unwrap()).unwrap_err().contains("too many metadata"));let _=std::fs::remove_file(p);}
     #[test]fn skips_unknown_string_and_array_metadata(){let mut b=b"GGUF".to_vec();b.extend_from_slice(&3u32.to_le_bytes());b.extend_from_slice(&0u64.to_le_bytes());b.extend_from_slice(&2u64.to_le_bytes());push_string(&mut b,"unknown.string");b.extend_from_slice(&8u32.to_le_bytes());push_string(&mut b,"ignored");push_string(&mut b,"unknown.array");b.extend_from_slice(&9u32.to_le_bytes());b.extend_from_slice(&4u32.to_le_bytes());b.extend_from_slice(&3u64.to_le_bytes());for n in [1u32,2,3]{b.extend_from_slice(&n.to_le_bytes());}let p=temp(&b,"gguf");assert_eq!(inspect(p.to_str().unwrap()).unwrap().tensor_count,0);let _=std::fs::remove_file(p);}
     fn single_metadata_fixture(key:&str,kind:u32,value:&[u8])->Vec<u8>{

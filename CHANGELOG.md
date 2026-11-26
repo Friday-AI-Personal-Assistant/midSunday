@@ -158,3 +158,5 @@ All notable project changes are recorded here. The project is in foundation/prot
 - Hardened recognised GGUF metadata fields: string fields reject non-string values, numeric fields reject incompatible/negative encodings, 32-bit fields reject overflow, and tensor analysis validates alignment and parameter-count types consistently. Unknown metadata remains supported; regression tests cover malformed encodings.
 
 - Hardened GGUF architecture metadata consistency: recognised architecture-specific fields must match the declared `general.architecture` namespace regardless of metadata order, and are rejected when the declaration is missing. Added regression coverage; tensor weights remain unread.
+
+- Unified the GGUF tensor-count safety limit across metadata inspection and tensor-storage analysis using a shared one-million-descriptor cap, with regression coverage for both entry points.
