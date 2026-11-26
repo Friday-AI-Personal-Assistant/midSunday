@@ -644,3 +644,8 @@ Both metadata inspection paths now preflight the four-byte metadata value-type t
 ## 61. GGUF metadata boundary regression fixture cursor correction (2026-11-26)
 
 Corrected the Batch #169 sparse-file regression fixture to seek to the tested boundary after reopening each file handle. Reopening a file resets its cursor to byte zero; the prior fixture therefore exercised an ordinary in-range read instead of the intended boundary. The production parser checks are unchanged. The regression now positions the reopened handle explicitly before asserting that the metadata type tag and scalar payload remain unread.
+
+
+## 62. GGUF alignment validation parity (2026-11-26)
+
+The metadata-only inspector now validates a declared `general.alignment` value using the same rule as tensor-storage analysis: it must be a power of two from 1 through 4096 bytes. Previously, tensor analysis rejected malformed alignment while the metadata inspector could report it as if it were usable. Both paths now share one validator, and regression coverage checks valid boundary values (1 and 4096), the default/common value (32), and invalid values (0, 3, and 8192). Files without an explicit alignment continue to use the GGUF default in tensor analysis and remain reported as unspecified by the metadata inspector. Tensor weights remain unread.

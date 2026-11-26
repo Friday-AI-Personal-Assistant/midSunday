@@ -196,3 +196,5 @@ All notable project changes are recorded here. The project is in foundation/prot
 - Hardened GGUF metadata-section accounting further: both inspectors now preflight metadata value-type tags, fixed-width scalar payloads, and complete array headers before reading bytes that would cross the 64 MiB boundary; added sparse-file cursor-boundary regression coverage.
 
 - Corrected the Batch #169 sparse-file regression fixture to restore its intended cursor position after reopening; parser changes remain unchanged.
+
+- Unified GGUF declared tensor-alignment validation across metadata inspection and tensor-storage analysis; malformed values (zero, non-power-of-two, or above 4096 bytes) are now rejected consistently, with valid/invalid cross-inspector regression coverage.

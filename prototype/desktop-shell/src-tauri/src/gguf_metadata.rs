@@ -256,6 +256,12 @@ fn tensor_type_layout(code:u32)->Option<(&'static str,u64,u64)> {
         _=>None,
     }
 }
+fn validate_tensor_alignment(alignment:u32)->Result<(),String>{
+    if alignment==0 || alignment>4096 || !alignment.is_power_of_two(){
+        return Err("GGUF tensor alignment must be a power of two from 1 to 4096 bytes.".to_owned());
+    }
+    Ok(())
+}
 fn align_up(value:u64, alignment:u32)->Result<u64,String>{
     let a=u64::from(alignment);
     value.checked_add(a-1).map(|v|v/a*a).ok_or_else(||"GGUF tensor-data alignment overflowed.".to_owned())
@@ -322,7 +328,7 @@ pub fn analyse_tensor_storage(input:&str)->Result<TensorStorageAnalysis,String>{
         }else{skip_value(&mut f,kind,metadata_section_start)?;}
         enforce_metadata_section_limit(&mut f,metadata_section_start)?;
     }
-    if alignment==0 || alignment>4096 || !alignment.is_power_of_two(){return Err("GGUF tensor alignment must be a power of two from 1 to 4096 bytes.".to_owned());}
+    validate_tensor_alignment(alignment)?;
     // A descriptor needs at least: u64 name length, one UTF-8 name byte,
     // u32 dimension count, one u64 dimension, u32 type, and u64 data offset.
     // Check this lower bound against the actual remaining file before allocating
@@ -482,6 +488,7 @@ pub fn inspect(input:&str)->Result<GgufMetadata,String>{
             _=>{}
         }
     }
+    if let Some(value)=alignment{validate_tensor_alignment(value)?;}
     if !architecture_metadata_prefixes.is_empty(){
         let declared=architecture.as_deref().ok_or_else(||"The GGUF file contains architecture-specific metadata but is missing general.architecture.".to_owned())?;
         if architecture_metadata_prefixes.iter().any(|prefix|prefix!=declared){
@@ -1213,4 +1220,25 @@ mod tests{
         let _=std::fs::remove_file(p);
     }
     #[test]fn rejects_non_gguf_extensions(){let p=temp(&fixture(),"bin");assert!(inspect(p.to_str().unwrap()).unwrap_err().contains(".gguf"));let _=std::fs::remove_file(p);}
+    #[test]fn validates_declared_tensor_alignment_in_both_inspectors(){
+        for alignment in [1u32,32,4096]{
+            let mut bytes=single_metadata_fixture("general.alignment",4,&alignment.to_le_bytes());
+            let aligned=((bytes.len()+4095)/4096)*4096;
+            bytes.resize(aligned,0);
+            let path=temp(&bytes,"gguf");
+            let metadata=inspect(path.to_str().unwrap()).unwrap();
+            assert_eq!(metadata.alignment,Some(alignment));
+            let analysis=analyse_tensor_storage(path.to_str().unwrap()).unwrap();
+            assert_eq!(analysis.alignment,alignment);
+            let _=std::fs::remove_file(path);
+        }
+        for alignment in [0u32,3,8192]{
+            let bytes=single_metadata_fixture("general.alignment",4,&alignment.to_le_bytes());
+            let path=temp(&bytes,"gguf");
+            assert!(inspect(path.to_str().unwrap()).unwrap_err().contains("power of two"));
+            assert!(analyse_tensor_storage(path.to_str().unwrap()).unwrap_err().contains("power of two"));
+            let _=std::fs::remove_file(path);
+        }
+    }
+
 }

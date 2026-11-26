@@ -1737,3 +1737,13 @@ This extends the aggregate metadata-section boundary to the remaining fixed-size
 - [x] Re-run the complete cross-platform Rust test workflow.
 
 See docs/HARDWARE-INTELLIGENCE.md section 61.
+
+
+### 2026-11-26 — GGUF alignment validation parity (Batch #171)
+
+- [x] Share one tensor-alignment validator between metadata inspection and tensor-storage analysis.
+- [x] Reject declared alignment values that are zero, non-power-of-two, or greater than 4096 bytes in both paths.
+- [x] Preserve unspecified metadata alignment and the tensor analyser's existing 32-byte default.
+- [x] Add cross-inspector regression coverage for valid values 1, 32, and 4096 and invalid values 0, 3, and 8192.
+
+This prevents the metadata-only inspector from presenting a malformed declared alignment as usable when tensor analysis would reject it. See docs/HARDWARE-INTELLIGENCE.md section 62.
