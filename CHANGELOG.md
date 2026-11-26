@@ -1,4 +1,5 @@
 # Changelog
+- Fixed GGUF tensor element-count comparison compilation by storing an owned status string and updating all existing tensor-analysis evidence fixtures with the new fields.
 - Added a GGUF tensor element-count cross-check using checked dimension arithmetic, with a separate comparison against optional file-reported parameter-count metadata; values are explicitly advisory and do not imply unique model parameters.
 - Fixed Batch #133 TypeScript compatibility and null-safe formatting for optional KV-cache evidence values.
 - Added a local, user-triggered GGUF host-memory evidence check comparing the theoretical one-sequence FP16 KV-cache estimate with fresh available system RAM; it explicitly excludes model-weight residency and does not claim model fit.

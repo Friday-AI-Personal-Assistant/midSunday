@@ -218,7 +218,7 @@ pub fn analyse_tensor_storage(input:&str)->Result<TensorStorageAnalysis,String>{
     };
     Ok(TensorStorageAnalysis{status:status.to_owned(),tensor_count,analysed_tensor_count:analysed,
         unknown_size_tensor_count:unknown_total,known_payload_bytes:known_total,tensor_element_count:total_tensor_elements,
-        reported_parameter_count,parameter_count_status,data_start_offset:data_start,
+        reported_parameter_count,parameter_count_status:parameter_count_status.to_owned(),data_start_offset:data_start,
         alignment,types:grouped.into_values().collect(),
         note:"Known payload sizes use verified GGML block layouts and exclude inter-tensor alignment padding. Unsupported types or dimensions that do not fit a known block layout remain unknown. This is stored tensor payload size, not RAM/VRAM required to run the model.".to_owned()})
 }
@@ -454,7 +454,7 @@ mod tests{
     }
     #[test]fn memory_evidence_warns_when_kv_cache_alone_exceeds_available_ram(){
         let p=temp(&fixture(), "gguf"); let metadata=inspect(p.to_str().unwrap()).unwrap();
-        let tensor=TensorStorageAnalysis{status:"complete".to_owned(),tensor_count:2,analysed_tensor_count:2,unknown_size_tensor_count:0,known_payload_bytes:123,data_start_offset:0,alignment:32,types:Vec::new(),note:String::new()};
+        let tensor=TensorStorageAnalysis{status:"complete".to_owned(),tensor_count:2,analysed_tensor_count:2,unknown_size_tensor_count:0,known_payload_bytes:123,tensor_element_count:0,reported_parameter_count:None,parameter_count_status:"not_provided".to_owned(),data_start_offset:0,alignment:32,types:Vec::new(),note:String::new()};
         let report=assess_memory_evidence(&metadata,&tensor,8*1024*1024*1024,512*1024*1024,8192).unwrap();
         assert_eq!(report.status,"kv_cache_exceeds_available_ram");
         assert_eq!(report.kv_cache_estimate_bytes,Some(1024*1024*1024));
@@ -464,7 +464,7 @@ mod tests{
     }
     #[test]fn memory_evidence_never_calls_kv_below_available_ram_a_fit_guarantee(){
         let p=temp(&fixture(), "gguf"); let metadata=inspect(p.to_str().unwrap()).unwrap();
-        let tensor=TensorStorageAnalysis{status:"partial".to_owned(),tensor_count:2,analysed_tensor_count:1,unknown_size_tensor_count:1,known_payload_bytes:123,data_start_offset:0,alignment:32,types:Vec::new(),note:String::new()};
+        let tensor=TensorStorageAnalysis{status:"partial".to_owned(),tensor_count:2,analysed_tensor_count:1,unknown_size_tensor_count:1,known_payload_bytes:123,tensor_element_count:0,reported_parameter_count:None,parameter_count_status:"not_provided".to_owned(),data_start_offset:0,alignment:32,types:Vec::new(),note:String::new()};
         let report=assess_memory_evidence(&metadata,&tensor,16*1024*1024*1024,8*1024*1024*1024,8192).unwrap();
         assert_eq!(report.status,"kv_cache_below_available_ram");
         assert!(report.limitations.contains("model-weight residency"));
@@ -472,7 +472,7 @@ mod tests{
     }
     #[test]fn memory_evidence_reports_missing_metadata_and_unavailable_hardware(){
         let p=temp(&fixture(), "gguf"); let mut metadata=inspect(p.to_str().unwrap()).unwrap();
-        let tensor=TensorStorageAnalysis{status:"unknown".to_owned(),tensor_count:2,analysed_tensor_count:0,unknown_size_tensor_count:2,known_payload_bytes:0,data_start_offset:0,alignment:32,types:Vec::new(),note:String::new()};
+        let tensor=TensorStorageAnalysis{status:"unknown".to_owned(),tensor_count:2,analysed_tensor_count:0,unknown_size_tensor_count:2,known_payload_bytes:0,tensor_element_count:0,reported_parameter_count:None,parameter_count_status:"not_provided".to_owned(),data_start_offset:0,alignment:32,types:Vec::new(),note:String::new()};
         metadata.attention_key_length=None;
         assert_eq!(assess_memory_evidence(&metadata,&tensor,8,4,2048).unwrap().status,"insufficient_model_metadata");
         metadata.attention_key_length=Some(128);
