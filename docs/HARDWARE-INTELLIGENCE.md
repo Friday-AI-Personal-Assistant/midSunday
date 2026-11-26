@@ -495,3 +495,12 @@ KV-cache estimates and host-memory evidence now compare the configured context l
 This comparison is deliberately advisory. GGUF metadata is file-supplied and may be inaccurate or incomplete; the reported context value is not treated as a verified runtime maximum. Some inference runtimes support RoPE scaling or context extension, while actual support depends on the model, runtime, and configuration. Being within the reported value does not guarantee runtime support or model fit. No context setting is changed, and no compatibility verdict is produced.
 
 Regression tests cover configured context within, above, and without a reported context value, including preservation of the arithmetic estimate when the configured context exceeds the reported value.
+
+
+## 35. GGUF tensor element-count cross-check (2026-11-26)
+
+Tensor storage analysis now multiplies the declared dimensions of every tensor using checked 64-bit arithmetic and sums those element counts across the descriptor table. This count is independent of the tensor's quantisation layout, so descriptors with unsupported payload-size layouts can still contribute their declared element count when their dimensions are valid. The analyser also reads the optional `general.parameter_count` metadata value and reports whether the aggregate descriptor element count matches, exceeds, or falls below that file-reported value.
+
+This is a structural cross-check, not a definitive parameter-count or model-integrity verdict. A tensor-element total is not necessarily identical to a model's unique parameter count: tied/shared weights, exporter conventions, incomplete or malformed descriptors, and file-supplied metadata can affect the comparison. The UI labels both values separately and presents the comparison as an advisory. Dimension or aggregate overflow and zero-sized dimensions are rejected rather than wrapped or guessed. No tensor weights are read, no model is loaded, and no hardware or runtime settings are changed.
+
+Regression coverage includes dimension-product aggregation, optional/matching/mismatching reported counts, and overflow/zero-dimension handling.

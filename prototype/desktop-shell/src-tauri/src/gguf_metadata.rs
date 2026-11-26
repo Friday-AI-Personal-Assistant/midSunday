@@ -89,6 +89,9 @@ pub struct TensorStorageAnalysis {
     pub analysed_tensor_count: u64,
     pub unknown_size_tensor_count: u64,
     pub known_payload_bytes: u64,
+    pub tensor_element_count: u64,
+    pub reported_parameter_count: Option<u64>,
+    pub parameter_count_status: String,
     pub data_start_offset: u64,
     pub alignment: u32,
     pub types: Vec<TensorTypeSummary>,
@@ -116,6 +119,13 @@ fn align_up(value:u64, alignment:u32)->Result<u64,String>{
     let a=u64::from(alignment);
     value.checked_add(a-1).map(|v|v/a*a).ok_or_else(||"GGUF tensor-data alignment overflowed.".to_owned())
 }
+fn tensor_element_count(dimensions:&[u64])->Result<u64,String>{
+    if dimensions.is_empty() || dimensions.iter().any(|value|*value==0){
+        return Err("A GGUF tensor has an empty or zero-sized dimension.".to_owned());
+    }
+    dimensions.iter().try_fold(1u64,|total,value|total.checked_mul(*value)
+        .ok_or_else(||"GGUF tensor element count overflowed.".to_owned()))
+}
 fn tensor_payload_bytes(dimensions:&[u64], block:u64, block_bytes:u64)->Option<u64>{
     let first=*dimensions.first()?;
     if block==0 || block_bytes==0 || first==0 || first%block!=0 || dimensions.iter().any(|v|*v==0){return None;}
@@ -137,11 +147,14 @@ pub fn analyse_tensor_storage(input:&str)->Result<TensorStorageAnalysis,String>{
     if metadata_count>MAX_METADATA_ENTRIES{return Err("The GGUF file declares too many metadata entries.".to_owned());}
     if tensor_count>1_000_000{return Err("The GGUF file declares too many tensors for safe inspection.".to_owned());}
     let mut alignment=32u32;
+    let mut reported_parameter_count=None;
     for _ in 0..metadata_count{
         let key=read_string(&mut f)?;let kind=read_u32(&mut f)?;
         if key=="general.alignment"{
             let value=unsigned(scalar(&mut f,kind)?).and_then(|v|u32::try_from(v).ok()).ok_or_else(||"GGUF alignment metadata is invalid.".to_owned())?;
             alignment=value;
+        }else if key=="general.parameter_count"{
+            reported_parameter_count=unsigned(scalar(&mut f,kind)?);
         }else{skip_value(&mut f,kind)?;}
     }
     if alignment==0 || alignment>4096 || !alignment.is_power_of_two(){return Err("GGUF tensor alignment must be a power of two from 1 to 4096 bytes.".to_owned());}
@@ -164,11 +177,15 @@ pub fn analyse_tensor_storage(input:&str)->Result<TensorStorageAnalysis,String>{
     if data_start>file_size{return Err("GGUF tensor descriptors extend beyond the file.".to_owned());}
     let mut grouped:std::collections::BTreeMap<u32,TensorTypeSummary>=std::collections::BTreeMap::new();
     let mut known_total=0u64;let mut unknown_total=0u64;let mut analysed=0u64;
+    let mut tensor_element_count=0u64;
     // Descriptor order is not trusted. Sort by relative data offset so known payload
     // ranges can be checked for overlap without reading tensor weights.
     descriptors.sort_unstable_by_key(|tensor| tensor.offset);
     let mut previous_known_end:Option<u64>=None;
     for tensor in descriptors{
+        let elements=tensor_element_count(&tensor.dimensions)?;
+        tensor_element_count=tensor_element_count.checked_add(elements)
+            .ok_or_else(||"Aggregate GGUF tensor element count overflowed.".to_owned())?;
         let (name,block,block_bytes)=tensor_type_layout(tensor.type_code).unwrap_or(("UNKNOWN",0,0));
         let summary=grouped.entry(tensor.type_code).or_insert_with(||TensorTypeSummary{
             type_code:tensor.type_code,type_name:name.to_owned(),tensor_count:0,known_payload_bytes:0,unknown_size_tensor_count:0});
@@ -193,8 +210,15 @@ pub fn analyse_tensor_storage(input:&str)->Result<TensorStorageAnalysis,String>{
         }
     }
     let status=if unknown_total==0{"complete"}else if analysed==0{"unknown"}else{"partial"};
+    let parameter_count_status=match reported_parameter_count{
+        None=>"not_provided",
+        Some(value) if value==tensor_element_count=>"matches_reported_count",
+        Some(value) if tensor_element_count>value=>"tensor_elements_exceed_reported_count",
+        Some(_)=>"tensor_elements_below_reported_count",
+    };
     Ok(TensorStorageAnalysis{status:status.to_owned(),tensor_count,analysed_tensor_count:analysed,
-        unknown_size_tensor_count:unknown_total,known_payload_bytes:known_total,data_start_offset:data_start,
+        unknown_size_tensor_count:unknown_total,known_payload_bytes:known_total,tensor_element_count,
+        reported_parameter_count,parameter_count_status,data_start_offset:data_start,
         alignment,types:grouped.into_values().collect(),
         note:"Known payload sizes use verified GGML block layouts and exclude inter-tensor alignment padding. Unsupported types or dimensions that do not fit a known block layout remain unknown. This is stored tensor payload size, not RAM/VRAM required to run the model.".to_owned()})
 }

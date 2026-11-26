@@ -1,4 +1,5 @@
 # Changelog
+- Added a GGUF tensor element-count cross-check using checked dimension arithmetic, with a separate comparison against optional file-reported parameter-count metadata; values are explicitly advisory and do not imply unique model parameters.
 - Fixed Batch #133 TypeScript compatibility and null-safe formatting for optional KV-cache evidence values.
 - Added a local, user-triggered GGUF host-memory evidence check comparing the theoretical one-sequence FP16 KV-cache estimate with fresh available system RAM; it explicitly excludes model-weight residency and does not claim model fit.
 - Extended GGUF tensor overlap validation to check known payload ends against every next descriptor start, including unsupported tensor types whose payload sizes remain unknown.

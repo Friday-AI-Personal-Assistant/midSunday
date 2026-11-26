@@ -1450,3 +1450,15 @@ The Batch #133 report is informational evidence only. It does not select models,
 - [ ] Validate reported-context interpretation against a representative GGUF corpus and supported llama.cpp runtime configurations.
 
 This is an informational metadata comparison only. It does not reject a context, change settings, prove runtime support, or guarantee model fit. See docs/HARDWARE-INTELLIGENCE.md section 34.
+
+
+### 2026-11-26 — GGUF tensor element-count cross-check (Batch #137)
+
+- [x] Calculate each tensor's declared element count from its dimensions with checked 64-bit multiplication.
+- [x] Aggregate declared tensor elements across all descriptors, including unsupported quantisation layouts whose dimensions remain readable.
+- [x] Read optional `general.parameter_count` metadata during tensor analysis and compare it with the descriptor-derived element total.
+- [x] Display both values and a neutral comparison status; do not conflate tensor elements with unique model parameters.
+- [x] Reject zero-sized dimensions and arithmetic overflow rather than wrapping or inventing counts.
+- [ ] Validate comparison behaviour against a representative real-world GGUF corpus, especially tied/shared tensors and exporter-specific parameter-count conventions.
+
+The comparison is an advisory structural cross-check only. It does not establish model correctness, runtime compatibility, or memory requirements, and it does not read tensor weights or change model settings. See `docs/HARDWARE-INTELLIGENCE.md` section 35.
