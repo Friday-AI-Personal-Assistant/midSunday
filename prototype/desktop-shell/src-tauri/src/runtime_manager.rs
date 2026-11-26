@@ -145,7 +145,7 @@ impl RuntimeManager {
     ) -> Result<(), String> {
         let _operation = self.inner.operation.lock()
             .map_err(|_| "Runtime operation lock is unavailable.".to_owned())?;
-        let mut slot = self.inner.session.lock()
+        let slot = self.inner.session.lock()
             .map_err(|_| "Runtime session is unavailable.".to_owned())?;
         if slot.is_some() {
             return Err("A runtime session already exists; stop it or use recovery first.".to_owned());

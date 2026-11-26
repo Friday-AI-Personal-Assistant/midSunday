@@ -126,3 +126,5 @@ All notable project changes are recorded here. The project is in foundation/prot
 - Added local HIARM storage headroom indicators with safe free-space percentages, Healthy/Low/Critical/Unknown classifications, accessible used-space meters, and regression tests. Model-specific storage fit remains future work.
 - Fixed nullable GGUF parameter-count and context-length rendering so the shared frontend TypeScript build succeeds on Windows, Linux, and macOS.
 - Extended the GGUF inspector with selected GQA, key/value head, RoPE, MoE expert, quantisation-version, and alignment metadata; added UI fields and synthetic regression coverage.
+
+- Fixed the startup-memory diagnostics test fixture to initialize the new report field and removed the resulting Rust warnings; the runtime behaviour is unchanged.

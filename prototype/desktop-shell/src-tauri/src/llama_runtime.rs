@@ -2,7 +2,7 @@
 use std::path::Path;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use serde::Serialize;
-use crate::system_info::{collect_known_process_memory, ProcessMemorySnapshot};
+use crate::system_info::collect_known_process_memory;
 
 use crate::llama_client::{wait_for_ready, GenerationCancellation, LlamaClientError, LlamaHttpClient, ReadinessError};
 use crate::llama_process::{LlamaServerProcess, ProcessStartError};
@@ -495,6 +495,14 @@ mod recovery_integration_tests {
                 client,
                 lifecycle,
                 config,
+                startup_memory_report: RuntimeStartupMemoryReport {
+                    status: "unavailable".to_owned(),
+                    peak_resident_bytes: None,
+                    peak_virtual_bytes: None,
+                    sample_count: 0,
+                    sampling_interval_ms: 0,
+                    captured_at_unix_seconds: 0,
+                },
             },
             stop_count,
         )
