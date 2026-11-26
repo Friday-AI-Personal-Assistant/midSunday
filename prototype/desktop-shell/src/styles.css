@@ -370,3 +370,10 @@ h1 { margin: 0; color: #eef5ef; font-size: clamp(25px, 3vw, 34px); font-weight: 
 .model-kv-grid span { display: grid; gap: 4px; color: var(--muted); font-size: 10px; }
 .model-kv-grid strong { color: #e4f2e7; font-size: 12px; }
 @media (max-width: 620px) { .model-kv-grid { grid-template-columns: 1fr; } }
+
+.model-memory-evidence { margin-top: 10px; padding: 13px; border: 1px solid var(--border-subtle, rgba(128,128,128,.25)); border-radius: 10px; background: var(--surface-muted, rgba(128,128,128,.06)); }
+.model-memory-evidence > strong { display: block; margin-bottom: 9px; text-transform: capitalize; }
+.model-memory-evidence > p { margin: 10px 0 0; overflow-wrap: anywhere; }
+.model-memory-evidence-kv_cache_exceeds_available_ram { border-color: rgba(214,151,82,.65); }
+.model-memory-evidence-kv_cache_below_available_ram { border-color: var(--border-subtle, rgba(128,128,128,.25)); }
+.model-memory-evidence-insufficient_model_metadata, .model-memory-evidence-hardware_memory_unavailable { border-style: dashed; }

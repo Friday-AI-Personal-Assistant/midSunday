@@ -1423,3 +1423,17 @@ Unknown tensor types still have unknown payload lengths, so their ranges cannot 
 - [ ] Validate descriptor offsets and overlap behaviour against a representative real-world GGUF corpus across architectures, quantisations, and exporter versions.
 
 See docs/HARDWARE-INTELLIGENCE.md section 32.
+
+
+### 2026-11-26 — Host-memory evidence check for GGUF models (Batch #133)
+
+- [x] Add a user-triggered, local-only report combining GGUF metadata, tensor descriptor analysis, the configured context length, and a fresh host-RAM snapshot.
+- [x] Compare only the theoretical one-sequence FP16 KV-cache estimate with currently available system RAM; flag when the KV cache alone exceeds the available reading.
+- [x] Keep model file size and known tensor payload bytes labelled as on-disk facts, never as required RAM.
+- [x] Report missing GGUF dimensions and unavailable hardware memory as explicit unknown states.
+- [x] Explain that a KV-cache estimate below available RAM is not a model-fit or runtime-compatibility guarantee.
+- [x] Add regression tests for above/below available RAM, missing metadata, and unavailable hardware readings.
+- [ ] Validate estimates against measured llama.cpp host/GPU allocations across supported models, cache types, and offload configurations.
+- [ ] Build a full compatibility engine only after representative real-device measurements establish reliable model-weight, runtime, compute-buffer, and accelerator requirements.
+
+The Batch #133 report is informational evidence only. It does not select models, alter context or resource settings, load weights, or claim CPU/GPU compatibility. See docs/HARDWARE-INTELLIGENCE.md section 33.

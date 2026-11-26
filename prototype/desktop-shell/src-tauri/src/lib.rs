@@ -279,6 +279,16 @@ async fn estimate_gguf_kv_cache(file_path: String, context_tokens: u64) -> Resul
 }
 
 #[tauri::command]
+async fn assess_gguf_memory_evidence(file_path: String, context_tokens: u64) -> Result<gguf_metadata::ModelMemoryEvidence, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let metadata = gguf_metadata::inspect(&file_path)?;
+        let tensor_analysis = gguf_metadata::analyse_tensor_storage(&file_path)?;
+        let (total_memory_bytes, available_memory_bytes) = system_info::collect_system_memory_bytes();
+        gguf_metadata::assess_memory_evidence(&metadata, &tensor_analysis, total_memory_bytes, available_memory_bytes, context_tokens)
+    }).await.map_err(|error| format!("Model memory evidence worker failed: {error}"))?
+}
+
+#[tauri::command]
 fn list_local_models(catalog: State<'_, ModelCatalog>) -> Result<Vec<LocalModel>, String> { catalog.list() }
 
 #[tauri::command]
@@ -510,6 +520,7 @@ pub fn run() {
             list_local_models,
             inspect_gguf_metadata,
             estimate_gguf_kv_cache,
+            assess_gguf_memory_evidence,
             register_local_model,
             remove_local_model,
             verify_local_model,

@@ -391,6 +391,14 @@ pub fn assess_model_storage(model_path: Option<&str>, disks: &[HardwareDisk]) ->
     }
 }
 
+/// Reads only total and currently available system RAM for a one-time local estimate.
+pub fn collect_system_memory_bytes() -> (u64, u64) {
+    let mut system = System::new();
+    system.refresh_memory();
+    let total = system.total_memory();
+    (total, system.available_memory().min(total))
+}
+
 /// Collects a one-time snapshot and queries only midSunday's own process memory.
 pub fn collect_hardware_snapshot(model_path: Option<String>) -> HardwareSnapshot {
     let mut system = System::new();

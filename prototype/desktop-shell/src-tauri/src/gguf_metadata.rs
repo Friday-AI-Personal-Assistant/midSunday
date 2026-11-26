@@ -275,6 +275,73 @@ pub fn estimate_kv_cache(metadata: &GgufMetadata, context_tokens: u64) -> Result
         assumptions: "FP16 K/V cache (2 bytes per element), one sequence, using the configured context length and GGUF-reported dimensions. Actual runtime cache type, batching, parallel sequences, padding, and implementation overhead can change memory use.".to_owned() })
 }
 
+/// Evidence-only comparison of the estimated KV cache with a fresh host-RAM snapshot.
+/// This deliberately excludes model weights and does not claim that the model will fit.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelMemoryEvidence {
+    pub status: String,
+    pub architecture: Option<String>,
+    pub model_file_size_bytes: u64,
+    pub tensor_analysis_status: String,
+    pub known_tensor_payload_bytes: u64,
+    pub unknown_size_tensor_count: u64,
+    pub context_tokens: u64,
+    pub kv_cache_estimate_bytes: Option<u64>,
+    pub total_system_memory_bytes: u64,
+    pub available_system_memory_bytes: u64,
+    pub kv_cache_percent_of_available_memory: Option<f64>,
+    pub explanation: String,
+    pub limitations: String,
+}
+
+pub fn assess_memory_evidence(
+    metadata: &GgufMetadata,
+    tensor_analysis: &TensorStorageAnalysis,
+    total_memory_bytes: u64,
+    available_memory_bytes: u64,
+    context_tokens: u64,
+) -> Result<ModelMemoryEvidence, String> {
+    let estimate = estimate_kv_cache(metadata, context_tokens)?;
+    let available = available_memory_bytes.min(total_memory_bytes);
+    let kv_bytes = estimate.total_bytes;
+    let (status, explanation, percentage) = match (kv_bytes, estimate.status.as_str(), total_memory_bytes) {
+        (None, _, _) => (
+            "insufficient_model_metadata",
+            "The GGUF file does not report all dimensions needed for a KV-cache estimate. No missing values were guessed.",
+            None,
+        ),
+        (Some(_), _, 0) => (
+            "hardware_memory_unavailable",
+            "The model's KV-cache estimate is available, but the operating system did not provide a usable total-RAM reading.",
+            None,
+        ),
+        (Some(bytes), _, _) if bytes > available => (
+            "kv_cache_exceeds_available_ram",
+            "The estimated FP16 KV cache alone is larger than currently available system RAM. This is a strong host-memory warning, not a complete model-fit verdict.",
+            if available > 0 { Some(bytes as f64 * 100.0 / available as f64) } else { None },
+        ),
+        (Some(bytes), _, _) => (
+            "kv_cache_below_available_ram",
+            "The estimated FP16 KV cache is below currently available system RAM. Model weights, runtime overhead, compute buffers, and other applications still need memory, so this does not mean the model will fit.",
+            if available > 0 { Some(bytes as f64 * 100.0 / available as f64) } else { None },
+        ),
+    };
+    Ok(ModelMemoryEvidence {
+        status: status.to_owned(), architecture: metadata.architecture.clone(),
+        model_file_size_bytes: metadata.file_size_bytes,
+        tensor_analysis_status: tensor_analysis.status.clone(),
+        known_tensor_payload_bytes: tensor_analysis.known_payload_bytes,
+        unknown_size_tensor_count: tensor_analysis.unknown_size_tensor_count,
+        context_tokens, kv_cache_estimate_bytes: kv_bytes,
+        total_system_memory_bytes: total_memory_bytes,
+        available_system_memory_bytes: available,
+        kv_cache_percent_of_available_memory: percentage,
+        explanation: explanation.to_owned(),
+        limitations: "The KV estimate assumes FP16 cache values and one sequence. It excludes model-weight residency, runtime/allocator overhead, compute buffers, batching, parallel sequences, cache quantisation, GPU allocation, CPU/GPU offload, and concurrent workload changes. GGUF tensor payload totals are file-storage measurements, not RAM requirements. Hardware and GGUF metadata are snapshots and may be incomplete or inaccurate.".to_owned(),
+    })
+}
+
 #[cfg(test)]
 mod tests{
     use super::*;use std::{io::Write,sync::atomic::{AtomicUsize,Ordering}};
@@ -323,7 +390,34 @@ mod tests{
         metadata.block_count=Some(u64::MAX); assert!(estimate_kv_cache(&metadata, 32768).is_err());
         let _=std::fs::remove_file(p);
     }
-    fn tensor_fixture_many(tensors:&[(u32,u64,u64)],payload:&[u8])->Vec<u8>{
+    #[test]fn memory_evidence_warns_when_kv_cache_alone_exceeds_available_ram(){
+        let p=temp(&fixture(), "gguf"); let metadata=inspect(p.to_str().unwrap()).unwrap();
+        let tensor=TensorStorageAnalysis{status:"complete".to_owned(),tensor_count:2,analysed_tensor_count:2,unknown_size_tensor_count:0,known_payload_bytes:123,data_start_offset:0,alignment:32,types:Vec::new(),note:String::new()};
+        let report=assess_memory_evidence(&metadata,&tensor,8*1024*1024*1024,512*1024*1024,8192).unwrap();
+        assert_eq!(report.status,"kv_cache_exceeds_available_ram");
+        assert_eq!(report.kv_cache_estimate_bytes,Some(1024*1024*1024));
+        assert_eq!(report.kv_cache_percent_of_available_memory,Some(200.0));
+        assert_eq!(report.known_tensor_payload_bytes,123);
+        let _=std::fs::remove_file(p);
+    }
+    #[test]fn memory_evidence_never_calls_kv_below_available_ram_a_fit_guarantee(){
+        let p=temp(&fixture(), "gguf"); let metadata=inspect(p.to_str().unwrap()).unwrap();
+        let tensor=TensorStorageAnalysis{status:"partial".to_owned(),tensor_count:2,analysed_tensor_count:1,unknown_size_tensor_count:1,known_payload_bytes:123,data_start_offset:0,alignment:32,types:Vec::new(),note:String::new()};
+        let report=assess_memory_evidence(&metadata,&tensor,16*1024*1024*1024,8*1024*1024*1024,8192).unwrap();
+        assert_eq!(report.status,"kv_cache_below_available_ram");
+        assert!(report.limitations.contains("model-weight residency"));
+        let _=std::fs::remove_file(p);
+    }
+    #[test]fn memory_evidence_reports_missing_metadata_and_unavailable_hardware(){
+        let p=temp(&fixture(), "gguf"); let mut metadata=inspect(p.to_str().unwrap()).unwrap();
+        let tensor=TensorStorageAnalysis{status:"unknown".to_owned(),tensor_count:2,analysed_tensor_count:0,unknown_size_tensor_count:2,known_payload_bytes:0,data_start_offset:0,alignment:32,types:Vec::new(),note:String::new()};
+        metadata.attention_key_length=None;
+        assert_eq!(assess_memory_evidence(&metadata,&tensor,8,4,2048).unwrap().status,"insufficient_model_metadata");
+        metadata.attention_key_length=Some(128);
+        assert_eq!(assess_memory_evidence(&metadata,&tensor,0,0,2048).unwrap().status,"hardware_memory_unavailable");
+        let _=std::fs::remove_file(p);
+    }
+        fn tensor_fixture_many(tensors:&[(u32,u64,u64)],payload:&[u8])->Vec<u8>{
         let mut b=b"GGUF".to_vec();b.extend_from_slice(&3u32.to_le_bytes());
         b.extend_from_slice(&(tensors.len() as u64).to_le_bytes());b.extend_from_slice(&1u64.to_le_bytes());
         entry_u32(&mut b,"general.alignment",32);

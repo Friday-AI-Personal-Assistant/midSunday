@@ -475,3 +475,14 @@ The tensor analyser now compares each known-size payload end with the next descr
 Unknown tensor payload lengths remain unmeasurable, so the analyser cannot establish their ending boundaries or prove non-overlap with later tensors. The check is deliberately one-sided: it protects known payload ranges against every following descriptor start without inventing sizes for unsupported formats. It remains local, read-only, and does not load tensor weights.
 
 Regression coverage includes a known F32 payload overlapping the start of an unsupported tensor.
+
+
+## 33. Host-memory evidence check for a registered GGUF model (2026-11-26)
+
+The local model library adds an explicit, user-triggered evidence check. It re-inspects the GGUF metadata and tensor descriptors, calculates the same conservative one-sequence FP16 KV-cache estimate for the currently configured context, and takes a fresh local snapshot of total and currently available system RAM. The report presents the model file size and known tensor-payload total as file facts, separately from the KV-cache estimate, and shows how large the estimated KV cache is relative to currently available host RAM when both values are known.
+
+The result is deliberately not a compatibility verdict. If the estimated KV cache alone exceeds available RAM, the report raises a host-memory warning. If it is below available RAM, the report says only that this one estimated component is below the current reading; it does not say the model fits. Model-weight residency, runtime and allocator overhead, compute buffers, batching, parallel sequences, cache quantisation, GPU memory, CPU/GPU offload, other applications, and runtime-specific behaviour remain unmeasured. Known tensor payload bytes are stored-file measurements and must not be treated as required RAM.
+
+Missing GGUF dimensions and unavailable hardware readings produce explicit unknown states rather than guessed values. The check runs locally on a blocking worker, does not load model weights, does not enumerate unrelated processes, does not transmit paths or hardware information, and does not select a model or change settings. Its snapshot can become stale immediately as system memory changes.
+
+Regression tests cover KV-cache-above-available-RAM, KV-cache-below-available-RAM without a fit guarantee, missing metadata, and unavailable hardware memory.
