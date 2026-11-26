@@ -14,6 +14,12 @@ type RuntimeGenerationMemoryReport = {
   residentDeltaBytes: number | null;
   virtualDeltaBytes: number | null;
   capturedAtUnixSeconds: number;
+  peakStatus: string;
+  peakResidentBytes: number | null;
+  peakVirtualBytes: number | null;
+  peakSampleCount: number;
+  samplesDuringGeneration: number;
+  samplingIntervalMs: number;
 };
 type HardwareDisk = { mountPoint: string; totalBytes: number; availableBytes: number; freePercent: number; status: "healthy" | "low" | "critical" | "unknown" };
 type GpuMemorySegment = { budgetBytes: number; currentUsageBytes: number; availableForReservationBytes: number; currentReservationBytes: number };
@@ -1261,8 +1267,15 @@ export default function App() {
                     <span>Resident change<strong>{generationMemoryReport.residentDeltaBytes === null ? "Unavailable" : `${generationMemoryReport.residentDeltaBytes > 0 ? "+" : generationMemoryReport.residentDeltaBytes < 0 ? "−" : ""}${formatModelSize(Math.abs(generationMemoryReport.residentDeltaBytes))}`}</strong></span>
                     <span>Virtual change<strong>{generationMemoryReport.virtualDeltaBytes === null ? "Unavailable" : `${generationMemoryReport.virtualDeltaBytes > 0 ? "+" : generationMemoryReport.virtualDeltaBytes < 0 ? "−" : ""}${formatModelSize(Math.abs(generationMemoryReport.virtualDeltaBytes))}`}</strong></span>
                   </div>
+                  <div className="model-kv-grid">
+                    <span>Peak resident<strong>{generationMemoryReport.peakResidentBytes === null ? "Unavailable" : formatModelSize(generationMemoryReport.peakResidentBytes)}</strong></span>
+                    <span>Peak virtual<strong>{generationMemoryReport.peakVirtualBytes === null ? "Unavailable" : formatModelSize(generationMemoryReport.peakVirtualBytes)}</strong></span>
+                    <span>Valid samples<strong>{generationMemoryReport.peakSampleCount}</strong></span>
+                    <span>During generation<strong>{generationMemoryReport.samplesDuringGeneration}</strong></span>
+                    <span>Peak status<strong>{generationMemoryReport.peakStatus}</strong></span>
+                  </div>
                   <p className="settings-footnote">Captured: {new Date(generationMemoryReport.capturedAtUnixSeconds * 1000).toLocaleString()}</p>
-                  <p className="settings-footnote">A positive value means memory was higher at the end than at the start. This is not peak usage, model-only memory, or proof that the generation caused every change.</p>
+                  <p className="settings-footnote">A positive delta means memory was higher at completion. Peak values are the maximum observed in the before/after readings and periodic samples every {generationMemoryReport.samplingIntervalMs} ms; brief spikes between samples can still be missed. This is process-wide memory, not model-only memory, and does not prove the generation caused every change.</p>
                 </div>}
                 <p className="settings-footnote">This is process-wide memory, not model-only memory. Virtual memory is not physical RAM use. GPU allocations are outside this snapshot; it does not prove accelerator use.</p>
               </div>

@@ -131,6 +131,14 @@ impl LlamaRuntimeSession {
         self.lifecycle.status()
     }
 
+    /// Returns a PID only for the live managed child; it is never exposed to the UI.
+    pub fn process_memory_sampling_target(&mut self) -> Option<u32> {
+        match self.process.is_running() {
+            Ok(true) => self.process.process_id(),
+            _ => None,
+        }
+    }
+
     /// Samples memory for the managed child only; the PID remains internal.
     pub fn process_memory_snapshot(&mut self) -> crate::system_info::ProcessMemorySnapshot {
         match self.process.is_running() {

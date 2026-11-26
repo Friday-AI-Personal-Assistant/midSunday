@@ -5,14 +5,14 @@
 //! signalling cancellation. This module never downloads assets or uses a
 //! network endpoint other than the validated loopback runtime.
 
-use std::{path::Path, sync::{Arc, Mutex}, time::{Duration, SystemTime, UNIX_EPOCH}};
+use std::{path::Path, sync::{atomic::{AtomicBool, Ordering}, Arc, Mutex}, thread::{self, JoinHandle}, time::{Duration, SystemTime, UNIX_EPOCH}};
 
 use serde::Serialize;
 
 use crate::llama_client::GenerationCancellation;
 use crate::llama_runtime::{LlamaRuntimeSession, RecoveryPolicy, RuntimeSessionError};
 use crate::runtime::{GenerationRequest, RuntimeConfig, RuntimeStatus};
-use crate::system_info::ProcessMemorySnapshot;
+use crate::system_info::{collect_known_process_memory, ProcessMemorySnapshot};
 
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -30,7 +30,43 @@ pub struct RuntimeGenerationMemoryReport {
     pub resident_delta_bytes: Option<i64>,
     pub virtual_delta_bytes: Option<i64>,
     pub captured_at_unix_seconds: u64,
+    pub peak_status: String,
+    pub peak_resident_bytes: Option<u64>,
+    pub peak_virtual_bytes: Option<u64>,
+    /// Includes the before/after boundary readings and successful interval samples.
+    pub peak_sample_count: u64,
+    /// Successful interval samples taken while generation was in progress.
+    pub samples_during_generation: u64,
+    pub sampling_interval_ms: u64,
 }
+
+#[derive(Clone, Debug, Default)]
+struct PeakMemoryAccumulator {
+    resident_bytes: Option<u64>,
+    virtual_bytes: Option<u64>,
+    sample_count: u64,
+    interval_sample_count: u64,
+}
+
+impl PeakMemoryAccumulator {
+    fn observe(&mut self, snapshot: &ProcessMemorySnapshot, interval_sample: bool) {
+        if snapshot.status != "detected" {
+            return;
+        }
+        if let Some(value) = snapshot.resident_bytes {
+            self.resident_bytes = Some(self.resident_bytes.map_or(value, |peak| peak.max(value)));
+        }
+        if let Some(value) = snapshot.virtual_bytes {
+            self.virtual_bytes = Some(self.virtual_bytes.map_or(value, |peak| peak.max(value)));
+        }
+        self.sample_count = self.sample_count.saturating_add(1);
+        if interval_sample {
+            self.interval_sample_count = self.interval_sample_count.saturating_add(1);
+        }
+    }
+}
+
+const GENERATION_MEMORY_SAMPLE_INTERVAL: Duration = Duration::from_millis(250);
 
 fn memory_delta_bytes(before: Option<u64>, after: Option<u64>) -> Option<i64> {
     let (before, after) = (before?, after?);
@@ -162,12 +198,46 @@ impl RuntimeManager {
             Some(cancellation.clone());
         self.set_status(RuntimeStatus::Generating, None)?;
 
-        // These are targeted boundary readings, not a peak-memory monitor.
         let before_memory = session.process_memory_snapshot();
+        let sampling_target = session.process_memory_sampling_target();
+        let peak = Arc::new(Mutex::new(PeakMemoryAccumulator::default()));
+        if let Ok(mut values) = peak.lock() {
+            values.observe(&before_memory, false);
+        }
+
+        // The monitor receives only the PID of the managed child and queries
+        // that PID directly. It never enumerates unrelated processes.
+        let stop_sampling = Arc::new(AtomicBool::new(false));
+        let sampler: Option<JoinHandle<()>> = sampling_target.map(|pid| {
+            let stop = Arc::clone(&stop_sampling);
+            let peak_values = Arc::clone(&peak);
+            thread::spawn(move || {
+                while !stop.load(Ordering::Relaxed) {
+                    thread::sleep(GENERATION_MEMORY_SAMPLE_INTERVAL);
+                    if stop.load(Ordering::Relaxed) {
+                        break;
+                    }
+                    let snapshot = collect_known_process_memory(pid);
+                    if let Ok(mut values) = peak_values.lock() {
+                        values.observe(&snapshot, true);
+                    }
+                }
+            })
+        });
+
         let result = session.generate_streaming(&request, &cancellation, |delta| {
             on_delta(delta);
         });
+
+        stop_sampling.store(true, Ordering::Relaxed);
+        if let Some(handle) = sampler {
+            let _ = handle.join();
+        }
         let after_memory = session.process_memory_snapshot();
+        if let Ok(mut values) = peak.lock() {
+            values.observe(&after_memory, false);
+        }
+        let peak_values = peak.lock().map(|values| values.clone()).unwrap_or_default();
         let report = RuntimeGenerationMemoryReport {
             status: if before_memory.status == "detected" && after_memory.status == "detected" {
                 "complete".to_owned()
@@ -176,6 +246,18 @@ impl RuntimeManager {
             },
             resident_delta_bytes: memory_delta_bytes(before_memory.resident_bytes, after_memory.resident_bytes),
             virtual_delta_bytes: memory_delta_bytes(before_memory.virtual_bytes, after_memory.virtual_bytes),
+            peak_status: if peak_values.resident_bytes.is_some() || peak_values.virtual_bytes.is_some() {
+                "detected".to_owned()
+            } else if sampling_target.is_some() {
+                "unavailable".to_owned()
+            } else {
+                "not_running".to_owned()
+            },
+            peak_resident_bytes: peak_values.resident_bytes,
+            peak_virtual_bytes: peak_values.virtual_bytes,
+            peak_sample_count: peak_values.sample_count,
+            samples_during_generation: peak_values.interval_sample_count,
+            sampling_interval_ms: GENERATION_MEMORY_SAMPLE_INTERVAL.as_millis() as u64,
             before: before_memory,
             after: after_memory,
             captured_at_unix_seconds: SystemTime::now()
@@ -292,6 +374,37 @@ mod tests {
     use super::*;
     use std::sync::mpsc;
     use std::thread;
+
+    #[test]
+    fn peak_accumulator_tracks_maximum_memory_and_interval_samples() {
+        let mut peak = PeakMemoryAccumulator::default();
+        let sample = |resident, virtual_bytes| ProcessMemorySnapshot {
+            status: "detected".to_owned(),
+            resident_bytes: resident,
+            virtual_bytes,
+        };
+        peak.observe(&sample(Some(100), Some(500)), false);
+        peak.observe(&sample(Some(250), Some(450)), true);
+        peak.observe(&sample(Some(200), Some(700)), true);
+        peak.observe(&ProcessMemorySnapshot {
+            status: "unavailable".to_owned(), resident_bytes: Some(999), virtual_bytes: Some(999),
+        }, true);
+        assert_eq!(peak.resident_bytes, Some(250));
+        assert_eq!(peak.virtual_bytes, Some(700));
+        assert_eq!(peak.sample_count, 3);
+        assert_eq!(peak.interval_sample_count, 2);
+    }
+
+    #[test]
+    fn peak_accumulator_handles_missing_values_and_empty_samples() {
+        let mut peak = PeakMemoryAccumulator::default();
+        peak.observe(&ProcessMemorySnapshot {
+            status: "detected".to_owned(), resident_bytes: None, virtual_bytes: Some(42),
+        }, true);
+        assert_eq!(peak.resident_bytes, None);
+        assert_eq!(peak.virtual_bytes, Some(42));
+        assert_eq!(peak.sample_count, 1);
+    }
 
     #[test]
     fn memory_delta_reports_positive_negative_zero_and_missing_samples() {

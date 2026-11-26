@@ -416,3 +416,13 @@ Only the already-known managed child PID is queried. No process enumeration, PID
 **Interpretation limits:** these are two point-in-time boundary samples, not continuous monitoring or peak-memory measurements. A positive resident delta means the process ended the request with more resident memory than it had immediately before; it does not prove that the request caused every change or identify model weights, KV cache, compute buffers, or individual allocations. Memory may rise and fall between samples. Virtual-memory delta is address-space change, not physical RAM use. GPU allocations remain outside this report. The report is diagnostic only and does not alter runtime settings, choose a model, or claim model-fit compatibility.
 
 Regression tests cover positive, negative, zero, missing, and out-of-range signed deltas.
+
+## 27. Managed inference-process peak memory sampling (2026-11-26)
+
+During each local generation request, the runtime manager starts a short-lived sampler for the exact managed llama-server child PID. It takes targeted samples at a 250 ms interval while generation is active, then stops and joins the sampler before returning the response report. The before- and after-generation boundary readings are also included when calculating the observed maximum. The report includes peak observed resident/virtual memory, number of valid readings, number of interval readings, sampling interval, and explicit detected/unavailable/not-running status.
+
+The sampler is request-scoped: it does not run in the background while idle, does not persist a history, and does not upload telemetry. The PID stays inside the Rust process boundary. Each interval read refreshes only the known PID through the existing targeted process query; unrelated processes are not enumerated.
+
+**Interpretation limits:** this is the maximum value observed at the sampling points, not a guaranteed true peak. A short-lived spike between 250 ms samples may be missed. The values cover the entire llama-server process and do not isolate model weights, KV cache, compute buffers, or GPU memory. Sampling overhead is expected to be small but must be checked on real devices. This diagnostic does not alter inference settings, reserve memory, select a model, or guarantee model fit.
+
+Regression tests verify maximum tracking, interval sample counting, and unavailable field handling.

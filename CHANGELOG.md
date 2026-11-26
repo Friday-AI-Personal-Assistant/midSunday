@@ -1,6 +1,7 @@
 # Changelog
 
 ## 2026-11-26
+- Added request-scoped peak resident/virtual memory sampling for the managed llama-server process during generation, using targeted 250 ms samples plus before/after readings. Reported peaks are observed maxima, not guaranteed true peaks.
 - Added a before/after memory boundary report around each successful local generation, including signed resident/virtual deltas for the managed llama-server child. These point-in-time samples are not peak or model-only memory measurements.
 - Added an explicit, local-only memory snapshot for the single managed llama-server child process, reporting resident and virtual memory without enumerating unrelated processes. The snapshot is informational and does not represent model-only or GPU memory.
 

@@ -1347,3 +1347,16 @@ This is a process-wide diagnostic measurement only. It does not predict model fi
 - [ ] Collect representative repeated measurements across models, context lengths, and workloads before using memory changes for hardware recommendations.
 
 This is a pair of process-wide boundary readings, not peak memory or model-only allocation measurement. It does not identify weights/KV cache/compute buffers, measure GPU allocations, guarantee model fit, or change runtime settings. See docs/HARDWARE-INTELLIGENCE.md section 26.
+
+### 2026-11-26 — Managed inference-process peak memory sampling (Batch #122)
+
+- [x] Add a request-scoped sampler that observes only the already-managed llama-server child PID while generation is active.
+- [x] Sample resident and virtual memory at a conservative 250 ms interval, stopping and joining the sampler when generation ends.
+- [x] Include the before/after boundary readings when calculating maximum observed memory.
+- [x] Report peak observed resident/virtual values, valid sample counts, interval sample counts, sampling interval, and explicit availability status.
+- [x] Keep sampling local and temporary: no idle background monitor, process enumeration, PID exposure, persistent history, or network telemetry.
+- [x] Add regression tests for peak tracking, interval counts, and missing readings.
+- [ ] Compare peak readings with operating-system process monitors on real Windows, Linux, and macOS devices.
+- [ ] Evaluate sampler overhead and missed short-lived spikes across short/long generations and multiple model sizes before using results for adaptive resource recommendations.
+
+The reported peak is the maximum observed at the sample points, not a guaranteed true peak. A short spike between 250 ms samples may be missed. It remains process-wide and does not measure GPU allocations or guarantee model fit. See docs/HARDWARE-INTELLIGENCE.md section 27.
