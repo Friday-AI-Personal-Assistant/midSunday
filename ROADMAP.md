@@ -1503,3 +1503,14 @@ This is structural container validation only; it does not establish model compat
 - [x] Preserve bounded per-string validation for string arrays and add regression coverage for valid and truncated numeric arrays in both inspection paths.
 
 This is parser resilience and efficiency work only; it does not load model weights or establish runtime compatibility. See docs/HARDWARE-INTELLIGENCE.md section 39.
+
+
+### 2026-11-26 — GGUF selected metadata value-type validation (Batch #145)
+
+- [x] Require recognised architecture and model-name metadata to use string values.
+- [x] Require recognised counts, dimensions, file-type codes, quantisation versions, and alignment fields to use non-negative integer values.
+- [x] Reject 32-bit metadata values that exceed the supported range instead of silently presenting them as unavailable.
+- [x] Apply strict type/range checks to alignment and parameter-count metadata in tensor-storage analysis as well as metadata inspection.
+- [x] Preserve bounded skipping of unknown metadata keys and add regression coverage for wrong types and integer overflow.
+
+This validates metadata representation only; it does not prove that metadata values are truthful or that a model is runtime-compatible. See docs/HARDWARE-INTELLIGENCE.md section 40.

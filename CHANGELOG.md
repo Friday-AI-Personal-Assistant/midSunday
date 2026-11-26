@@ -151,3 +151,6 @@ All notable project changes are recorded here. The project is in foundation/prot
 - Improved GGUF metadata array handling: fixed-width arrays now use checked bulk skipping, boolean arrays are validated in bounded chunks, and truncated numeric arrays are rejected with regression coverage in both inspector paths.
 
 - Fixed the Batch #143 GGUF array regression fixture to include required 32-byte tensor-data alignment padding, so the valid zero-tensor file is accepted by both inspection paths while truncated numeric arrays remain rejected.
+
+
+- Hardened recognised GGUF metadata fields: string fields reject non-string values, numeric fields reject incompatible/negative encodings, 32-bit fields reject overflow, and tensor analysis validates alignment and parameter-count types consistently. Unknown metadata remains supported; regression tests cover malformed encodings.

@@ -528,3 +528,10 @@ Both GGUF inspection paths now reject empty metadata keys. Scalar boolean values
 ## 39. GGUF metadata array scanning efficiency and bounds (2026-11-26)
 
 Unknown fixed-width metadata arrays are now skipped in one checked byte-range operation rather than seeking once per element. The element-count limit remains in force, multiplication is checked for overflow, and the file boundary is validated before accepting the array. Boolean arrays are scanned in fixed-size chunks so every value is validated as canonical 0 or 1 without allocating memory proportional to the declared count. String arrays retain per-string length and UTF-8 validation. Truncated arrays fail cleanly in both inspection paths. This improves malformed-file resilience without reading tensor weights or changing model/runtime settings.
+
+
+## 40. GGUF selected metadata value-type validation (2026-11-26)
+
+Recognised metadata fields are now required to contain the expected broad value category: architecture/name fields must be strings, while counts, dimensions, file-type codes, quantisation versions, and alignment must be non-negative integers. Values that previously appeared as silently missing when encoded with an incompatible GGUF scalar type now produce an explicit inspection error. Values narrowed to 32-bit fields are checked for range overflow. Tensor-storage analysis applies the same strict checks to general.alignment and general.parameter_count. Unknown metadata keys remain supported through the existing bounded type-aware skip path.
+
+Regression tests cover wrong string/integer encodings in both inspection paths, string-versus-number mismatches, and 32-bit range overflow. These checks validate container metadata representation only; they do not establish architecture correctness, model compatibility, or runtime support.

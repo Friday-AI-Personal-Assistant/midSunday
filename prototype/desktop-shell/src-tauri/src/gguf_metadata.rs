@@ -90,6 +90,15 @@ fn skip_value(f:&mut File,kind:u32)->Result<(),String>{
     }
 }
 fn unsigned(v:Value)->Option<u64>{match v{Value::Unsigned(n)=>Some(n),Value::Signed(n) if n>=0=>Some(n as u64),_=>None}}
+fn required_unsigned(value:Value,key:&str)->Result<u64,String>{
+    unsigned(value).ok_or_else(||format!("GGUF metadata field {key} must contain a non-negative integer."))
+}
+fn required_u32(value:Value,key:&str)->Result<u32,String>{
+    u32::try_from(required_unsigned(value,key)?).map_err(|_|format!("GGUF metadata field {key} exceeds the supported 32-bit range."))
+}
+fn required_text(value:Value,key:&str)->Result<String,String>{
+    match value{Value::Text(text)=>Ok(text),_=>Err(format!("GGUF metadata field {key} must contain a string."))}
+}
 fn file_type_description(code:u32)->Option<String>{
     let label=match code{0=>"F32",1=>"F16",2=>"Q4_0",3=>"Q4_1",4=>"Q4_1 with some F16 tensors",5=>"Q8_0",6=>"Q5_0",7=>"Q5_1",8=>"Q2_K",9=>"Q3_K_S",10=>"Q3_K_M",11=>"Q3_K_L",12=>"Q4_K_S",13=>"Q4_K_M",14=>"Q5_K_S",15=>"Q5_K_M",16=>"Q6_K",17=>"Q8_K",18=>"IQ2_XXS",19=>"IQ2_XS",20=>"IQ3_XXS",21=>"IQ1_S",22=>"IQ4_NL",23=>"IQ3_S",24=>"IQ2_S",25=>"IQ4_XS",_=>return None};Some(label.to_owned())
 }
@@ -177,10 +186,10 @@ pub fn analyse_tensor_storage(input:&str)->Result<TensorStorageAnalysis,String>{
         if !metadata_keys.insert(key.clone()){return Err("The GGUF file contains a duplicate metadata key.".to_owned());}
         let kind=read_u32(&mut f)?;
         if key=="general.alignment"{
-            let value=unsigned(scalar(&mut f,kind)?).and_then(|v|u32::try_from(v).ok()).ok_or_else(||"GGUF alignment metadata is invalid.".to_owned())?;
+            let value=required_u32(scalar(&mut f,kind)?,&key)?;
             alignment=value;
         }else if key=="general.parameter_count"{
-            reported_parameter_count=unsigned(scalar(&mut f,kind)?);
+            reported_parameter_count=Some(required_unsigned(scalar(&mut f,kind)?,&key)?);
         }else{skip_value(&mut f,kind)?;}
     }
     if alignment==0 || alignment>4096 || !alignment.is_power_of_two(){return Err("GGUF tensor alignment must be a power of two from 1 to 4096 bytes.".to_owned());}
@@ -280,22 +289,22 @@ pub fn inspect(input:&str)->Result<GgufMetadata,String>{
         if !selected{skip_value(&mut f,kind)?;continue;}
         let value=scalar(&mut f,kind)?;
         match key.as_str(){
-            "general.architecture"=>if let Value::Text(v)=value{architecture=Some(v);},
-            "general.name"=>if let Value::Text(v)=value{model_name=Some(v);},
-            "general.file_type"=>file_type_code=unsigned(value).and_then(|v|u32::try_from(v).ok()),
-            "general.parameter_count"=>parameter_count=unsigned(value),
-            "general.quantization_version"=>quantization_version=unsigned(value).and_then(|v|u32::try_from(v).ok()),
-            "general.alignment"=>alignment=unsigned(value).and_then(|v|u32::try_from(v).ok()),
-            _ if key.ends_with(".context_length")=>context_length=unsigned(value),
-            _ if key.ends_with(".block_count")=>block_count=unsigned(value),
-            _ if key.ends_with(".embedding_length")=>embedding_length=unsigned(value),
-            _ if key.ends_with(".attention.head_count_kv")=>attention_kv_head_count=unsigned(value),
-            _ if key.ends_with(".attention.key_length")=>attention_key_length=unsigned(value),
-            _ if key.ends_with(".attention.value_length")=>attention_value_length=unsigned(value),
-            _ if key.ends_with(".attention.head_count")=>attention_head_count=unsigned(value),
-            _ if key.ends_with(".rope.dimension_count")=>rope_dimension_count=unsigned(value),
-            _ if key.ends_with(".expert_count")=>expert_count=unsigned(value),
-            _ if key.ends_with(".expert_used_count")=>expert_used_count=unsigned(value),
+            "general.architecture"=>architecture=Some(required_text(value,&key)?),
+            "general.name"=>model_name=Some(required_text(value,&key)?),
+            "general.file_type"=>file_type_code=Some(required_u32(value,&key)?),
+            "general.parameter_count"=>parameter_count=Some(required_unsigned(value,&key)?),
+            "general.quantization_version"=>quantization_version=Some(required_u32(value,&key)?),
+            "general.alignment"=>alignment=Some(required_u32(value,&key)?),
+            _ if key.ends_with(".context_length")=>context_length=Some(required_unsigned(value,&key)?),
+            _ if key.ends_with(".block_count")=>block_count=Some(required_unsigned(value,&key)?),
+            _ if key.ends_with(".embedding_length")=>embedding_length=Some(required_unsigned(value,&key)?),
+            _ if key.ends_with(".attention.head_count_kv")=>attention_kv_head_count=Some(required_unsigned(value,&key)?),
+            _ if key.ends_with(".attention.key_length")=>attention_key_length=Some(required_unsigned(value,&key)?),
+            _ if key.ends_with(".attention.value_length")=>attention_value_length=Some(required_unsigned(value,&key)?),
+            _ if key.ends_with(".attention.head_count")=>attention_head_count=Some(required_unsigned(value,&key)?),
+            _ if key.ends_with(".rope.dimension_count")=>rope_dimension_count=Some(required_unsigned(value,&key)?),
+            _ if key.ends_with(".expert_count")=>expert_count=Some(required_unsigned(value,&key)?),
+            _ if key.ends_with(".expert_used_count")=>expert_used_count=Some(required_unsigned(value,&key)?),
             _=>{}
         }
     }
@@ -506,6 +515,37 @@ mod tests{
     #[test]fn rejects_invalid_magic_and_versions(){let p=temp(b"NOPE","gguf");assert!(inspect(p.to_str().unwrap()).is_err());let _=std::fs::remove_file(p);let mut b=fixture();b[4..8].copy_from_slice(&99u32.to_le_bytes());let p=temp(&b,"gguf");assert!(inspect(p.to_str().unwrap()).unwrap_err().contains("version 99"));let _=std::fs::remove_file(p);}
     #[test]fn rejects_truncated_metadata_and_unreasonable_counts(){let mut b=fixture();b.truncate(35);let p=temp(&b,"gguf");assert!(inspect(p.to_str().unwrap()).is_err());let _=std::fs::remove_file(p);let mut b=fixture();b[20..28].copy_from_slice(&(MAX_METADATA_ENTRIES+1).to_le_bytes());let p=temp(&b,"gguf");assert!(inspect(p.to_str().unwrap()).unwrap_err().contains("too many metadata"));let _=std::fs::remove_file(p);}
     #[test]fn skips_unknown_string_and_array_metadata(){let mut b=b"GGUF".to_vec();b.extend_from_slice(&3u32.to_le_bytes());b.extend_from_slice(&0u64.to_le_bytes());b.extend_from_slice(&2u64.to_le_bytes());push_string(&mut b,"unknown.string");b.extend_from_slice(&8u32.to_le_bytes());push_string(&mut b,"ignored");push_string(&mut b,"unknown.array");b.extend_from_slice(&9u32.to_le_bytes());b.extend_from_slice(&4u32.to_le_bytes());b.extend_from_slice(&3u64.to_le_bytes());for n in [1u32,2,3]{b.extend_from_slice(&n.to_le_bytes());}let p=temp(&b,"gguf");assert_eq!(inspect(p.to_str().unwrap()).unwrap().tensor_count,0);let _=std::fs::remove_file(p);}
+    fn single_metadata_fixture(key:&str,kind:u32,value:&[u8])->Vec<u8>{
+        let mut b=b"GGUF".to_vec();b.extend_from_slice(&3u32.to_le_bytes());
+        b.extend_from_slice(&0u64.to_le_bytes());b.extend_from_slice(&1u64.to_le_bytes());
+        push_string(&mut b,key);b.extend_from_slice(&kind.to_le_bytes());b.extend_from_slice(value);
+        while b.len()%32!=0{b.push(0);}b
+    }
+    #[test]fn rejects_wrong_types_and_out_of_range_selected_metadata(){
+        let mut string_value=Vec::new();push_string(&mut string_value,"seven");
+        let wrong_string=single_metadata_fixture("general.parameter_count",8,&string_value);
+        let p=temp(&wrong_string,"gguf");
+        assert!(inspect(p.to_str().unwrap()).unwrap_err().contains("non-negative integer"));
+        assert!(analyse_tensor_storage(p.to_str().unwrap()).unwrap_err().contains("non-negative integer"));
+        let _=std::fs::remove_file(p);
+
+        let mut alignment_string=Vec::new();push_string(&mut alignment_string,"32");
+        let wrong_alignment=single_metadata_fixture("general.alignment",8,&alignment_string);
+        let p=temp(&wrong_alignment,"gguf");
+        assert!(inspect(p.to_str().unwrap()).unwrap_err().contains("non-negative integer"));
+        assert!(analyse_tensor_storage(p.to_str().unwrap()).unwrap_err().contains("non-negative integer"));
+        let _=std::fs::remove_file(p);
+
+        let wrong_architecture=single_metadata_fixture("general.architecture",4,&32u32.to_le_bytes());
+        let p=temp(&wrong_architecture,"gguf");
+        assert!(inspect(p.to_str().unwrap()).unwrap_err().contains("must contain a string"));
+        let _=std::fs::remove_file(p);
+
+        let out_of_range=single_metadata_fixture("general.file_type",10,&u64::MAX.to_le_bytes());
+        let p=temp(&out_of_range,"gguf");
+        assert!(inspect(p.to_str().unwrap()).unwrap_err().contains("32-bit range"));
+        let _=std::fs::remove_file(p);
+    }
     #[test]fn skips_fixed_width_arrays_in_bounded_bulk_and_rejects_truncation(){
         let mut valid=b"GGUF".to_vec();valid.extend_from_slice(&3u32.to_le_bytes());
         valid.extend_from_slice(&0u64.to_le_bytes());valid.extend_from_slice(&1u64.to_le_bytes());
