@@ -2,8 +2,9 @@
 //! This intentionally does not enumerate processes, host names, network interfaces,
 //! device serial numbers, or private user files.
 use serde::Serialize;
-use sysinfo::{get_current_pid, CpuRefreshKind, Disks, Pid, ProcessRefreshKind, ProcessesToUpdate, System};
+use sysinfo::{get_current_pid, CpuRefreshKind, Disks, Networks, Pid, ProcessRefreshKind, ProcessesToUpdate, System};
 use std::sync::Mutex;
+use std::time::{Duration, Instant};
 
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -573,15 +574,19 @@ pub fn collect_hardware_snapshot(model_path: Option<String>) -> HardwareSnapshot
     }
 }
 
-/// Bounded, read-only sampler for the live System Monitor. It refreshes only CPU,
-/// memory, and the current midSunday process; it never enumerates unrelated processes.
+/// Bounded, read-only sampler for the live System Monitor. It refreshes CPU, memory,
+/// aggregate network counters, and the current midSunday process only; it never exposes
+/// interface names or enumerates unrelated processes.
 pub struct SystemMonitor {
     state: Mutex<SystemMonitorState>,
 }
 
 struct SystemMonitorState {
     system: System,
+    networks: Networks,
     samples: u64,
+    previous_network_totals: Option<(u64, u64)>,
+    previous_sample_at: Option<Instant>,
 }
 
 #[derive(Clone, Debug, Serialize, PartialEq)]
@@ -595,6 +600,13 @@ pub struct LiveSystemMetrics {
     pub used_memory_bytes: u64,
     pub available_memory_bytes: u64,
     pub process_memory: ProcessMemorySnapshot,
+    pub network_status: String,
+    pub network_interface_count: usize,
+    pub download_bytes_per_second: Option<u64>,
+    pub upload_bytes_per_second: Option<u64>,
+    pub process_disk_io_status: String,
+    pub process_read_bytes_per_second: Option<u64>,
+    pub process_write_bytes_per_second: Option<u64>,
 }
 
 impl Default for SystemMonitor {
@@ -602,7 +614,8 @@ impl Default for SystemMonitor {
         let mut system = System::new();
         system.refresh_cpu_list(CpuRefreshKind::everything());
         system.refresh_memory();
-        Self { state: Mutex::new(SystemMonitorState { system, samples: 0 }) }
+        let networks = Networks::new_with_refreshed_list();
+        Self { state: Mutex::new(SystemMonitorState { system, networks, samples: 0, previous_network_totals: None, previous_sample_at: None }) }
     }
 }
 
@@ -611,6 +624,9 @@ impl SystemMonitor {
         let mut state = self.state.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
         state.system.refresh_cpu_usage();
         state.system.refresh_memory();
+        state.networks.refresh(true);
+        let now = Instant::now();
+        let elapsed = state.previous_sample_at.map(|previous| now.saturating_duration_since(previous));
         let cpu_core_usage_percent = state.system.cpus().iter()
             .map(|cpu| normalise_cpu_usage_percent(cpu.cpu_usage()))
             .collect::<Vec<_>>();
@@ -622,18 +638,53 @@ impl SystemMonitor {
         state.samples = state.samples.saturating_add(1);
         let total_memory_bytes = state.system.total_memory();
         let available_memory_bytes = state.system.available_memory().min(total_memory_bytes);
-        let process_memory = match get_current_pid() {
+        let network_interface_count = state.networks.iter().count();
+        let network_totals = state.networks.iter().fold((0_u64, 0_u64), |(received, transmitted), (_, data)| {
+            (received.saturating_add(data.total_received()), transmitted.saturating_add(data.total_transmitted()))
+        });
+        let download_bytes_per_second = state.previous_network_totals.zip(elapsed)
+            .and_then(|(previous, duration)| counter_rate_bytes_per_second(network_totals.0, previous.0, duration));
+        let upload_bytes_per_second = state.previous_network_totals.zip(elapsed)
+            .and_then(|(previous, duration)| counter_rate_bytes_per_second(network_totals.1, previous.1, duration));
+        let network_status = if network_interface_count == 0 {
+            "unavailable"
+        } else if download_bytes_per_second.is_some() && upload_bytes_per_second.is_some() {
+            "detected"
+        } else {
+            "warming_up"
+        }.to_owned();
+        state.previous_network_totals = Some(network_totals);
+        let process_result = match get_current_pid() {
             Ok(pid) => {
                 state.system.refresh_processes_specifics(
-                    ProcessesToUpdate::Some(&[pid]), true, ProcessRefreshKind::nothing().with_memory(),
+                    ProcessesToUpdate::Some(&[pid]), true,
+                    ProcessRefreshKind::nothing().with_memory().with_disk_usage(),
                 );
-                match state.system.process(pid) {
-                    Some(process) => ProcessMemorySnapshot { status: "detected".to_owned(), resident_bytes: Some(process.memory()), virtual_bytes: Some(process.virtual_memory()) },
-                    None => ProcessMemorySnapshot { status: "unavailable".to_owned(), resident_bytes: None, virtual_bytes: None },
-                }
+                state.system.process(pid).map(|process| {
+                    let disk_usage = process.disk_usage();
+                    (
+                        ProcessMemorySnapshot { status: "detected".to_owned(), resident_bytes: Some(process.memory()), virtual_bytes: Some(process.virtual_memory()) },
+                        elapsed.and_then(|duration| rate_bytes_per_second(disk_usage.read_bytes, duration)),
+                        elapsed.and_then(|duration| rate_bytes_per_second(disk_usage.written_bytes, duration)),
+                    )
+                })
             }
-            Err(_) => ProcessMemorySnapshot { status: "unavailable".to_owned(), resident_bytes: None, virtual_bytes: None },
+            Err(_) => None,
         };
+        let (process_memory, process_read_bytes_per_second, process_write_bytes_per_second, process_disk_io_status) =
+            match process_result {
+                Some((memory, read_rate, write_rate)) => (
+                    memory,
+                    read_rate,
+                    write_rate,
+                    if read_rate.is_some() && write_rate.is_some() { "detected".to_owned() } else { "warming_up".to_owned() },
+                ),
+                None => (
+                    ProcessMemorySnapshot { status: "unavailable".to_owned(), resident_bytes: None, virtual_bytes: None },
+                    None, None, "unavailable".to_owned(),
+                ),
+            };
+        state.previous_sample_at = Some(now);
         LiveSystemMetrics {
             captured_at_unix_millis: std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis().min(u64::MAX as u128) as u64,
             cpu_status: if cpu_usage_percent.is_some() { "detected".to_owned() } else if cpu_core_usage_percent.is_empty() { "unavailable".to_owned() } else { "warming_up".to_owned() },
@@ -643,12 +694,31 @@ impl SystemMonitor {
             used_memory_bytes: total_memory_bytes.saturating_sub(available_memory_bytes),
             available_memory_bytes,
             process_memory,
+            network_status,
+            network_interface_count,
+            download_bytes_per_second,
+            upload_bytes_per_second,
+            process_disk_io_status,
+            process_read_bytes_per_second,
+            process_write_bytes_per_second,
         }
     }
 }
 
 fn normalise_cpu_usage_percent(value: f32) -> f32 {
     if value.is_finite() { value.clamp(0.0, 100.0) } else { 0.0 }
+}
+
+fn rate_bytes_per_second(bytes: u64, elapsed: Duration) -> Option<u64> {
+    let seconds = elapsed.as_secs_f64();
+    if !seconds.is_finite() || seconds <= 0.0 { return None; }
+    let rate = bytes as f64 / seconds;
+    if !rate.is_finite() { return None; }
+    Some(rate.round().clamp(0.0, u64::MAX as f64) as u64)
+}
+
+fn counter_rate_bytes_per_second(current: u64, previous: u64, elapsed: Duration) -> Option<u64> {
+    current.checked_sub(previous).and_then(|delta| rate_bytes_per_second(delta, elapsed))
 }
 
 #[cfg(test)]
@@ -674,6 +744,31 @@ mod tests {
         assert!(matches!(snapshot.cpu_status.as_str(), "warming_up" | "detected" | "unavailable"));
     }
     use super::*;
+
+
+    #[test]
+    fn network_counter_rates_handle_deltas_resets_and_zero_elapsed() {
+        use std::time::Duration;
+        assert_eq!(super::counter_rate_bytes_per_second(3_072, 1_024, Duration::from_secs(2)), Some(1_024));
+        assert_eq!(super::counter_rate_bytes_per_second(100, 200, Duration::from_secs(1)), None);
+        assert_eq!(super::counter_rate_bytes_per_second(100, 100, Duration::ZERO), None);
+        assert_eq!(super::rate_bytes_per_second(512, Duration::from_secs(2)), Some(256));
+    }
+
+    #[test]
+    fn live_monitor_reports_network_and_mid_sunday_io_without_interface_names() {
+        let monitor = super::SystemMonitor::default();
+        let snapshot = monitor.sample();
+        assert!(matches!(snapshot.network_status.as_str(), "warming_up" | "detected" | "unavailable"));
+        assert!(matches!(snapshot.process_disk_io_status.as_str(), "warming_up" | "detected" | "unavailable"));
+        assert!(snapshot.download_bytes_per_second.is_none() || snapshot.network_status == "detected");
+        assert!(snapshot.upload_bytes_per_second.is_none() || snapshot.network_status == "detected");
+        let json = serde_json::to_value(&snapshot).expect("live metrics should serialize");
+        assert!(json.get("networkInterfaceCount").is_some());
+        assert!(json.get("downloadBytesPerSecond").is_some());
+        assert!(json.get("processReadBytesPerSecond").is_some());
+        assert!(json.get("networkInterfaceNames").is_none());
+    }
 
     #[test]
     fn hardware_snapshot_is_serializable_and_contains_only_inventory_fields() {

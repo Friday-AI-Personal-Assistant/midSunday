@@ -1835,7 +1835,7 @@ See docs/HARDWARE-INTELLIGENCE.md section 68.
 - [ ] CPU: show overall utilisation and, where reliable, per-core utilisation; explain that readings are sampled over an interval.
 - [ ] GPU: show per-physical-adapter utilisation and memory usage/budget where reliable APIs expose them; show temperature, engine breakdown, and vendor details only when supported.
 - [ ] Storage: show volume capacity/used/free space, and add read/write activity rates where reliable and useful.
-- [ ] Network: show upload/download throughput and clearly identify whether readings are system-wide or process-specific.
+- [x] Network: show aggregate system-wide upload/download throughput without collecting interface names; clearly label scope and unavailable/warming-up states.
 - [ ] Battery: show charge percentage, charging/discharging state, and remaining-time estimate only when the OS provides a trustworthy value.
 - [ ] Provide clear unavailable/unsupported/permission-limited states instead of fabricated, stale, or misleading zero values.
 - [ ] Keep the layout responsive, accessible, keyboard-friendly, and readable at different window sizes and display scales.
@@ -1875,3 +1875,14 @@ See docs/HARDWARE-INTELLIGENCE.md section 68.
 - [ ] Validate real metric accuracy on physical Windows, Linux, and macOS devices; hosted CI validates builds/tests, not sensor accuracy.
 
 This is the first vertical slice of the roadmap feature, not the completed System Monitor. See the Live System Monitor section in ROADMAP.md.
+
+
+### 2026-11-26 — Network and process I/O monitoring (Batch #180)
+
+- [x] Add aggregate system-wide upload/download rates from network byte-counter deltas, without collecting or displaying interface names.
+- [x] Add explicit network warm-up/unavailable states and guard against counter resets and zero-duration samples.
+- [x] Add midSunday-only disk read/write rates using the current process's I/O counters; do not enumerate or expose other processes.
+- [x] Extend the bounded live history with download/upload activity.
+- [x] Add regression tests for rate calculations, counter resets, serialization, and absence of interface-name fields.
+- [ ] Add system-wide disk activity, live GPU utilisation/memory, and battery telemetry in later platform-aware batches.
+- [ ] Validate network and process I/O accuracy on physical Windows, Linux, and macOS devices.

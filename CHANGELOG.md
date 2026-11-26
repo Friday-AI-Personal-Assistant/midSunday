@@ -214,3 +214,6 @@ All notable project changes are recorded here. The project is in foundation/prot
 
 
 - Began the Live System Monitor implementation with an opt-in, local CPU/RAM/process-memory dashboard, bounded recent-activity bars, and a stateful Rust sampler. GPU live utilisation, network, battery, and live disk activity remain planned follow-up work.
+
+
+- Extended the Live System Monitor with aggregate system-wide network download/upload rates and midSunday-process-only disk read/write rates. Added bounded network history and counter-reset/warm-up handling; interface names and other process details remain uncollected.

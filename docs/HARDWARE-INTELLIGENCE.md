@@ -689,3 +689,12 @@ These are point-in-time OS reservation-headroom indicators, not free VRAM, model
 The model-memory evidence report now includes a fresh GPU inventory and per-adapter reservation-headroom snapshot alongside the existing host-RAM and FP16 KV-cache evidence. It reports the number of physical adapters, how many expose a usable local budget, critical/constrained/healthy headroom counts, and the lowest per-adapter reservation-headroom reading when available. The UI keeps this GPU information in a separate section of the report.
 
 GPU context does not alter the host-RAM verdict or KV-cache calculation. It is not free VRAM, a model-fit prediction, or proof that the installed llama.cpp build or another inference backend supports GPU offload. Memory is never pooled across adapters. This addition is evidence-only and does not select a model, change offload layers, reserve memory, or modify runtime settings. Regression tests verify that constrained GPU headroom is carried into the report without changing an otherwise unchanged host-RAM result.
+
+
+## 69. Live network throughput and midSunday process I/O (Batch #180)
+
+The opt-in Live System Monitor now reports aggregate system-wide download/upload throughput using the operating system's per-interface byte counters. It sums counters without exposing interface names, IP addresses, or per-interface identity. Rates are derived from successive totals and elapsed sample time; the first sample warms up, and counter decreases (for example, interface changes or resets) do not produce misleading negative rates.
+
+The monitor also reports read/write throughput for the midSunday process only, using that process's I/O counters. This is not system-wide disk activity. Operating-system caching and platform-specific accounting may affect the values, so the UI labels the scope explicitly. The recent activity view now includes bounded download/upload history.
+
+The implementation reuses the existing sysinfo dependency and refreshes only the current midSunday process. It does not enumerate other processes, expose network interface names, store history persistently, or send telemetry anywhere. GPU utilisation, battery telemetry, and system-wide disk activity remain future work. Tests cover rate calculations, counter resets, unavailable/warm-up states, and serialized snapshot shape.

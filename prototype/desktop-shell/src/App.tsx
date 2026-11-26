@@ -7,6 +7,8 @@ type LiveSystemMetrics = {
   capturedAtUnixMillis: number; cpuStatus: string; cpuUsagePercent: number | null; cpuCoreUsagePercent: number[];
   totalMemoryBytes: number; usedMemoryBytes: number; availableMemoryBytes: number;
   processMemory: { status: string; residentBytes: number | null; virtualBytes: number | null };
+  networkStatus: string; networkInterfaceCount: number; downloadBytesPerSecond: number | null; uploadBytesPerSecond: number | null;
+  processDiskIoStatus: string; processReadBytesPerSecond: number | null; processWriteBytesPerSecond: number | null;
 };
 type Section = "chat" | "characters" | "settings";
 type Message = { id: number; role: "user" | "assistant" | "system"; text: string };
@@ -196,7 +198,7 @@ export default function App() {
   const [monitorRunning, setMonitorRunning] = useState(false);
   const [liveMetrics, setLiveMetrics] = useState<LiveSystemMetrics | null>(null);
   const [monitorError, setMonitorError] = useState("");
-  const [monitorHistory, setMonitorHistory] = useState<{ cpu: number; ram: number }[]>([]);
+  const [monitorHistory, setMonitorHistory] = useState<{ cpu: number; ram: number; download: number; upload: number }[]>([]);
   const [executablePath, setExecutablePath] = useState("");
   const [modelPath, setModelPath] = useState("");
   const [contextTokens, setContextTokens] = useState("2048");
@@ -234,7 +236,7 @@ export default function App() {
           if (snapshot.totalMemoryBytes > 0) {
             const ram = Math.max(0, Math.min(100, (snapshot.usedMemoryBytes / snapshot.totalMemoryBytes) * 100));
             const cpu = snapshot.cpuUsagePercent ?? 0;
-            setMonitorHistory((previous) => [...previous, { cpu, ram }].slice(-36));
+            setMonitorHistory((previous) => [...previous, { cpu, ram, download: snapshot.downloadBytesPerSecond ?? 0, upload: snapshot.uploadBytesPerSecond ?? 0 }].slice(-36));
           }
         })
         .catch(() => { if (active) setMonitorError("Live measurements are temporarily unavailable."); });
@@ -1104,6 +1106,13 @@ export default function App() {
     return `${bytes.toLocaleString()} bytes`;
   }
 
+  function formatTransferRate(bytesPerSecond: number | null) {
+    if (bytesPerSecond === null) return "Warming up…";
+    if (bytesPerSecond >= 1024 ** 2) return `${(bytesPerSecond / 1024 ** 2).toFixed(2)} MB/s`;
+    if (bytesPerSecond >= 1024) return `${(bytesPerSecond / 1024).toFixed(1)} KB/s`;
+    return `${bytesPerSecond.toLocaleString()} B/s`;
+  }
+
   async function refreshHardwareSnapshot() {
     setHardwareBusy(true);
     setHardwareError("");
@@ -1441,13 +1450,17 @@ export default function App() {
                     <div className="system-monitor-card"><small>CPU · total usage</small><strong>{liveMetrics?.cpuUsagePercent === null || !liveMetrics ? (liveMetrics?.cpuStatus === "unavailable" ? "Unavailable" : "Warming up…") : liveMetrics.cpuUsagePercent.toFixed(1) + "%"}</strong><div className="system-monitor-track"><i style={{ width: (liveMetrics?.cpuUsagePercent ?? 0) + "%" }} /></div><span>{liveMetrics?.cpuCoreUsagePercent.length ? liveMetrics.cpuCoreUsagePercent.length + " logical processors" : "Waiting for CPU samples"}</span></div>
                     <div className="system-monitor-card"><small>RAM · system-wide</small><strong>{liveMetrics ? formatModelSize(liveMetrics.usedMemoryBytes) + " / " + formatModelSize(liveMetrics.totalMemoryBytes) : "Collecting…"}</strong><div className="system-monitor-track"><i style={{ width: (liveMetrics && liveMetrics.totalMemoryBytes > 0 ? (liveMetrics.usedMemoryBytes / liveMetrics.totalMemoryBytes) * 100 : 0) + "%" }} /></div><span>{liveMetrics ? formatModelSize(liveMetrics.availableMemoryBytes) + " available" : "Waiting for memory sample"}</span></div>
                     <div className="system-monitor-card"><small>midSunday · resident RAM</small><strong>{liveMetrics?.processMemory.residentBytes === null || !liveMetrics ? "Unavailable" : formatModelSize(liveMetrics.processMemory.residentBytes)}</strong><span>{liveMetrics?.processMemory.status === "detected" && liveMetrics.processMemory.virtualBytes !== null ? formatModelSize(liveMetrics.processMemory.virtualBytes) + " virtual address space" : "Own-process reading unavailable"}</span></div>
+                    <div className="system-monitor-card"><small>Network · all interfaces</small><strong>↓ {formatTransferRate(liveMetrics?.downloadBytesPerSecond ?? null)}</strong><span>↑ {formatTransferRate(liveMetrics?.uploadBytesPerSecond ?? null)} · {liveMetrics?.networkStatus === "unavailable" ? "No interface counters available" : liveMetrics?.networkInterfaceCount + " interfaces · system-wide totals"}</span></div>
+                    <div className="system-monitor-card"><small>midSunday · disk I/O</small><strong>Read {formatTransferRate(liveMetrics?.processReadBytesPerSecond ?? null)}</strong><span>Write {formatTransferRate(liveMetrics?.processWriteBytesPerSecond ?? null)} · own process only</span></div>
                     <div className="system-monitor-card"><small>GPU · live utilisation</small><strong>Not available yet</strong><span>GPU inventory and memory-budget evidence remain in the hardware section below.</span></div>
                   </div>
                   <div className="system-monitor-history"><div><strong>Recent activity</strong><span>Last 36 samples · approximately 54 seconds</span></div>
                     <div className="system-monitor-history-row"><small>CPU</small><div>{monitorHistory.map((point, index) => <i key={"cpu-" + index} title={point.cpu.toFixed(1) + "%"} style={{ height: Math.max(2, point.cpu) + "%" }} />)}</div></div>
                     <div className="system-monitor-history-row"><small>RAM</small><div>{monitorHistory.map((point, index) => <i key={"ram-" + index} title={point.ram.toFixed(1) + "%"} style={{ height: Math.max(2, point.ram) + "%" }} />)}</div></div>
+                    <div className="system-monitor-history-row"><small>↓ NET</small><div>{monitorHistory.map((point, index) => <i key={"down-" + index} title={formatTransferRate(point.download)} style={{ height: Math.max(2, point.download / Math.max(1, ...monitorHistory.map((sample) => sample.download)) * 100) + "%" }} />)}</div></div>
+                    <div className="system-monitor-history-row"><small>↑ NET</small><div>{monitorHistory.map((point, index) => <i key={"up-" + index} title={formatTransferRate(point.upload)} style={{ height: Math.max(2, point.upload / Math.max(1, ...monitorHistory.map((sample) => sample.upload)) * 100) + "%" }} />)}</div></div>
                   </div>
-                  <p className="settings-footnote">CPU usage is calculated from successive operating-system samples. The first CPU sample establishes a baseline. System RAM and midSunday's own process memory are separate readings; other applications' process details are not collected. GPU utilisation, network, battery, and live disk activity are not included in this first monitoring slice.</p>
+                  <p className="settings-footnote">CPU usage is calculated from successive operating-system samples. Network rates aggregate byte counters across interfaces without collecting or displaying interface names. Disk I/O rates are for the midSunday process only, not the whole computer; OS caching and platform-specific accounting can affect readings. System RAM and midSunday's own process memory remain separate. GPU utilisation and battery telemetry are not included in this monitoring slice.</p>
                   {liveMetrics && <p className="settings-footnote">Last sample: {new Date(liveMetrics.capturedAtUnixMillis).toLocaleTimeString()}</p>}
                 </>}
               </div>
