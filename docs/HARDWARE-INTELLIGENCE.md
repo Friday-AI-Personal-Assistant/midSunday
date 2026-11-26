@@ -611,3 +611,8 @@ Unknown metadata string arrays now enforce the aggregate 64 MiB metadata-section
 ## 54. GGUF string-array section-budget preflight (2026-11-26)
 
 Unknown metadata string arrays now check the declared string payload against the remaining aggregate metadata-section budget immediately after reading its length prefix. If the payload would cross the 64 MiB section boundary, inspection stops before allocating or reading that string. The existing per-string limit and opened-file truncation preflight remain in force, and ordinary string reads retain their existing behaviour. Regression coverage verifies that an over-budget string is rejected with the file cursor still positioned before its payload, proving the payload was not consumed. Tensor weights remain unread and no data is transmitted.
+
+
+## 55. GGUF metadata-key aggregate allocation preflight (2026-11-26)
+
+Metadata keys now check their declared byte length against the remaining aggregate 8 MiB key-storage budget immediately after the length prefix is read. A key that would exceed the remaining budget is rejected before its payload buffer is allocated or its bytes are read. This applies to both metadata inspection paths and complements the existing per-string cap, duplicate-key checks, and metadata-section budget. A focused regression test verifies rejection with the file cursor still directly after the length prefix.

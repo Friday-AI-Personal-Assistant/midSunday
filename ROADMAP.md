@@ -1671,3 +1671,12 @@ The previous fixture correction fixed the encoded byte count but left the test r
 - [x] Add regression coverage proving an over-budget payload is rejected before the parser reads it.
 
 This prevents a single bounded string allocation from temporarily overshooting the aggregate metadata-section limit. See docs/HARDWARE-INTELLIGENCE.md section 54.
+
+
+### 2026-11-26 — GGUF metadata-key aggregate allocation preflight (Batch #163)
+
+- [x] Compare each declared metadata-key length with the remaining aggregate 8 MiB key budget before allocation or payload reads.
+- [x] Apply the preflight consistently in both metadata inspection paths.
+- [x] Add regression coverage proving an over-budget key payload is not consumed.
+
+See docs/HARDWARE-INTELLIGENCE.md section 55.
