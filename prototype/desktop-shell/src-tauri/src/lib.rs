@@ -532,6 +532,7 @@ pub fn run() {
             Ok(())
         })
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, Some(vec![])))
         .manage(RuntimeManager::default())
         .manage(SystemMonitor::default())
         .invoke_handler(tauri::generate_handler![

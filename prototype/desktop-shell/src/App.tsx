@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { Channel, invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
+import { disable as disableAutostart, enable as enableAutostart, isEnabled as isAutostartEnabled } from "@tauri-apps/plugin-autostart";
 
 type BackendState = "checking" | "connected" | "error";
 type LiveSystemMetrics = {
@@ -228,7 +229,9 @@ export default function App() {
   const [userProfileDraft, setUserProfileDraft] = useState<UserProfile>(DEFAULT_USER_PROFILE);
   const [userProfileBusy, setUserProfileBusy] = useState(false);
   const [userProfileNotice, setUserProfileNotice] = useState("");
-  const [startWithWindows, setStartWithWindows] = useState(false);
+  const [launchAtLogin, setLaunchAtLogin] = useState(false);
+  const [launchAtLoginBusy, setLaunchAtLoginBusy] = useState(false);
+  const [launchAtLoginError, setLaunchAtLoginError] = useState("");
   const [runtimeStatus, setRuntimeStatus] = useState<RuntimeStatusSnapshot>({ status: "notInstalled", detail: null, startupMemory: null });
   const [runtimeBusy, setRuntimeBusy] = useState(false);
   const [runtimeError, setRuntimeError] = useState("");
@@ -338,6 +341,9 @@ export default function App() {
 
   useEffect(() => {
     let active = true;
+    isAutostartEnabled()
+      .then((enabled) => { if (active) setLaunchAtLogin(enabled); })
+      .catch(() => { if (active) setLaunchAtLoginError("Could not read the operating-system startup setting."); });
     invoke<string>("get_app_status")
       .then((message) => {
         if (!active) return;
@@ -1456,6 +1462,25 @@ export default function App() {
     }
   }
 
+  async function toggleLaunchAtLogin() {
+    if (launchAtLoginBusy) return;
+    const requested = !launchAtLogin;
+    setLaunchAtLoginBusy(true);
+    setLaunchAtLoginError("");
+    try {
+      if (requested) await enableAutostart();
+      else await disableAutostart();
+      const confirmed = await isAutostartEnabled();
+      setLaunchAtLogin(confirmed);
+      if (confirmed !== requested) setLaunchAtLoginError("The operating system did not confirm the requested startup setting.");
+    } catch {
+      setLaunchAtLoginError("Could not change the operating-system startup setting. Check your account permissions and try again.");
+      try { setLaunchAtLogin(await isAutostartEnabled()); } catch { /* Keep the last confirmed state. */ }
+    } finally {
+      setLaunchAtLoginBusy(false);
+    }
+  }
+
   const statusLabel = backendState === "connected" ? "Core connected" : backendState === "checking" ? "Checking core" : "Core unavailable";
 
   const monitorCaptureIntervals = monitorHistory.slice(1).map((point, index) => point.capturedAtUnixMillis - monitorHistory[index].capturedAtUnixMillis).filter((elapsedMs) => Number.isFinite(elapsedMs) && elapsedMs > 0);
@@ -2030,7 +2055,7 @@ export default function App() {
                 </div>
                 <div className="hardware-note">This assessment does not select a model, change performance settings, download anything, or guarantee compatibility.</div>
               </>}
-              <div className="setting-row"><div><strong>Start with Windows</strong><p>Launch midSunday when you sign in. Not implemented yet.</p></div><button className={startWithWindows ? "toggle on" : "toggle"} role="switch" aria-checked={startWithWindows} onClick={() => setStartWithWindows(!startWithWindows)}><i /></button></div>
+              <div className="setting-row"><div><strong>Launch at sign-in</strong><p>Start midSunday automatically when you sign in to Windows, Linux, or macOS. This only registers the app with your operating system; it does not start an AI model or connect to the internet.</p></div><button className={launchAtLogin ? "toggle on" : "toggle"} type="button" role="switch" aria-label="Launch midSunday at sign-in" aria-checked={launchAtLogin} aria-busy={launchAtLoginBusy} disabled={launchAtLoginBusy} onClick={() => void toggleLaunchAtLogin()}><i /></button></div>{launchAtLoginError && <p className="hardware-error" role="status">{launchAtLoginError}</p>}
             </section>
             <div className="settings-footnote">Local memory is stored separately from conversation history. Clearing chats does not delete memories; use the memory controls above to manage them.</div>
           </div>

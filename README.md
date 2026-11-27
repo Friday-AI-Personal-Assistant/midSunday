@@ -51,6 +51,7 @@ The product must remain useful without a cloud account. Online features must be 
 - [Voice and language requirements](docs/VOICE-AND-LANGUAGES.md)
 - [Personalities and characters](docs/PERSONALITIES-AND-CHARACTERS.md)
 - [Privacy, security, and safety](docs/PRIVACY-AND-SAFETY.md)
+- [Startup and launch-at-sign-in](docs/STARTUP-AND-LAUNCH.md)
 
 ### Reuse and commercial readiness
 - [FRIDAY reuse analysis](docs/FRIDAY-REUSE-ANALYSIS.md)

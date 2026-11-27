@@ -225,3 +225,5 @@ All notable project changes are recorded here. The project is in foundation/prot
 
 
 - Added system-wide disk read/write throughput to the opt-in System Monitor, distinct from midSunday process I/O, with bounded history and no exposed volume or device identifiers.
+
+- Added opt-in, cross-platform launch-at-sign-in registration for Windows, Linux, and macOS. The setting reads the operating-system state, confirms changes, reports failures, and remains disabled unless the user enables it.

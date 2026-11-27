@@ -14,6 +14,7 @@ This register tracks licence checks for code, models, voices, and creative asset
 | Component / asset | Intended role | Exact version or asset | Status | Notes |
 |---|---|---|---|---|
 | Tauri 2 | Desktop shell | Not selected | Pending | Review framework and bundled dependency notices |
+| Tauri autostart plugin | Optional launch-at-sign-in integration | Tauri plugin v2 Rust and JavaScript packages | In review | Upstream states MIT or MIT/Apache-2.0; verify exact resolved versions and transitive notices before distribution |
 | Rust crates | Native backend | Not selected | Pending | Review each crate and transitive dependency |
 | React / TypeScript / Vite | UI and build | Not selected | Pending | Review exact package versions and notices |
 | llama.cpp | Local inference runtime | Not selected | Pending | Runtime licence separate from model weights |

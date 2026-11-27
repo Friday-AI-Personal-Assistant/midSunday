@@ -2328,3 +2328,16 @@ See docs/HARDWARE-INTELLIGENCE.md section 105.
 - [ ] Validate unusual driver/counter readings and timeline presentation on physical Windows, Linux, and macOS devices.
 
 See docs/HARDWARE-INTELLIGENCE.md section 106.
+
+### 2026-11-27 — Cross-platform launch at sign-in (Batch #229)
+
+- [x] Replace the non-functional Windows-only placeholder with an opt-in Launch at sign-in setting for Windows, Linux, and macOS.
+- [x] Register the Tauri autostart integration and expose only its default enable/disable/status permissions to the desktop UI.
+- [x] Read the actual operating-system registration state at startup rather than assuming a preference from an in-memory default.
+- [x] Confirm the requested state after each change; preserve the last confirmed state and show a useful error if the OS rejects the operation.
+- [x] Keep the feature disabled by default; no startup registration occurs without an explicit user action.
+- [x] Clarify that launch-at-sign-in starts the app only; it does not start a model or enable network/cloud features.
+- [x] Document supported platforms, privacy behavior, dependency licensing review, and physical-device validation requirements.
+- [ ] Validate enable/disable, uninstall cleanup, and login behavior on physical Windows, Linux desktop environments, and macOS.
+
+See docs/STARTUP-AND-LAUNCH.md.
