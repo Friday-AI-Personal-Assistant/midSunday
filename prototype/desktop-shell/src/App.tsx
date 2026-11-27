@@ -203,7 +203,7 @@ export default function App() {
   const [liveMetrics, setLiveMetrics] = useState<LiveSystemMetrics | null>(null);
   const [monitorError, setMonitorError] = useState("");
   const [monitorExportNotice, setMonitorExportNotice] = useState("");
-  const [monitorHistory, setMonitorHistory] = useState<{ capturedAtUnixMillis: number; cpu: number | null; ram: number | null; processResidentBytes: number | null; processRead: number | null; processWrite: number | null; download: number | null; upload: number | null; diskRead: number | null; diskWrite: number | null; gpu: Record<string, number | null>; gpuMemory: Record<string, number | null>; cores: (number | null)[]; coreCount: number }[]>([]);
+  const [monitorHistory, setMonitorHistory] = useState<{ capturedAtUnixMillis: number; cpu: number | null; ram: number | null; processResidentBytes: number | null; processVirtualBytes: number | null; processRead: number | null; processWrite: number | null; download: number | null; upload: number | null; diskRead: number | null; diskWrite: number | null; gpu: Record<string, number | null>; gpuMemory: Record<string, number | null>; cores: (number | null)[]; coreCount: number }[]>([]);
   const [executablePath, setExecutablePath] = useState("");
   const [modelPath, setModelPath] = useState("");
   const [contextTokens, setContextTokens] = useState("2048");
@@ -249,6 +249,7 @@ export default function App() {
             cpu: clampPercent(snapshot.cpuUsagePercent),
             ram,
             processResidentBytes: finiteNonNegative(snapshot.processMemory.residentBytes),
+            processVirtualBytes: finiteNonNegative(snapshot.processMemory.virtualBytes),
             processRead: finiteNonNegative(snapshot.processReadBytesPerSecond),
             processWrite: finiteNonNegative(snapshot.processWriteBytesPerSecond),
             download: snapshot.downloadBytesPerSecond,
@@ -1171,6 +1172,7 @@ export default function App() {
       ...Array.from({ length: coreCount }, (_, index) => "Logical processor " + (index + 1) + " utilisation (%)"),
       "System RAM utilisation (%)",
       "midSunday resident memory (bytes)",
+      "midSunday virtual address space (bytes)",
       "midSunday process disk read (bytes/s)",
       "midSunday process disk write (bytes/s)",
       "Network download (bytes/s)",
@@ -1202,6 +1204,7 @@ export default function App() {
       ...Array.from({ length: coreCount }, (_, index) => point.coreCount === coreCount ? (point.cores[index] ?? null) : null),
       point.ram,
       point.processResidentBytes,
+      point.processVirtualBytes,
       point.processRead,
       point.processWrite,
       point.download,
@@ -1386,6 +1389,7 @@ export default function App() {
     }),
     buildMonitorHistorySummary("System RAM", monitorHistory.map((point) => point.ram), (value) => value.toFixed(1) + "%"),
     buildMonitorHistorySummary("midSunday resident memory", monitorHistory.map((point) => point.processResidentBytes), (value) => formatModelSize(value)),
+    buildMonitorHistorySummary("midSunday virtual address space", monitorHistory.map((point) => point.processVirtualBytes), (value) => formatModelSize(value)),
     buildMonitorHistorySummary("midSunday process disk read", monitorHistory.map((point) => point.processRead), (value) => formatTransferRate(value)),
     buildMonitorHistorySummary("midSunday process disk write", monitorHistory.map((point) => point.processWrite), (value) => formatTransferRate(value)),
     buildMonitorHistorySummary("Network download", monitorHistory.map((point) => point.download), (value) => formatTransferRate(value)),
@@ -1690,6 +1694,7 @@ export default function App() {
                     <div className="system-monitor-history-row"><small>RAM</small><div role="img" aria-label="System RAM utilisation history, oldest to newest; missing samples are gaps">{monitorHistory.map((point, index) => point.ram === null ? <i key={"ram-" + index} className="system-monitor-history-gap" title={monitorHistorySampleTitle(index, "No RAM reading")} style={{ marginLeft: monitorHistoryGapBefore(index) }} /> : <i key={"ram-" + index} title={monitorHistorySampleTitle(index, point.ram.toFixed(1) + "%")} style={{ height: Math.max(2, point.ram) + "%", marginLeft: monitorHistoryGapBefore(index) }} />)}</div></div>
                     {([
                       { key: "process-memory", label: "APP MEM", field: "processResidentBytes" as const, format: (value: number) => formatModelSize(value), unit: "resident memory" },
+                      { key: "process-virtual", label: "APP VIRT", field: "processVirtualBytes" as const, format: (value: number) => formatModelSize(value), unit: "virtual address space" },
                       { key: "process-read", label: "APP READ", field: "processRead" as const, format: (value: number) => formatTransferRate(value), unit: "process disk read" },
                       { key: "process-write", label: "APP WRITE", field: "processWrite" as const, format: (value: number) => formatTransferRate(value), unit: "process disk write" },
                     ]).map((metric) => {

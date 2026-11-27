@@ -2199,3 +2199,14 @@ See docs/HARDWARE-INTELLIGENCE.md section 95.
 - [ ] Validate process counter semantics, CSV output, and narrow-window layout on physical Windows, Linux, and macOS devices.
 
 See docs/HARDWARE-INTELLIGENCE.md section 96.
+
+### 2026-11-27 — midSunday virtual address-space history (Batch #217)
+
+- [x] Add midSunday's virtual address-space size to the opt-in System Monitor's bounded Recent activity timeline and numeric summary.
+- [x] Include the virtual address-space value in explicit local CSV exports with an unambiguous byte-unit header.
+- [x] Keep virtual address space distinct from resident memory, system RAM, and GPU memory; explain that it is not physical RAM consumption.
+- [x] Preserve unavailable/invalid values as timeline gaps and blank CSV cells; accept only finite, non-negative readings.
+- [x] Reuse the existing OS snapshot, opt-in 1.5-second polling, 36-sample in-memory bound, and local-only export without process enumeration or extra hardware reads.
+- [ ] Validate process virtual-memory counter semantics, CSV output, and narrow-window layout on physical Windows, Linux, and macOS devices.
+
+See docs/HARDWARE-INTELLIGENCE.md section 97.
