@@ -1070,7 +1070,7 @@ fn gpu_adapter_key_from_instance(instance: &str) -> Option<String> {
     let tail = &instance[start..];
     let end = tail.find("_phys_").unwrap_or(tail.len());
     if end <= "luid_".len() { return None; }
-    Some(tail[..end].to_owned())
+    Some(tail[..end].to_ascii_lowercase())
 }
 
 #[cfg(not(any(target_os = "linux", target_os = "windows")))]
