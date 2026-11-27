@@ -451,3 +451,52 @@ h1 { margin: 0; color: #eef5ef; font-size: clamp(25px, 3vw, 34px); font-weight: 
   outline: 2px solid #80cda2;
   outline-offset: 3px;
 }
+
+
+/* System Monitor: per-logical-processor readings stay legible on narrow windows. */
+.system-monitor-cores-card {
+  grid-column: 1 / -1;
+}
+.system-monitor-cores-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.system-monitor-cores-heading > span {
+  color: #829287;
+  font-size: 9px;
+}
+.system-monitor-cores-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));
+  gap: 10px;
+}
+.system-monitor-core {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+  padding: 9px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255,255,255,.018);
+}
+.system-monitor-core > div:first-child {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+}
+.system-monitor-core > div:first-child small {
+  color: #9aab9f;
+  font-size: 9px;
+}
+.system-monitor-core > div:first-child strong {
+  color: #dce8de;
+  font-size: 11px;
+}
+.system-monitor-core-unavailable {
+  color: #829287;
+  font-size: 9px;
+}

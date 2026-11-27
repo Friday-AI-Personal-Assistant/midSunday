@@ -748,3 +748,12 @@ The Live System Monitor presents GPU utilisation and dedicated-memory allocation
 Recent GPU activity is retained separately for each generic adapter label in the same bounded 36-sample, approximately 54-second local history used by the monitor. A missing reading is represented as a visual gap, not a zero-utilisation sample. Adapter labels remain generic and no vendor, model, PCI, LUID, or serial identifiers are added to the UI or history.
 
 The history is observational only. It inherits each platform collector's meaning: for example, Windows reports the busiest individual GPU engine rather than universal whole-GPU utilisation. Cross-platform values should not be compared as if their counter semantics were identical. Sampling remains opt-in, local, read-only, and paused when the user leaves the Settings view. Hosted CI checks compilation and frontend integration, not physical sensor accuracy.
+
+
+## 76. Per-core CPU dashboard and truthful history gaps (Batch #190)
+
+The Live System Monitor now displays each operating-system-reported logical processor as a separate, labelled utilisation meter alongside total CPU usage. The grid adapts to the available window width and uses accessible meter labels and bounded percentage values. These are logical processors as reported by the operating system; they are not necessarily distinct physical cores or independent CPU packages.
+
+The monitor's bounded 36-sample history now retains unavailable CPU, RAM, network, and system-wide disk readings as missing samples. The chart draws a visible gap for those samples rather than silently replacing missing data with zero, which could incorrectly imply an idle processor or no traffic. Valid idle readings remain zero when the collector actually reports zero. Sampling remains opt-in, local, read-only, and paused when the user leaves Settings.
+
+The overall CPU, per-logical-processor, system RAM, and aggregate battery indicators expose accessible meter semantics when a valid percentage exists. A meter is omitted when its percentage is unavailable rather than rendering a misleading empty bar. Hosted CI can validate compilation and frontend integration, but physical-device checks are still needed to confirm OS reporting and layout across different CPU topologies, power states, and display scales.

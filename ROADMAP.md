@@ -1963,3 +1963,15 @@ See docs/HARDWARE-INTELLIGENCE.md section 74.
 - [ ] Validate live GPU utilisation and memory readings against physical devices and driver tools on supported platforms; history inherits each collector's platform-specific measurement semantics.
 
 See docs/HARDWARE-INTELLIGENCE.md section 75.
+
+
+### 2026-11-27 — Per-core CPU dashboard and truthful history gaps (Batch #190)
+
+- [x] Display current utilisation for each logical processor in a responsive, individually labelled grid.
+- [x] Expose overall CPU, per-core CPU, system RAM, and aggregate battery meters with accessible labels and bounded values.
+- [x] Preserve missing CPU, RAM, network, and system-disk samples as visible history gaps rather than converting unavailable readings into zero activity.
+- [x] Keep the 36-sample in-memory history bounded and local; retain the existing 1.5-second sampling cadence and pause behavior.
+- [x] Keep per-core readings separate from overall CPU utilisation and avoid exposing process or hardware identifiers.
+- [ ] Validate per-core reporting and UI behavior on physical Windows, Linux, and macOS systems with different CPU topologies and power states.
+
+See docs/HARDWARE-INTELLIGENCE.md section 76.
