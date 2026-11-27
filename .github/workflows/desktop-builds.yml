@@ -51,6 +51,15 @@ jobs:
       - name: Install Linux desktop prerequisites
         if: runner.os == 'Linux'
         run: |
+          # Hosted images may include an optional Microsoft package feed that
+          # can return 403 and make apt-get update fail before our build starts.
+          # Disable only that external feed on this disposable CI runner; the
+          # packages required by midSunday come from Ubuntu's repositories.
+          while IFS= read -r source; do
+            [ -n "$source" ] || continue
+            echo "Temporarily disabling unavailable optional package feed: $source"
+            sudo mv "$source" "${source}.disabled"
+          done < <(grep -rl "packages.microsoft.com" /etc/apt/sources.list /etc/apt/sources.list.d 2>/dev/null || true)
           sudo apt-get update
           sudo apt-get install -y \
             build-essential \
