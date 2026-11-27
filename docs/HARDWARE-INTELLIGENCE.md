@@ -883,3 +883,10 @@ This is a presentation-only summary derived from timestamps already held in the 
 The Recent activity capture-timing summary now includes the fastest and median valid interval in addition to the existing valid-interval count, arithmetic average, longest gap, and delayed-interval count. The median is calculated from a sorted copy of the positive, finite adjacent timestamp differences; for an even number of intervals it is the arithmetic midpoint of the two central values. The fastest and median figures help distinguish typical sampling cadence from occasional long pauses that can pull the average upward.
 
 All values are derived from the existing bounded in-memory timestamps. No new sampling, hardware queries, persistence, identifiers, or network activity are introduced. When no valid intervals exist, duration values remain unavailable. The six summary cells use a three-column layout that collapses to two columns on narrow windows. Hosted CI checks cross-platform compilation; physical readability and timing behavior still require validation on Windows, Linux, and macOS.
+
+
+## 94. Robust capture-interval variability indicator (Batch #214)
+
+The Recent activity capture-timing summary now includes the median absolute deviation of valid adjacent capture intervals. This robust variability measure is the median of the absolute distances between each valid interval and the median interval. It describes typical timing spread while being less sensitive than standard deviation to an occasional unusually long pause. Even-sized deviation sets use the midpoint of their two central values; with no valid intervals the value remains unavailable.
+
+The calculation uses only the existing bounded in-memory timestamps and sorted temporary arrays. It adds no polling, hardware queries, persistence, identifiers, or network activity. The summary now contains seven timing indicators and remains responsive, using four columns on wide layouts and two columns on narrow windows. Hosted CI checks cross-platform compilation; physical layout and timing validation remain necessary on Windows, Linux, and macOS.

@@ -2164,3 +2164,14 @@ See docs/HARDWARE-INTELLIGENCE.md section 92.
 - [ ] Validate timing summary readability and real capture distributions on physical Windows, Linux, and macOS devices.
 
 See docs/HARDWARE-INTELLIGENCE.md section 93.
+
+
+### 2026-11-27 — Robust System Monitor capture-interval variability (Batch #214)
+
+- [x] Add median absolute deviation for valid capture intervals as a robust indicator of typical timing variation.
+- [x] Calculate the median absolute distance from the median interval, including midpoint handling for even-sized sets.
+- [x] Keep the calculation limited to existing bounded in-memory timestamps; add no polling, hardware queries, persistence, identifiers, or network activity.
+- [x] Preserve unavailable timing when no valid intervals exist and explain the meaning of the variability measure.
+- [ ] Validate timing summary layout and real-world sampling behavior on physical Windows, Linux, and macOS devices.
+
+See docs/HARDWARE-INTELLIGENCE.md section 94.

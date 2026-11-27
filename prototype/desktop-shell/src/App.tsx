@@ -1335,12 +1335,20 @@ export default function App() {
   const monitorCaptureIntervals = monitorHistory.slice(1).map((point, index) => point.capturedAtUnixMillis - monitorHistory[index].capturedAtUnixMillis).filter((elapsedMs) => Number.isFinite(elapsedMs) && elapsedMs > 0);
   const sortedMonitorCaptureIntervals = [...monitorCaptureIntervals].sort((left, right) => left - right);
   const middleMonitorInterval = Math.floor(sortedMonitorCaptureIntervals.length / 2);
+  const medianMonitorIntervalMs = sortedMonitorCaptureIntervals.length === 0 ? null : sortedMonitorCaptureIntervals.length % 2 === 0
+    ? (sortedMonitorCaptureIntervals[middleMonitorInterval - 1] + sortedMonitorCaptureIntervals[middleMonitorInterval]) / 2
+    : sortedMonitorCaptureIntervals[middleMonitorInterval];
+  const sortedMonitorIntervalDeviations = medianMonitorIntervalMs === null ? [] : monitorCaptureIntervals
+    .map((elapsedMs) => Math.abs(elapsedMs - medianMonitorIntervalMs))
+    .sort((left, right) => left - right);
+  const middleMonitorDeviation = Math.floor(sortedMonitorIntervalDeviations.length / 2);
   const monitorCaptureTiming = {
     intervalCount: monitorCaptureIntervals.length,
     fastestIntervalMs: sortedMonitorCaptureIntervals.length > 0 ? sortedMonitorCaptureIntervals[0] : null,
-    medianIntervalMs: sortedMonitorCaptureIntervals.length === 0 ? null : sortedMonitorCaptureIntervals.length % 2 === 0
-      ? (sortedMonitorCaptureIntervals[middleMonitorInterval - 1] + sortedMonitorCaptureIntervals[middleMonitorInterval]) / 2
-      : sortedMonitorCaptureIntervals[middleMonitorInterval],
+    medianIntervalMs: medianMonitorIntervalMs,
+    medianAbsoluteDeviationMs: sortedMonitorIntervalDeviations.length === 0 ? null : sortedMonitorIntervalDeviations.length % 2 === 0
+      ? (sortedMonitorIntervalDeviations[middleMonitorDeviation - 1] + sortedMonitorIntervalDeviations[middleMonitorDeviation]) / 2
+      : sortedMonitorIntervalDeviations[middleMonitorDeviation],
     averageIntervalMs: monitorCaptureIntervals.length > 0 ? monitorCaptureIntervals.reduce((total, elapsedMs) => total + elapsedMs, 0) / monitorCaptureIntervals.length : null,
     longestGapMs: monitorCaptureIntervals.length > 0 ? Math.max(...monitorCaptureIntervals) : null,
     delayedIntervals: monitorCaptureIntervals.filter((elapsedMs) => elapsedMs > 2250).length,
@@ -1688,11 +1696,12 @@ export default function App() {
                           <div><small>Valid intervals</small><strong>{monitorCaptureTiming.intervalCount}</strong></div>
                           <div><small>Fastest interval</small><strong>{formatMonitorDuration(monitorCaptureTiming.fastestIntervalMs)}</strong></div>
                           <div><small>Median interval</small><strong>{formatMonitorDuration(monitorCaptureTiming.medianIntervalMs)}</strong></div>
+                          <div><small>Median deviation</small><strong>{formatMonitorDuration(monitorCaptureTiming.medianAbsoluteDeviationMs)}</strong></div>
                           <div><small>Average interval</small><strong>{formatMonitorDuration(monitorCaptureTiming.averageIntervalMs)}</strong></div>
                           <div><small>Longest gap</small><strong>{formatMonitorDuration(monitorCaptureTiming.longestGapMs)}</strong></div>
                           <div><small>Delayed intervals</small><strong>{monitorCaptureTiming.intervalCount === 0 ? "Unavailable" : monitorCaptureTiming.delayedIntervals}</strong></div>
                         </div>
-                        <p className="system-monitor-capture-note">Timing uses positive differences between existing sample timestamps. Median is the middle interval (or midpoint of the two middle intervals); intervals over 2.25 seconds count as delayed. These values describe capture timing, not missing metric readings.</p>
+                        <p className="system-monitor-capture-note">Timing uses positive differences between existing sample timestamps. Median is the middle interval (or midpoint of the two middle intervals). Median deviation is the median absolute distance from that median and describes typical timing variation; intervals over 2.25 seconds count as delayed. These values describe capture timing, not missing metric readings.</p>
                         {monitorHistory.some((point) => point.coreCount !== (monitorHistory[monitorHistory.length - 1]?.coreCount ?? 0)) && <p className="system-monitor-topology-note" role="status">The number of logical processors changed during this history. Per-processor statistics include only samples matching the newest processor count; older-topology samples are excluded, not treated as zero.</p>}
                         <div className="system-monitor-summary-scroll"><table className="system-monitor-summary-table"><thead><tr><th scope="col">Metric</th><th scope="col">Latest</th><th scope="col">Average</th><th scope="col">Peak</th><th scope="col">Samples</th></tr></thead><tbody>{monitorHistorySummaryRows.map((row) => <tr key={row.label}><th scope="row">{row.label}</th><td>{row.latest}</td><td>{row.average}</td><td>{row.peak}</td><td>{row.samples}</td></tr>)}</tbody></table></div>
                       </>}
