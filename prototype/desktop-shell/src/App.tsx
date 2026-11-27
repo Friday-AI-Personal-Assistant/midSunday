@@ -208,7 +208,7 @@ export default function App() {
   const [liveMetrics, setLiveMetrics] = useState<LiveSystemMetrics | null>(null);
   const [monitorError, setMonitorError] = useState("");
   const [monitorExportNotice, setMonitorExportNotice] = useState("");
-  const [monitorHistory, setMonitorHistory] = useState<{ capturedAtUnixMillis: number; cpu: number | null; ram: number | null; systemUsedMemoryBytes: number | null; systemAvailableMemoryBytes: number | null; battery: number | null; batteryState: string; processResidentBytes: number | null; processVirtualBytes: number | null; processRead: number | null; processWrite: number | null; download: number | null; upload: number | null; diskRead: number | null; diskWrite: number | null; gpu: Record<string, number | null>; gpuMemory: Record<string, number | null>; cores: (number | null)[]; coreCount: number }[]>([]);
+  const [monitorHistory, setMonitorHistory] = useState<{ capturedAtUnixMillis: number; cpu: number | null; ram: number | null; systemUsedMemoryBytes: number | null; systemAvailableMemoryBytes: number | null; battery: number | null; batteryState: string; processResidentBytes: number | null; processVirtualBytes: number | null; processRead: number | null; processWrite: number | null; download: number | null; upload: number | null; diskRead: number | null; diskWrite: number | null; gpu: Record<string, number | null>; gpuMemory: Record<string, number | null>; cores: (number | null)[]; coreCount: number; storageVolumeCount: number; storageVolumes: { totalBytes: number | null; usedBytes: number | null; availableBytes: number | null; usedPercent: number | null }[] }[]>([]);
   const [executablePath, setExecutablePath] = useState("");
   const [modelPath, setModelPath] = useState("");
   const [contextTokens, setContextTokens] = useState("2048");
@@ -255,6 +255,18 @@ export default function App() {
             ram,
             systemUsedMemoryBytes: finiteNonNegative(snapshot.usedMemoryBytes),
             systemAvailableMemoryBytes: finiteNonNegative(snapshot.availableMemoryBytes),
+            storageVolumeCount: snapshot.storageVolumes.length,
+            storageVolumes: snapshot.storageVolumes
+              .map((volume) => {
+                const totalBytes = finiteNonNegative(volume.totalBytes);
+                const availableRaw = finiteNonNegative(volume.availableBytes);
+                const availableBytes = totalBytes !== null && availableRaw !== null ? Math.min(totalBytes, availableRaw) : null;
+                const usedBytes = totalBytes !== null && availableBytes !== null ? totalBytes - availableBytes : null;
+                const usedPercent = totalBytes !== null && totalBytes > 0 && usedBytes !== null ? clampPercent((usedBytes / totalBytes) * 100) : null;
+                return { totalBytes, usedBytes, availableBytes, usedPercent };
+              })
+              .sort((a, b) => (b.totalBytes ?? -1) - (a.totalBytes ?? -1))
+              .slice(0, 16),
             battery: clampPercent(snapshot.battery.chargePercent),
             batteryState: normalizeBatteryState(snapshot.battery.state),
             processResidentBytes: finiteNonNegative(snapshot.processMemory.residentBytes),
@@ -1182,6 +1194,11 @@ export default function App() {
       "System RAM utilisation (%)",
       "System RAM used (bytes)",
       "System RAM available (bytes)",
+      "Reported storage volume count",
+      ...Array.from({ length: Math.min(16, Math.max(0, ...monitorHistory.map((point) => point.storageVolumeCount))) }, (_, index) => {
+        const rank = index + 1;
+        return [`Storage capacity rank ${rank} total (bytes)`, `Storage capacity rank ${rank} used (bytes)`, `Storage capacity rank ${rank} available (bytes)`, `Storage capacity rank ${rank} used (%)`];
+      }).flat(),
       "Battery charge (%)",
       "Battery state",
       "midSunday resident memory (bytes)",
@@ -1218,6 +1235,11 @@ export default function App() {
       point.ram,
       point.systemUsedMemoryBytes,
       point.systemAvailableMemoryBytes,
+      point.storageVolumeCount,
+      ...Array.from({ length: Math.min(16, Math.max(0, ...monitorHistory.map((sample) => sample.storageVolumeCount))) }, (_, rank) => {
+        const volume = point.storageVolumes[rank];
+        return [volume?.totalBytes ?? null, volume?.usedBytes ?? null, volume?.availableBytes ?? null, volume?.usedPercent ?? null];
+      }).flat(),
       point.battery,
       point.batteryState,
       point.processResidentBytes,
@@ -1416,6 +1438,16 @@ export default function App() {
     buildMonitorHistorySummary("System RAM", monitorHistory.map((point) => point.ram), (value) => value.toFixed(1) + "%"),
     buildMonitorHistorySummary("System RAM used", monitorHistory.map((point) => point.systemUsedMemoryBytes), (value) => formatModelSize(value)),
     buildMonitorHistorySummary("System RAM available", monitorHistory.map((point) => point.systemAvailableMemoryBytes), (value) => formatModelSize(value)),
+    ...Array.from({ length: Math.min(16, monitorHistory[monitorHistory.length - 1]?.storageVolumeCount ?? 0) }, (_, index) => {
+      const count = monitorHistory[monitorHistory.length - 1]?.storageVolumeCount ?? 0;
+      const rank = index === 0 ? "Largest" : index === 1 ? "2nd-largest" : index === 2 ? "3rd-largest" : `${index + 1}th-largest`;
+      const matching = monitorHistory.map((point) => point.storageVolumeCount === count ? point.storageVolumes[index] : null);
+      return [
+        buildMonitorHistorySummary(rank + " volume used", matching.map((volume) => volume?.usedBytes ?? null), (value) => formatModelSize(value)),
+        buildMonitorHistorySummary(rank + " volume free", matching.map((volume) => volume?.availableBytes ?? null), (value) => formatModelSize(value)),
+        buildMonitorHistorySummary(rank + " volume capacity", matching.map((volume) => volume?.totalBytes ?? null), (value) => formatModelSize(value)),
+      ];
+    }).flat(),
     buildMonitorHistorySummary("Battery charge", monitorHistory.map((point) => point.battery), (value) => value.toFixed(1) + "%"),
     buildMonitorHistorySummary("midSunday resident memory", monitorHistory.map((point) => point.processResidentBytes), (value) => formatModelSize(value)),
     buildMonitorHistorySummary("midSunday virtual address space", monitorHistory.map((point) => point.processVirtualBytes), (value) => formatModelSize(value)),
@@ -1723,6 +1755,18 @@ export default function App() {
                     <div className="system-monitor-history-row"><small>RAM</small><div role="img" aria-label="System RAM utilisation history, oldest to newest; missing samples are gaps">{monitorHistory.map((point, index) => point.ram === null ? <i key={"ram-" + index} className="system-monitor-history-gap" title={monitorHistorySampleTitle(index, "No RAM reading")} style={{ marginLeft: monitorHistoryGapBefore(index) }} /> : <i key={"ram-" + index} title={monitorHistorySampleTitle(index, point.ram.toFixed(1) + "%")} style={{ height: Math.max(2, point.ram) + "%", marginLeft: monitorHistoryGapBefore(index) }} />)}</div></div>
                     <div className="system-monitor-history-row"><small>BAT</small><div role="img" aria-label="Battery charge percentage history, oldest to newest; missing readings are gaps">{monitorHistory.map((point, index) => point.battery === null ? <i key={"battery-" + index} className="system-monitor-history-gap" title={monitorHistorySampleTitle(index, "No battery charge reading")} style={{ marginLeft: monitorHistoryGapBefore(index) }} /> : <i key={"battery-" + index} title={monitorHistorySampleTitle(index, point.battery.toFixed(1) + "% charge")} style={{ height: Math.max(2, point.battery) + "%", marginLeft: monitorHistoryGapBefore(index) }} />)}</div></div>
                     <div className="system-monitor-history-row system-monitor-battery-state-row"><small>BAT ST</small><div role="img" aria-label="Battery operating state history, oldest to newest; each segment represents one sampled OS-reported state">{monitorHistory.map((point, index) => <i key={"battery-state-" + index} className={"system-monitor-battery-state system-monitor-battery-state-" + point.batteryState} title={monitorHistorySampleTitle(index, point.batteryState.replace("_", " "))} />)}</div></div>
+                    {Array.from({ length: Math.min(16, monitorHistory[monitorHistory.length - 1]?.storageVolumeCount ?? 0) }, (_, rank) => {
+                      const currentCount = monitorHistory[monitorHistory.length - 1]?.storageVolumeCount ?? 0;
+                      const values = monitorHistory.map((point) => point.storageVolumeCount === currentCount ? point.storageVolumes[rank]?.usedPercent ?? null : null);
+                      const peak = Math.max(1, ...values.filter((value): value is number => value !== null));
+                      const label = rank === 0 ? "VOL 1" : rank === 1 ? "VOL 2" : "VOL " + (rank + 1);
+                      const description = rank === 0 ? "largest-capacity volume" : "capacity rank " + (rank + 1) + " volume";
+                      return <div className="system-monitor-history-row system-monitor-storage-history" key={"storage-rank-" + rank}>
+                        <small>{label}</small>
+                        <div role="img" aria-label={description + " used-capacity history, ranked by total capacity at each sample; gaps indicate a changed reported volume count or unavailable reading"}>{values.map((value, index) => value === null ? <i key={"storage-" + rank + "-" + index} className="system-monitor-history-gap" title={monitorHistorySampleTitle(index, "No matching storage-capacity reading")} style={{ marginLeft: monitorHistoryGapBefore(index) }} /> : <i key={"storage-" + rank + "-" + index} title={monitorHistorySampleTitle(index, value.toFixed(1) + "% used")} style={{ height: Math.max(2, value / peak * 100) + "%", marginLeft: monitorHistoryGapBefore(index) }} />)}</div>
+                      </div>;
+                    })}
+                    {monitorHistory.some((point) => point.storageVolumeCount !== (monitorHistory[monitorHistory.length - 1]?.storageVolumeCount ?? 0)) && <p className="system-monitor-timeline-note">Storage volume count changed during this history. Capacity-rank comparisons and summary statistics use only samples with the current volume count.</p>}
                     {([
                       { key: "system-ram-used", label: "RAM USED", field: "systemUsedMemoryBytes" as const, format: (value: number) => formatModelSize(value), unit: "system RAM used" },
                       { key: "system-ram-available", label: "RAM FREE", field: "systemAvailableMemoryBytes" as const, format: (value: number) => formatModelSize(value), unit: "system RAM available" },

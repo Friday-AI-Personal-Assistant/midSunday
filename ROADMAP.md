@@ -2248,3 +2248,16 @@ See docs/HARDWARE-INTELLIGENCE.md section 99.
 - [ ] Validate platform memory-accounting semantics, CSV output, and narrow-window layout on physical Windows, Linux, and macOS devices.
 
 See docs/HARDWARE-INTELLIGENCE.md section 100.
+
+
+### 2026-11-27 — Per-volume storage capacity history (Batch #221)
+
+- [x] Retain per-volume total, used, available bytes, and used percentage from the existing live storage snapshot in the opt-in System Monitor history.
+- [x] Rank up to the 16 largest reported volumes by capacity per sample; do not treat enumeration indexes as persistent volume identities.
+- [x] Add a used-capacity timeline for each current capacity rank, with gaps when the reported volume count changes or a reading is unavailable.
+- [x] Add latest, average, peak, and valid-sample counts for each rank's total, used, and available capacity.
+- [x] Add reported volume count and per-rank total, used, available, and used-percentage columns to explicit local CSV exports.
+- [x] Preserve no-mount-path/no-volume-ID privacy; use existing snapshot and polling only, with 36-sample in-memory cap and local-only export.
+- [ ] Validate volume enumeration, removable/network volumes, topology changes, CSV output, and narrow-window layout on physical Windows, Linux, and macOS devices.
+
+See docs/HARDWARE-INTELLIGENCE.md section 101.
