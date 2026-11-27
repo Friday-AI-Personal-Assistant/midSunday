@@ -217,3 +217,6 @@ All notable project changes are recorded here. The project is in foundation/prot
 
 
 - Extended the Live System Monitor with aggregate system-wide network download/upload rates and midSunday-process-only disk read/write rates. Added bounded network history and counter-reset/warm-up handling; interface names and other process details remain uncollected.
+
+
+- Added cross-platform battery telemetry to the opt-in System Monitor, including energy-weighted charge aggregation and combined battery state. No battery identifiers are collected; no-battery and unavailable states remain explicit.

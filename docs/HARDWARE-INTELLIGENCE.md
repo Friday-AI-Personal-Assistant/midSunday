@@ -698,3 +698,10 @@ The opt-in Live System Monitor now reports aggregate system-wide download/upload
 The monitor also reports read/write throughput for the midSunday process only, using that process's I/O counters. This is not system-wide disk activity. Operating-system caching and platform-specific accounting may affect the values, so the UI labels the scope explicitly. The recent activity view now includes bounded download/upload history.
 
 The implementation reuses the existing sysinfo dependency and refreshes only the current midSunday process. It does not enumerate other processes, expose network interface names, store history persistently, or send telemetry anywhere. GPU utilisation, battery telemetry, and system-wide disk activity remain future work. Tests cover rate calculations, counter resets, unavailable/warm-up states, and serialized snapshot shape.
+
+
+## 70. Live battery telemetry (Batch #181)
+
+The Live System Monitor now uses the cross-platform `starship-battery` library to query battery state on supported Windows, Linux, and macOS systems. Charge is aggregated across detected batteries using reported current energy divided by summed full energy, rather than taking an arbitrary first battery or averaging percentages equally. State is reported as charging, discharging, empty, full, paused, unknown, or mixed when batteries disagree.
+
+No battery produces an explicit `no_battery` / `not_present` result; query failures and partial readings remain distinct. The monitor intentionally omits remaining-time estimates because they can be unstable and are not consistently trustworthy across devices. Battery vendor, model, and serial identifiers are not collected. Sampling remains opt-in, local, read-only, and active only while the Settings monitor is visible. CI checks compilation and pure aggregation behavior; physical-device testing is still required.

@@ -2,6 +2,7 @@
 //! This intentionally does not enumerate processes, host names, network interfaces,
 //! device serial numbers, or private user files.
 use serde::Serialize;
+use starship_battery::{Manager as BatteryManager, State as BatteryState};
 use sysinfo::{get_current_pid, CpuRefreshKind, Disks, Networks, Pid, ProcessRefreshKind, ProcessesToUpdate, System};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
@@ -607,6 +608,16 @@ pub struct LiveSystemMetrics {
     pub process_disk_io_status: String,
     pub process_read_bytes_per_second: Option<u64>,
     pub process_write_bytes_per_second: Option<u64>,
+    pub battery: BatteryMetrics,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct BatteryMetrics {
+    pub status: String,
+    pub battery_count: usize,
+    pub charge_percent: Option<f32>,
+    pub state: String,
 }
 
 impl Default for SystemMonitor {
@@ -701,8 +712,79 @@ impl SystemMonitor {
             process_disk_io_status,
             process_read_bytes_per_second,
             process_write_bytes_per_second,
+            battery: collect_battery_metrics(),
         }
     }
+}
+
+
+/// Reads aggregate battery telemetry without exposing vendor, model, or serial identifiers.
+/// Charge is energy-weighted across installed batteries; remaining time is intentionally omitted.
+fn collect_battery_metrics() -> BatteryMetrics {
+    let manager = match BatteryManager::new() {
+        Ok(manager) => manager,
+        Err(_) => return BatteryMetrics { status: "unavailable".to_owned(), battery_count: 0, charge_percent: None, state: "unavailable".to_owned() },
+    };
+    let batteries = match manager.batteries() {
+        Ok(batteries) => batteries,
+        Err(_) => return BatteryMetrics { status: "unavailable".to_owned(), battery_count: 0, charge_percent: None, state: "unavailable".to_owned() },
+    };
+    let mut count = 0_usize;
+    let mut current_energy = 0.0_f64;
+    let mut full_energy = 0.0_f64;
+    let mut states = Vec::new();
+    let mut had_read_error = false;
+    for result in batteries {
+        let battery = match result {
+            Ok(battery) => battery,
+            Err(_) => { had_read_error = true; continue; }
+        };
+        count += 1;
+        let charge = battery.state_of_charge().value as f64;
+        let energy = battery.energy().value as f64;
+        let full = battery.energy_full().value as f64;
+        if charge.is_finite() && energy.is_finite() && full.is_finite() && full > 0.0 {
+            current_energy += energy.max(0.0);
+            full_energy += full;
+        } else {
+            had_read_error = true;
+        }
+        states.push(battery_state_label(battery.state()));
+    }
+    if count == 0 {
+        return BatteryMetrics {
+            status: if had_read_error { "unavailable" } else { "no_battery" }.to_owned(),
+            battery_count: 0, charge_percent: None,
+            state: if had_read_error { "unavailable" } else { "not_present" }.to_owned(),
+        };
+    }
+    let charge_percent = if full_energy.is_finite() && full_energy > 0.0 && current_energy.is_finite() {
+        Some(((current_energy / full_energy) * 100.0).clamp(0.0, 100.0) as f32)
+    } else {
+        None
+    };
+    BatteryMetrics {
+        status: if had_read_error { "partial" } else if charge_percent.is_some() { "detected" } else { "unavailable" }.to_owned(),
+        battery_count: count,
+        charge_percent,
+        state: combined_battery_state(&states),
+    }
+}
+
+fn battery_state_label(state: BatteryState) -> &'static str {
+    match state {
+        BatteryState::Charging => "charging",
+        BatteryState::Discharging => "discharging",
+        BatteryState::Empty => "empty",
+        BatteryState::Full => "full",
+        BatteryState::Paused => "paused",
+        BatteryState::Unknown => "unknown",
+    }
+}
+
+fn combined_battery_state(states: &[&str]) -> String {
+    let Some(first) = states.first() else { return "unknown".to_owned(); };
+    if states.iter().all(|state| state == first) { (*first).to_owned() } else { "mixed".to_owned() }
 }
 
 fn normalise_cpu_usage_percent(value: f32) -> f32 {
@@ -723,6 +805,25 @@ fn counter_rate_bytes_per_second(current: u64, previous: u64, elapsed: Duration)
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn battery_states_are_combined_without_hiding_mixed_devices() {
+        assert_eq!(super::combined_battery_state(&[]), "unknown");
+        assert_eq!(super::combined_battery_state(&["charging", "charging"]), "charging");
+        assert_eq!(super::combined_battery_state(&["charging", "discharging"]), "mixed");
+    }
+
+    #[test]
+    fn battery_charge_is_bounded_in_live_snapshots() {
+        let snapshot = super::SystemMonitor::default().sample();
+        if let Some(percent) = snapshot.battery.charge_percent {
+            assert!(percent.is_finite() && (0.0..=100.0).contains(&percent));
+        }
+        assert!(matches!(snapshot.battery.status.as_str(), "detected" | "partial" | "unavailable" | "no_battery"));
+        assert!(matches!(snapshot.battery.state.as_str(), "charging" | "discharging" | "empty" | "full" | "paused" | "unknown" | "mixed" | "not_present" | "unavailable"));
+        let json = serde_json::to_value(&snapshot).expect("battery metrics should serialize");
+        assert!(json.get("battery").and_then(|value| value.get("chargePercent")).is_some());
+    }
+
     #[test]
     fn cpu_usage_is_clamped_and_non_finite_values_are_safe() {
         assert_eq!(super::normalise_cpu_usage_percent(-4.0), 0.0);

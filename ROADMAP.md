@@ -1836,7 +1836,7 @@ See docs/HARDWARE-INTELLIGENCE.md section 68.
 - [ ] GPU: show per-physical-adapter utilisation and memory usage/budget where reliable APIs expose them; show temperature, engine breakdown, and vendor details only when supported.
 - [ ] Storage: show volume capacity/used/free space, and add read/write activity rates where reliable and useful.
 - [x] Network: show aggregate system-wide upload/download throughput without collecting interface names; clearly label scope and unavailable/warming-up states.
-- [ ] Battery: show charge percentage, charging/discharging state, and remaining-time estimate only when the OS provides a trustworthy value.
+- [x] Battery: show aggregate charge percentage and charging/discharging state where reported; do not invent remaining-time estimates.
 - [ ] Provide clear unavailable/unsupported/permission-limited states instead of fabricated, stale, or misleading zero values.
 - [ ] Keep the layout responsive, accessible, keyboard-friendly, and readable at different window sizes and display scales.
 
@@ -1886,3 +1886,14 @@ This is the first vertical slice of the roadmap feature, not the completed Syste
 - [x] Add regression tests for rate calculations, counter resets, serialization, and absence of interface-name fields.
 - [ ] Add system-wide disk activity, live GPU utilisation/memory, and battery telemetry in later platform-aware batches.
 - [ ] Validate network and process I/O accuracy on physical Windows, Linux, and macOS devices.
+
+
+### 2026-11-27 — Battery telemetry (Batch #181)
+
+- [x] Add cross-platform battery detection through the maintained starship-battery library (Windows, Linux, and macOS support).
+- [x] Report energy-weighted aggregate charge across detected batteries and a combined charging/discharging/full/empty/paused state.
+- [x] Preserve no-battery, partial, unavailable, unknown, and mixed-state outcomes without fabricating values.
+- [x] Keep battery vendor, model, serial number, and other device identifiers out of the snapshot.
+- [x] Display battery charge and state in the opt-in live monitor; retain explicit local-only sampling and bounded history.
+- [x] Add regression tests for mixed battery states, valid charge bounds, and snapshot serialization.
+- [ ] Validate battery readings on physical laptops across Windows, Linux, and macOS; desktop CI cannot prove battery hardware availability or accuracy.
