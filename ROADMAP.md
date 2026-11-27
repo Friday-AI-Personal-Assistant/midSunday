@@ -2316,3 +2316,15 @@ See docs/HARDWARE-INTELLIGENCE.md section 104.
 - [ ] Validate real CPU/GPU collector states, adapter counts, driver permissions and layout on physical Windows, Linux and macOS devices.
 
 See docs/HARDWARE-INTELLIGENCE.md section 105.
+
+### 2026-11-27 — Live telemetry sample validation (Batch #228)
+
+- [x] Reject negative, non-finite, or unavailable network download/upload rates from numeric history while preserving gaps.
+- [x] Apply the same finite, non-negative validation to system-wide disk read/write rates.
+- [x] Clamp GPU and GPU-memory utilisation percentages to 0–100; preserve null/non-finite readings as unavailable.
+- [x] Prevent invalid values from distorting timeline bars, tooltips, and numeric summaries.
+- [x] Reuse the existing opt-in snapshot, polling cadence, 36-sample in-memory history, and explicit local CSV export.
+- [x] Add no extra hardware queries, process enumeration, identifiers, persistence, or network activity.
+- [ ] Validate unusual driver/counter readings and timeline presentation on physical Windows, Linux, and macOS devices.
+
+See docs/HARDWARE-INTELLIGENCE.md section 106.
