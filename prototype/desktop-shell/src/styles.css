@@ -703,3 +703,24 @@ body { color:var(--text-main); background:var(--app-bg); }
 :root[data-mode="light"] h1, :root[data-mode="system"] h1, :root[data-mode="light"] h2, :root[data-mode="system"] h2 { color:var(--text-strong); }
 :root[data-mode="light"] .page-lead, :root[data-mode="system"] .page-lead, :root[data-mode="light"] .heading-subtitle, :root[data-mode="system"] .heading-subtitle { color:var(--muted); }
 @media (max-width:650px) { .appearance-theme-grid { grid-template-columns:1fr; } .appearance-mode-row { align-items:flex-start; flex-direction:column; } }
+
+/* Accessibility preferences: text scaling, density and motion reduction. */
+:root[data-text-size="large"] .workspace { zoom: 1.08; }
+:root[data-text-size="largest"] .workspace { zoom: 1.16; }
+:root[data-density="compact"] .settings-section { margin-top: 17px; padding: 12px 15px 3px; }
+:root[data-density="compact"] .settings-section-title { padding-bottom: 9px; }
+:root[data-density="compact"] .appearance-theme-grid { gap: 6px; }
+:root[data-density="compact"] .appearance-theme-option { padding: 9px; gap: 9px; }
+:root[data-density="compact"] .appearance-mode-row { padding-top: 10px; margin-top: 9px; }
+:root[data-density="compact"] .accessibility-control-row { padding: 9px 0; }
+.accessibility-controls { display:grid; gap:0; padding-top:5px; border-top:1px solid var(--line); }
+.accessibility-control-row { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:13px 0; border-bottom:1px solid var(--line); }
+.accessibility-control-row > div:first-child { min-width:0; }
+.accessibility-control-row > div:first-child strong, .accessibility-toggle-row strong { color:var(--text-strong); font-size:12px; }
+.accessibility-control-row > div:first-child p { margin:5px 0 0; color:var(--muted); font-size:10px; line-height:1.45; }
+.accessibility-toggle-row { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:13px 0; cursor:pointer; }
+.accessibility-toggle-row > span { display:grid; gap:5px; }
+.accessibility-toggle-row small { color:var(--muted); font-size:10px; line-height:1.45; }
+.accessibility-toggle-row input { width:18px; height:18px; flex:0 0 auto; accent-color:var(--green-strong); cursor:pointer; }
+:root[data-reduce-motion="true"] *, :root[data-reduce-motion="true"] *::before, :root[data-reduce-motion="true"] *::after { scroll-behavior:auto !important; animation-duration:0.01ms !important; animation-iteration-count:1 !important; transition-duration:0.01ms !important; }
+@media (max-width:650px) { .accessibility-control-row { align-items:flex-start; flex-direction:column; } }

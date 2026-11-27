@@ -17,6 +17,8 @@ type LiveSystemMetrics = {
 };
 type ThemeId = "sunday-green" | "midnight-blue" | "lavender-dream" | "rose-blossom" | "warm-sand";
 type AppearanceMode = "system" | "light" | "dark";
+type TextSize = "standard" | "large" | "largest";
+type InterfaceDensity = "comfortable" | "compact";
 const APPEARANCE_THEMES: { id: ThemeId; name: string; description: string; swatch: string }[] = [
   { id: "sunday-green", name: "Sunday Green", description: "Calm, modern and distinctly midSunday", swatch: "#176b45" },
   { id: "midnight-blue", name: "Midnight Blue", description: "Deep navy with cool blue highlights", swatch: "#315b9a" },
@@ -240,6 +242,10 @@ export default function App() {
   const [userProfileNotice, setUserProfileNotice] = useState("");
   const [appearanceTheme, setAppearanceTheme] = useState<ThemeId>("sunday-green");
   const [appearanceMode, setAppearanceMode] = useState<AppearanceMode>("system");
+  const [appearanceTextSize, setAppearanceTextSize] = useState<TextSize>("standard");
+  const [interfaceDensity, setInterfaceDensity] = useState<InterfaceDensity>("comfortable");
+  const [reduceMotion, setReduceMotion] = useState(false);
+  const [appearancePreferencesLoaded, setAppearancePreferencesLoaded] = useState(false);
   const [launchAtLogin, setLaunchAtLogin] = useState(false);
   const [launchAtLoginBusy, setLaunchAtLoginBusy] = useState(false);
   const [launchAtLoginError, setLaunchAtLoginError] = useState("");
@@ -355,24 +361,36 @@ export default function App() {
     try {
       const saved = window.localStorage.getItem("midsunday-appearance-v1");
       if (saved) {
-        const parsed = JSON.parse(saved) as { theme?: string; mode?: string };
+        const parsed = JSON.parse(saved) as { theme?: string; mode?: string; textSize?: string; density?: string; reduceMotion?: boolean };
         if (APPEARANCE_THEMES.some((theme) => theme.id === parsed.theme)) setAppearanceTheme(parsed.theme as ThemeId);
         if (["system", "light", "dark"].includes(parsed.mode ?? "")) setAppearanceMode(parsed.mode as AppearanceMode);
+        if (["standard", "large", "largest"].includes(parsed.textSize ?? "")) setAppearanceTextSize(parsed.textSize as TextSize);
+        if (["comfortable", "compact"].includes(parsed.density ?? "")) setInterfaceDensity(parsed.density as InterfaceDensity);
+        if (typeof parsed.reduceMotion === "boolean") setReduceMotion(parsed.reduceMotion);
       }
     } catch {
       // Invalid or unavailable local preferences fall back to the built-in defaults.
+    } finally {
+      setAppearancePreferencesLoaded(true);
     }
   }, []);
 
   useEffect(() => {
+    if (!appearancePreferencesLoaded) return;
     document.documentElement.dataset.theme = appearanceTheme;
     document.documentElement.dataset.mode = appearanceMode;
+    document.documentElement.dataset.textSize = appearanceTextSize;
+    document.documentElement.dataset.density = interfaceDensity;
+    document.documentElement.dataset.reduceMotion = String(reduceMotion);
     try {
-      window.localStorage.setItem("midsunday-appearance-v1", JSON.stringify({ theme: appearanceTheme, mode: appearanceMode }));
+      window.localStorage.setItem("midsunday-appearance-v1", JSON.stringify({
+        theme: appearanceTheme, mode: appearanceMode, textSize: appearanceTextSize,
+        density: interfaceDensity, reduceMotion,
+      }));
     } catch {
       // Appearance remains active for this session if local storage is unavailable.
     }
-  }, [appearanceTheme, appearanceMode]);
+  }, [appearancePreferencesLoaded, appearanceTheme, appearanceMode, appearanceTextSize, interfaceDensity, reduceMotion]);
 
   useEffect(() => {
     let active = true;
@@ -1741,7 +1759,16 @@ export default function App() {
               <div className="appearance-mode-row"><div><strong>Appearance mode</strong><p>Follow your operating system or choose a mode manually.</p></div><div className="appearance-mode-options" role="group" aria-label="Choose appearance mode">
                 {(["system", "light", "dark"] as AppearanceMode[]).map((mode) => <button key={mode} type="button" className={appearanceMode === mode ? "appearance-mode-option active" : "appearance-mode-option"} aria-pressed={appearanceMode === mode} onClick={() => setAppearanceMode(mode)}>{mode === "system" ? "Follow system" : mode === "light" ? "Light" : "Dark"}</button>)}
               </div></div>
-              <p className="settings-footnote">Theme and mode preferences are stored locally in this app. They do not change your conversations, companion personality, privacy settings, or model behaviour.</p>
+              <div className="accessibility-controls">
+                <div className="accessibility-control-row"><div><strong>Text size</strong><p>Make interface text easier to read.</p></div><div className="appearance-mode-options" role="group" aria-label="Choose interface text size">
+                  {(["standard", "large", "largest"] as TextSize[]).map((size) => <button key={size} type="button" className={appearanceTextSize === size ? "appearance-mode-option active" : "appearance-mode-option"} aria-pressed={appearanceTextSize === size} onClick={() => setAppearanceTextSize(size)}>{size === "standard" ? "Standard" : size === "large" ? "Large" : "Largest"}</button>)}
+                </div></div>
+                <div className="accessibility-control-row"><div><strong>Interface spacing</strong><p>Choose a roomier or more compact layout.</p></div><div className="appearance-mode-options" role="group" aria-label="Choose interface spacing">
+                  {(["comfortable", "compact"] as InterfaceDensity[]).map((density) => <button key={density} type="button" className={interfaceDensity === density ? "appearance-mode-option active" : "appearance-mode-option"} aria-pressed={interfaceDensity === density} onClick={() => setInterfaceDensity(density)}>{density === "comfortable" ? "Comfortable" : "Compact"}</button>)}
+                </div></div>
+                <label className="accessibility-toggle-row"><span><strong>Reduce motion</strong><small>Minimise animations and transitions across the interface.</small></span><input type="checkbox" checked={reduceMotion} onChange={(event) => setReduceMotion(event.target.checked)} /></label>
+              </div>
+              <p className="settings-footnote">Theme, text size, spacing and motion preferences are stored locally in this app. They do not change conversations, companion personality, privacy settings or model behaviour.</p>
             </section>
             <section className="settings-section">
               <div className="settings-section-title"><div><h2>About you</h2><p>Choose how midSunday addresses you. This profile stays on this device.</p></div><span className="settings-symbol">◎</span></div>

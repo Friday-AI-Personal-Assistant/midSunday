@@ -232,3 +232,7 @@ All notable project changes are recorded here. The project is in foundation/prot
 
 ## 2026-11-27
 - Added five built-in Appearance & Themes choices (Sunday Green, Midnight Blue, Lavender Dream, Rose Blossom, Warm Sand), plus Follow system / Light / Dark modes. Preferences apply immediately and are stored locally on the device; no account, network connection, or paid service is used.
+
+
+## 2026-11-27
+- Added local accessibility preferences: Standard/Large/Largest interface text, Comfortable/Compact settings spacing, and Reduce motion. Existing theme preferences now load before being written, preventing first-launch defaults from overwriting saved choices.

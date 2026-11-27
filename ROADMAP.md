@@ -2366,3 +2366,16 @@ See docs/HARDWARE-INTELLIGENCE.md section 107.
 - [ ] Validate all theme/mode combinations, contrast, narrow-window layouts, and restart persistence on physical Windows, Linux, and macOS devices.
 
 See Settings → Appearance & themes.
+
+
+### 2026-11-27 — Accessibility and readability preferences (Batch #232)
+
+- [x] Add Standard, Large and Largest interface text-size choices.
+- [x] Add Comfortable and Compact spacing choices for settings and appearance controls.
+- [x] Add a Reduce motion option that minimises CSS animations and transitions.
+- [x] Persist all accessibility choices with theme and mode preferences in device-local WebView storage.
+- [x] Validate stored preference values and preserve defaults for malformed or unavailable local storage.
+- [x] Prevent initial preference loading from being overwritten by default values before saved settings are read.
+- [ ] Validate text legibility, keyboard navigation, zoom/layout behaviour and reduced-motion behaviour on physical Windows, Linux and macOS devices.
+
+See Settings → Appearance & themes → Accessibility.
