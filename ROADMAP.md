@@ -2021,3 +2021,16 @@ See docs/HARDWARE-INTELLIGENCE.md section 79.
 - [ ] Validate status presentation for no-battery desktops, unsupported GPU drivers, permission-limited systems, and devices with multiple adapters/volumes.
 
 See docs/HARDWARE-INTELLIGENCE.md section 80.
+
+
+### 2026-11-27 — Linux Intel GPU telemetry (Batch #197)
+
+- [x] Add Intel DRM GT engine-busy sampling when the kernel exposes cumulative per-engine busy nanosecond counters.
+- [x] Calculate utilisation from two bounded local samples and report the busiest individual engine per adapter rather than summing concurrent engines.
+- [x] Keep generic adapter labels and avoid returning PCI IDs, engine names, or other hardware identifiers.
+- [x] Reuse optional driver-published dedicated-memory counters only when both used and nonzero total capacity are available.
+- [x] Add regression tests for idle readings, valid rates, counter resets, out-of-range deltas, and zero elapsed time.
+- [ ] Validate Intel integrated and discrete GPU counters across physical Linux devices, kernel versions, and driver generations.
+- [ ] Add a separately validated NVIDIA collector; NVIDIA remains explicitly unsupported in this batch.
+
+See docs/HARDWARE-INTELLIGENCE.md section 81.
