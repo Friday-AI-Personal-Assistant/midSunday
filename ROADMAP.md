@@ -2068,3 +2068,13 @@ See docs/HARDWARE-INTELLIGENCE.md section 83.
 - [ ] Validate telemetry on physical NVIDIA GPUs across driver branches, GPU generations, hybrid systems, and permission configurations.
 
 See docs/HARDWARE-INTELLIGENCE.md section 84.
+
+
+### 2026-11-27 — Source-aware GPU System Monitor presentation (Batch #205)
+
+- [x] Distinguish NVIDIA device-wide utilisation, AMDGPU driver GPU-busy percentage, Intel busiest-engine utilisation, and Windows peak-engine utilisation in card labels.
+- [x] Label NVIDIA memory as framebuffer allocation and use a distinct FB MEM history row.
+- [x] Update accessible history descriptions to name source-specific metrics.
+- [x] Preserve opt-in polling, missing-sample gaps, generic labels, and bounded in-memory history without adding hardware reads or telemetry.
+
+See docs/HARDWARE-INTELLIGENCE.md section 85.
