@@ -2111,3 +2111,13 @@ See docs/HARDWARE-INTELLIGENCE.md section 87.
 - Preserved missing readings as empty cells and logical-processor topology changes as blank values; source-specific GPU labels distinguish Metal working-set and NVIDIA framebuffer allocation.
 - CSV generation uses only the retained in-memory samples after an explicit user click; no new polling, persistence, identifiers, process enumeration, or network transfer.
 - Added CSV quoting and spreadsheet-formula injection guards for text cells.
+
+
+### 2026-11-27 — Timestamp-aware System Monitor sampling gaps (Batch #209)
+
+- Added consistent horizontal spacing for delayed intervals across CPU, per-logical-processor, RAM, network, system-disk, GPU utilisation, and GPU memory history.
+- Derive gap cues from actual adjacent capture timestamps; use the normal 1.5-second cadence as the baseline and show a cue when elapsed time exceeds 2.25 seconds.
+- Add elapsed-time details to affected sample tooltips and explain the gap cue to users.
+- Keep missing metric readings visible as gaps; do not interpolate, fabricate zeroes, or imply continuous measurements.
+- Preserve the existing bounded 36-sample in-memory window, opt-in polling cadence, and local-only collection.
+- Physical validation remains required for slow collectors, system sleep/resume, app load, and narrow-window readability across Windows, Linux, and macOS.

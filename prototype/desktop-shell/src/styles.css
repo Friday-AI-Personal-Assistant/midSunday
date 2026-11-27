@@ -575,3 +575,8 @@ h1 { margin: 0; color: #eef5ef; font-size: clamp(25px, 3vw, 34px); font-weight: 
 .system-monitor-summary-table tbody th { color: #dce8de; font-weight: 600; }
 .system-monitor-summary-table tbody tr:last-child th,
 .system-monitor-summary-table tbody tr:last-child td { border-bottom: 0; }
+
+
+/* System Monitor history: preserve visible time gaps when polling is delayed. */
+.system-monitor-history-row i { margin-left: 0; }
+.system-monitor-timeline-note { margin: 0; color: #829287; font-size: 9px; line-height: 1.5; }
