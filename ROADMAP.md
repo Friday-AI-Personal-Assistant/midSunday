@@ -1975,3 +1975,14 @@ See docs/HARDWARE-INTELLIGENCE.md section 75.
 - [ ] Validate per-core reporting and UI behavior on physical Windows, Linux, and macOS systems with different CPU topologies and power states.
 
 See docs/HARDWARE-INTELLIGENCE.md section 76.
+
+
+### 2026-11-27 — Per-processor CPU activity history (Batch #191)
+
+- [x] Extend the bounded, in-memory monitor history with per-logical-processor CPU samples.
+- [x] Display separate compact history rows for each reported logical processor, aligned to the shared 36-sample timeline.
+- [x] Preserve unavailable or missing per-processor readings as visible gaps; retain genuine zero utilisation as a valid idle sample.
+- [x] Keep processor labels generic (C1, C2, etc.), avoid hardware identifiers, and retain opt-in/local-only sampling.
+- [ ] Validate history alignment, processor hot-plug/topology changes, and display scaling on physical Windows, Linux, and macOS devices.
+
+See docs/HARDWARE-INTELLIGENCE.md section 77.

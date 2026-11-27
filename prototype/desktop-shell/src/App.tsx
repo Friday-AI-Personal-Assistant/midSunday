@@ -202,7 +202,7 @@ export default function App() {
   const [monitorRunning, setMonitorRunning] = useState(false);
   const [liveMetrics, setLiveMetrics] = useState<LiveSystemMetrics | null>(null);
   const [monitorError, setMonitorError] = useState("");
-  const [monitorHistory, setMonitorHistory] = useState<{ cpu: number | null; ram: number | null; download: number | null; upload: number | null; diskRead: number | null; diskWrite: number | null; gpu: Record<string, number | null> }[]>([]);
+  const [monitorHistory, setMonitorHistory] = useState<{ cpu: number | null; ram: number | null; download: number | null; upload: number | null; diskRead: number | null; diskWrite: number | null; gpu: Record<string, number | null>; cores: (number | null)[] }[]>([]);
   const [executablePath, setExecutablePath] = useState("");
   const [modelPath, setModelPath] = useState("");
   const [contextTokens, setContextTokens] = useState("2048");
@@ -247,6 +247,7 @@ export default function App() {
             diskRead: snapshot.systemDiskReadBytesPerSecond,
             diskWrite: snapshot.systemDiskWriteBytesPerSecond,
             gpu: Object.fromEntries(snapshot.gpu.adapters.map((adapter) => [adapter.label, adapter.utilizationPercent])),
+            cores: snapshot.cpuCoreUsagePercent.map((usage) => clampPercent(usage)),
           }].slice(-36));
         })
         .catch(() => { if (active) setMonitorError("Live measurements are temporarily unavailable."); });
@@ -1483,6 +1484,13 @@ export default function App() {
                   </div>
                   <div className="system-monitor-history"><div><strong>Recent activity</strong><span>Last 36 samples · approximately 54 seconds</span></div>
                     <div className="system-monitor-history-row"><small>CPU</small><div>{monitorHistory.map((point, index) => point.cpu === null ? <i key={"cpu-" + index} className="system-monitor-history-gap" title="No CPU reading" /> : <i key={"cpu-" + index} title={point.cpu.toFixed(1) + "%"} style={{ height: Math.max(2, point.cpu) + "%" }} />)}</div></div>
+                    {Array.from({ length: liveMetrics?.cpuCoreUsagePercent.length ?? 0 }, (_, coreIndex) => {
+                      const samples = monitorHistory.map((point) => point.cores[coreIndex] ?? null);
+                      return <div className="system-monitor-history-row system-monitor-core-history" key={"cpu-core-history-" + coreIndex}>
+                        <small>{"C" + (coreIndex + 1)}</small>
+                        <div role="img" aria-label={"Logical processor " + (coreIndex + 1) + " recent CPU activity; missing readings are shown as gaps"}>{samples.map((value, index) => <i key={"cpu-core-" + coreIndex + "-" + index} className={value === null ? "system-monitor-history-gap" : undefined} title={value === null ? "No reading" : value.toFixed(1) + "%"} style={{ height: value === null ? "0%" : Math.max(2, value) + "%" }} />)}</div>
+                      </div>;
+                    })}
                     <div className="system-monitor-history-row"><small>RAM</small><div>{monitorHistory.map((point, index) => point.ram === null ? <i key={"ram-" + index} className="system-monitor-history-gap" title="No RAM reading" /> : <i key={"ram-" + index} title={point.ram.toFixed(1) + "%"} style={{ height: Math.max(2, point.ram) + "%" }} />)}</div></div>
                     <div className="system-monitor-history-row"><small>↓ NET</small><div>{monitorHistory.map((point, index) => point.download === null ? <i key={"down-" + index} className="system-monitor-history-gap" title="No download reading" /> : <i key={"down-" + index} title={formatTransferRate(point.download)} style={{ height: Math.max(2, point.download / Math.max(1, ...monitorHistory.map((sample) => sample.download ?? 0)) * 100) + "%" }} />)}</div></div>
                     <div className="system-monitor-history-row"><small>↑ NET</small><div>{monitorHistory.map((point, index) => point.upload === null ? <i key={"up-" + index} className="system-monitor-history-gap" title="No upload reading" /> : <i key={"up-" + index} title={formatTransferRate(point.upload)} style={{ height: Math.max(2, point.upload / Math.max(1, ...monitorHistory.map((sample) => sample.upload ?? 0)) * 100) + "%" }} />)}</div></div>
