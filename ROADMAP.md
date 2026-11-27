@@ -1986,3 +1986,14 @@ See docs/HARDWARE-INTELLIGENCE.md section 76.
 - [ ] Validate history alignment, processor hot-plug/topology changes, and display scaling on physical Windows, Linux, and macOS devices.
 
 See docs/HARDWARE-INTELLIGENCE.md section 77.
+
+
+### 2026-11-27 — CPU history topology-change handling (Batch #192)
+
+- [x] Record the logical-processor count with each bounded CPU history sample.
+- [x] Render a visible gap for historical per-processor samples captured under a different logical-processor count, rather than mapping old ordinals onto a changed topology.
+- [x] Preserve real zero readings and missing-value semantics.
+- [x] Keep labels ordinal and generic; do not imply stable physical-core identity.
+- [ ] Validate CPU topology changes and hot-plug behavior on physical devices; the OS-provided logical-processor ordering is not a persistent hardware identity.
+
+See docs/HARDWARE-INTELLIGENCE.md section 78.
