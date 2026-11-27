@@ -836,13 +836,250 @@ fn read_gpu_percent(path: &std::path::Path) -> Option<f32> {
     parse_gpu_percent_text(&std::fs::read_to_string(path).ok()?)
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(target_os = "windows")]
+#[repr(C)]
+#[derive(Clone, Copy)]
+union PdhFormattedValueUnion {
+    long_value: i32,
+    double_value: f64,
+    large_value: i64,
+    ansi_string: *mut i8,
+    wide_string: *mut u16,
+}
+
+#[cfg(target_os = "windows")]
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct PdhFormattedValue {
+    c_status: u32,
+    value: PdhFormattedValueUnion,
+}
+
+#[cfg(target_os = "windows")]
+#[repr(C)]
+struct PdhFormattedCounterValueItem {
+    name: *mut u16,
+    value: PdhFormattedValue,
+}
+
+#[cfg(target_os = "windows")]
+#[link(name = "pdh")]
+extern "system" {
+    fn PdhOpenQueryW(data_source: *const u16, user_data: usize, query: *mut *mut std::ffi::c_void) -> u32;
+    fn PdhAddEnglishCounterW(query: *mut std::ffi::c_void, path: *const u16, user_data: usize, counter: *mut *mut std::ffi::c_void) -> u32;
+    fn PdhCollectQueryData(query: *mut std::ffi::c_void) -> u32;
+    fn PdhGetFormattedCounterArrayW(counter: *mut std::ffi::c_void, format: u32, buffer_size: *mut u32, item_count: *mut u32, items: *mut PdhFormattedCounterValueItem) -> u32;
+    fn PdhCloseQuery(query: *mut std::ffi::c_void) -> u32;
+}
+
+#[cfg(target_os = "windows")]
+const PDH_MORE_DATA_CODE: u32 = 0x8000_07D2;
+#[cfg(target_os = "windows")]
+const PDH_FMT_DOUBLE_CODE: u32 = 0x0000_0200;
+#[cfg(target_os = "windows")]
+const PDH_FMT_LARGE_CODE: u32 = 0x0000_0400;
+#[cfg(target_os = "windows")]
+const PDH_FMT_NOCAP100_CODE: u32 = 0x0000_8000;
+
+/// Collects Windows GPU Engine activity and dedicated adapter-memory allocations
+/// through language-neutral PDH counters. Only generic adapter labels are returned.
+#[cfg(target_os = "windows")]
+fn collect_live_gpu_metrics() -> GpuLiveMetrics {
+    use std::ffi::c_void;
+
+    let mut query: *mut c_void = std::ptr::null_mut();
+    let opened = unsafe { PdhOpenQueryW(std::ptr::null(), 0, &mut query) };
+    if opened != 0 || query.is_null() {
+        return windows_gpu_unavailable("Windows PDH could not open a local performance-counter query.");
+    }
+
+    let engine_path = "\\GPU Engine(*)\\Utilization Percentage";
+    let memory_path = "\\GPU Adapter Memory(*)\\Dedicated Usage";
+    let engine_utf16 = engine_path.encode_utf16().chain(std::iter::once(0)).collect::<Vec<_>>();
+    let memory_utf16 = memory_path.encode_utf16().chain(std::iter::once(0)).collect::<Vec<_>>();
+    let mut engine_counter: *mut c_void = std::ptr::null_mut();
+    let mut memory_counter: *mut c_void = std::ptr::null_mut();
+    let engine_added = unsafe { PdhAddEnglishCounterW(query, engine_utf16.as_ptr(), 0, &mut engine_counter) } == 0;
+    let memory_added = unsafe { PdhAddEnglishCounterW(query, memory_utf16.as_ptr(), 0, &mut memory_counter) } == 0;
+
+    if !engine_added && !memory_added {
+        unsafe { PdhCloseQuery(query); }
+        return GpuLiveMetrics {
+            status: "unsupported_driver".to_owned(), adapter_count: 0, adapters: Vec::new(),
+            limitations: "Windows does not expose the expected GPU Engine or GPU Adapter Memory performance counters on this device. Driver and Windows-version support varies.".to_owned(),
+        };
+    }
+
+    let first_sample = unsafe { PdhCollectQueryData(query) };
+    if first_sample != 0 {
+        unsafe { PdhCloseQuery(query); }
+        return windows_gpu_unavailable("Windows PDH could not collect the initial GPU counter sample.");
+    }
+    // GPU Engine utilisation is a rate-style counter and needs two samples.
+    std::thread::sleep(std::time::Duration::from_millis(80));
+    let second_sample = unsafe { PdhCollectQueryData(query) };
+    if second_sample != 0 {
+        unsafe { PdhCloseQuery(query); }
+        return windows_gpu_unavailable("Windows PDH could not collect the follow-up GPU counter sample.");
+    }
+
+    let engine_values = if engine_added { unsafe { pdh_read_counter_array(engine_counter, PDH_FMT_DOUBLE_CODE | PDH_FMT_NOCAP100_CODE) }.unwrap_or_default() } else { Vec::new() };
+    let memory_values = if memory_added { unsafe { pdh_read_counter_array(memory_counter, PDH_FMT_LARGE_CODE) }.unwrap_or_default() } else { Vec::new() };
+    unsafe { PdhCloseQuery(query); }
+    assemble_windows_gpu_metrics(engine_values, memory_values)
+}
+
+#[cfg(target_os = "windows")]
+fn windows_gpu_unavailable(reason: &str) -> GpuLiveMetrics {
+    GpuLiveMetrics {
+        status: "unavailable".to_owned(), adapter_count: 0, adapters: Vec::new(),
+        limitations: format!("{reason} No fabricated zero readings are reported."),
+    }
+}
+
+#[cfg(target_os = "windows")]
+unsafe fn pdh_read_counter_array(counter: *mut std::ffi::c_void, format: u32) -> Option<Vec<(String, f64)>> {
+    let mut buffer_size = 0_u32;
+    let mut item_count = 0_u32;
+    let status = PdhGetFormattedCounterArrayW(counter, format, &mut buffer_size, &mut item_count, std::ptr::null_mut());
+    if status == 0 && item_count == 0 {
+        return Some(Vec::new());
+    }
+    if status != PDH_MORE_DATA_CODE || buffer_size == 0 {
+        return None;
+    }
+
+    // u64 storage guarantees sufficient alignment for PDH's pointer-containing records.
+    let words = (buffer_size as usize).saturating_add(7) / 8;
+    let mut buffer = vec![0_u64; words];
+    let items = buffer.as_mut_ptr().cast::<PdhFormattedCounterValueItem>();
+    let result = PdhGetFormattedCounterArrayW(counter, format, &mut buffer_size, &mut item_count, items);
+    if result != 0 {
+        return None;
+    }
+
+    let mut values = Vec::with_capacity(item_count as usize);
+    for index in 0..item_count as usize {
+        let item = &*items.add(index);
+        if item.name.is_null() || item.value.c_status > 1 {
+            continue;
+        }
+        let mut length = 0_usize;
+        while length < 1024 && *item.name.add(length) != 0 {
+            length += 1;
+        }
+        if length == 0 || length == 1024 {
+            continue;
+        }
+        let name = String::from_utf16_lossy(std::slice::from_raw_parts(item.name, length));
+        let numeric = if format & PDH_FMT_LARGE_CODE == PDH_FMT_LARGE_CODE {
+            item.value.value.large_value as f64
+        } else {
+            item.value.value.double_value
+        };
+        if numeric.is_finite() && numeric >= 0.0 {
+            values.push((name, numeric));
+        }
+    }
+    Some(values)
+}
+
+#[cfg(target_os = "windows")]
+fn assemble_windows_gpu_metrics(engine_values: Vec<(String, f64)>, memory_values: Vec<(String, f64)>) -> GpuLiveMetrics {
+    use std::collections::{BTreeMap, BTreeSet};
+
+    let mut engine_by_adapter: BTreeMap<String, Vec<f64>> = BTreeMap::new();
+    for (instance, value) in engine_values {
+        if let Some(key) = gpu_adapter_key_from_instance(&instance) {
+            engine_by_adapter.entry(key).or_default().push(value);
+        }
+    }
+    let mut memory_by_adapter: BTreeMap<String, u64> = BTreeMap::new();
+    for (instance, value) in memory_values {
+        if let Some(key) = gpu_adapter_key_from_instance(&instance) {
+            let bytes = value.min(u64::MAX as f64) as u64;
+            let total = memory_by_adapter.entry(key).or_default();
+            *total = total.saturating_add(bytes);
+        }
+    }
+
+    let totals = windows_gpu_dedicated_memory_totals();
+    let mut keys = BTreeSet::new();
+    keys.extend(engine_by_adapter.keys().cloned());
+    keys.extend(memory_by_adapter.keys().cloned());
+
+    let mut adapters = Vec::new();
+    for key in keys {
+        let utilization_percent = engine_by_adapter.get(&key).and_then(|values| max_gpu_engine_utilization(values));
+        let memory_used_bytes = memory_by_adapter.get(&key).copied();
+        let memory_total_bytes = totals.get(&key).copied().filter(|total| *total > 0);
+        let (bounded_used, memory_utilization_percent) = match (memory_used_bytes, memory_total_bytes) {
+            (Some(used), Some(total)) => gpu_memory_usage(used, total),
+            (Some(used), None) => (Some(used), None),
+            _ => (None, None),
+        };
+        if utilization_percent.is_some() || bounded_used.is_some() {
+            adapters.push(GpuLiveAdapterMetrics {
+                label: format!("GPU {}", adapters.len() + 1),
+                status: if utilization_percent.is_some() && bounded_used.is_some() { "detected" } else { "partial" }.to_owned(),
+                utilization_percent,
+                memory_used_bytes: bounded_used,
+                memory_total_bytes,
+                memory_utilization_percent,
+                source: "Windows PDH GPU Engine / Adapter Memory".to_owned(),
+            });
+        }
+    }
+
+    let adapter_count = adapters.len();
+    let status = if adapter_count == 0 {
+        if totals.is_empty() { "no_adapters" } else { "unsupported_driver" }
+    } else if adapters.iter().all(|adapter| adapter.utilization_percent.is_some()) {
+        "detected"
+    } else {
+        "partial"
+    };
+    GpuLiveMetrics {
+        status: status.to_owned(),
+        adapter_count,
+        adapters,
+        limitations: "Windows PDH GPU Engine counters report the busiest individual engine per adapter, not a single universal whole-GPU utilisation percentage. Dedicated Usage is an OS-reported allocation counter; its total is paired with DXGI dedicated-memory inventory where available. Shared GPU memory is not labelled VRAM. Counter availability and attribution vary by Windows build and graphics driver; physical-device validation is required.".to_owned(),
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn windows_gpu_dedicated_memory_totals() -> std::collections::BTreeMap<String, u64> {
+    use windows::Win32::Graphics::Dxgi::{CreateDXGIFactory1, IDXGIFactory1, DXGI_ADAPTER_FLAG_SOFTWARE};
+    let mut totals = std::collections::BTreeMap::new();
+    let Ok(factory) = (unsafe { CreateDXGIFactory1::<IDXGIFactory1>() }) else { return totals; };
+    for index in 0..32_u32 {
+        let Ok(adapter) = (unsafe { factory.EnumAdapters1(index) }) else { break; };
+        let Ok(desc) = (unsafe { adapter.GetDesc1() }) else { continue; };
+        if desc.Flags & (DXGI_ADAPTER_FLAG_SOFTWARE.0 as u32) != 0 || desc.DedicatedVideoMemory == 0 {
+            continue;
+        }
+        let key = format!("luid_0x{:08x}_0x{:08x}", desc.AdapterLuid.HighPart as u32, desc.AdapterLuid.LowPart);
+        totals.insert(key, desc.DedicatedVideoMemory as u64);
+    }
+    totals
+}
+
+#[cfg(target_os = "windows")]
+fn gpu_adapter_key_from_instance(instance: &str) -> Option<String> {
+    let start = instance.to_ascii_lowercase().find("luid_")?;
+    let tail = &instance[start..];
+    let end = tail.find("_phys_").unwrap_or(tail.len());
+    if end <= "luid_".len() { return None; }
+    Some(tail[..end].to_owned())
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "windows")))]
 fn collect_live_gpu_metrics() -> GpuLiveMetrics {
     GpuLiveMetrics {
         status: "unsupported_platform".to_owned(),
         adapter_count: 0,
         adapters: Vec::new(),
-        limitations: "A live GPU telemetry collector is not yet available for this operating system. Existing GPU inventory and Windows memory-budget evidence are separate point-in-time hardware information.".to_owned(),
+        limitations: "A live GPU telemetry collector is not yet available for this operating system. Existing GPU inventory remains separate point-in-time hardware information.".to_owned(),
     }
 }
 
@@ -920,6 +1157,22 @@ fn disk_io_rates(read_bytes: u64, written_bytes: u64, elapsed: Option<Duration>)
     (rate_bytes_per_second(read_bytes, duration), rate_bytes_per_second(written_bytes, duration))
 }
 
+fn max_gpu_engine_utilization(values: &[f64]) -> Option<f32> {
+    values.iter().filter_map(|value| {
+        if !value.is_finite() || !(0.0..=100.0).contains(value) { return None; }
+        Some(*value as f32)
+    }).reduce(f32::max)
+}
+
+#[cfg(target_os = "windows")]
+fn gpu_adapter_key_from_instance(instance: &str) -> Option<String> {
+    let start = instance.to_ascii_lowercase().find("luid_")?;
+    let tail = &instance[start..];
+    let end = tail.find("_phys_").unwrap_or(tail.len());
+    if end <= "luid_".len() { return None; }
+    Some(tail[..end].to_owned())
+}
+
 fn parse_gpu_percent_text(value: &str) -> Option<f32> {
     let parsed = value.trim().parse::<u64>().ok()?;
     if parsed > 100 { return None; }
@@ -950,6 +1203,23 @@ fn counter_rate_bytes_per_second(current: u64, previous: u64, elapsed: Duration)
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn gpu_engine_utilisation_uses_peak_engine_and_rejects_invalid_values() {
+        assert_eq!(super::max_gpu_engine_utilization(&[12.0, 68.5, 34.0]), Some(68.5));
+        assert_eq!(super::max_gpu_engine_utilization(&[f64::NAN, 101.0, -1.0]), None);
+        assert_eq!(super::max_gpu_engine_utilization(&[0.0, 100.0]), Some(100.0));
+    }
+
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn windows_gpu_engine_instances_are_grouped_by_adapter_luid_without_exposing_it() {
+        assert_eq!(
+            super::gpu_adapter_key_from_instance("pid_123_luid_0x00000000_0x0000ABCD_phys_0_eng_3D"),
+            Some("luid_0x00000000_0x0000abcd".to_owned())
+        );
+        assert_eq!(super::gpu_adapter_key_from_instance("pid_1_eng_3D"), None);
+    }
+
     #[test]
     fn gpu_live_percent_parser_rejects_out_of_range_and_malformed_values() {
         assert_eq!(super::parse_gpu_percent_text("0"), Some(0.0));

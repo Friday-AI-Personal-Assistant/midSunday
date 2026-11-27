@@ -1919,9 +1919,23 @@ This is the first vertical slice of the roadmap feature, not the completed Syste
 - [x] Reject malformed/out-of-range utilisation and zero-capacity memory readings; clamp used VRAM to the reported total.
 - [x] Display live GPU utilisation and allocated VRAM as distinct values in the System Monitor.
 - [x] Preserve explicit unsupported-platform, unsupported-driver, no-adapter, partial, and unavailable states rather than presenting zero as a fabricated reading.
-- [ ] Add and validate Windows GPU Engine / adapter-memory collectors.
+- [x] Add a Windows PDH GPU Engine / dedicated Adapter Memory collector with generic per-adapter labels, explicit unsupported states, and DXGI capacity context where available.
 - [ ] Add and validate macOS GPU telemetry using supported public or carefully reviewed platform interfaces.
 - [ ] Add Linux Intel and NVIDIA collectors with driver-specific semantics and tests.
 - [ ] Validate live readings on physical hardware; hosted CI cannot validate sensor accuracy.
 
 This is the first GPU telemetry slice, not universal GPU support. The initial live collector reads documented AMDGPU driver counters on Linux. Windows and macOS remain explicitly unsupported in this batch; the existing Windows DXGI inventory and process-scoped memory-budget snapshot are separate from system-wide live utilisation. See docs/HARDWARE-INTELLIGENCE.md section 72.
+
+
+### 2026-11-27 — Windows live GPU telemetry (Batch #185)
+
+- [x] Add a local PDH collector for Windows GPU Engine utilisation and dedicated adapter-memory allocation counters.
+- [x] Take two samples for rate-style GPU Engine counters and select the peak individual engine per adapter rather than summing concurrent engines.
+- [x] Group PDH instances by adapter LUID internally and expose only generic GPU labels; do not return adapter names, LUIDs, PIDs, or engine instance names.
+- [x] Pair dedicated-memory allocation with DXGI dedicated-memory capacity only where a matching capacity is available; never label shared memory as VRAM.
+- [x] Preserve explicit unavailable, unsupported-driver, no-adapter, and partial states; show dedicated-memory bytes even when total capacity is unavailable.
+- [x] Add regression tests for peak-engine selection and malformed/out-of-range utilisation values.
+- [ ] Validate PDH counter presence, attribution, and accuracy on physical Windows 10 and Windows 11 systems with different GPU vendors and driver versions.
+- [ ] Add and validate macOS GPU telemetry and Linux Intel/NVIDIA collectors.
+
+Windows readings are driver/build-dependent. The displayed percentage is the busiest individual engine, not a universal whole-GPU utilisation value. See docs/HARDWARE-INTELLIGENCE.md section 73.
