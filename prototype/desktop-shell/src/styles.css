@@ -529,3 +529,21 @@ h1 { margin: 0; color: #eef5ef; font-size: clamp(25px, 3vw, 34px); font-weight: 
     flex-direction: row !important;
   }
 }
+
+
+/* System Monitor: clear, honest per-source sensor availability. */
+.system-monitor-capabilities { display: grid; gap: 10px; padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: rgba(255,255,255,.018); }
+.system-monitor-capabilities-heading { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 6px 12px; }
+.system-monitor-capabilities-heading strong { color: #dce8de; font-size: 11px; }
+.system-monitor-capabilities-heading > span, .system-monitor-capabilities > p { color: #829287; font-size: 9px; line-height: 1.5; }
+.system-monitor-capabilities > p { margin: 0; }
+.system-monitor-capabilities-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }
+.system-monitor-capability { display: grid; gap: 5px; min-width: 0; padding: 8px; border: 1px solid var(--line); border-radius: 7px; }
+.system-monitor-capability > div { display: flex; justify-content: space-between; align-items: flex-start; gap: 5px; flex-wrap: wrap; }
+.system-monitor-capability strong { color: #dce8de; font-size: 9px; }
+.system-monitor-capability > small { color: #829287; font-size: 8px; line-height: 1.4; overflow-wrap: anywhere; }
+.system-monitor-status { padding: 2px 5px; border-radius: 99px; font-size: 7px; line-height: 1.4; white-space: nowrap; background: rgba(130,146,135,.13); color: #aab8ad; }
+.system-monitor-status-available { color: #8fd2a9; background: rgba(73,168,121,.14); }
+.system-monitor-status-limited { color: #e4c68b; background: rgba(196,157,82,.14); }
+@media (max-width: 700px) { .system-monitor-capabilities-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 420px) { .system-monitor-capabilities-grid { grid-template-columns: 1fr; } }

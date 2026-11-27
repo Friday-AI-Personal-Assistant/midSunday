@@ -780,3 +780,12 @@ Each retained System Monitor history point now carries the capture timestamp sup
 The polling loop now allows only one live-metrics request at a time. If a sample takes longer than the nominal 1.5-second interval, subsequent timer ticks are skipped until that request settles; this avoids piling up concurrent collector requests and prevents out-of-order samples from distorting the bounded timeline. A completed request still releases the guard after success or failure.
 
 A Clear history control removes only the temporary 36-point chart history. It does not stop sampling, erase the current live metric cards, or affect hardware inventory. The history remains in memory only and is discarded when monitoring stops or the app session ends. No samples are persisted or transmitted. Physical-device testing is still required to validate actual collector latency and timing behavior across supported operating systems.
+
+
+## 80. System Monitor measurement availability panel (Batch #194)
+
+The live dashboard now includes a Measurement availability overview for CPU, system memory, aggregate network counters, midSunday process memory, midSunday process disk I/O, system-wide disk I/O, storage capacity, GPU telemetry, and battery reporting.
+
+Each source displays its existing collector status in plain language: available, partially available, warming up, unavailable, or a specific no-device/unsupported state. The panel also shows limited aggregate context such as logical processor count, interface count, disk count, generic volume count, GPU adapter count, and battery count. It does not expose interface names, mount paths, GPU vendor/device identifiers, battery identifiers, or unrelated process details.
+
+The panel explicitly explains that warming-up requires another sample and that unavailable/unsupported readings are not zero activity. It is driven by the same live snapshot as the metric cards, so no extra polling, background service, persistence, or network transfer is introduced. This is a reporting/clarity improvement, not a claim that additional hardware collectors have been implemented. Physical-device validation remains necessary for driver and permission-specific states.

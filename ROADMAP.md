@@ -2009,3 +2009,15 @@ See docs/HARDWARE-INTELLIGENCE.md section 78.
 - [ ] Validate timing, slow collector behavior, and history controls on physical Windows, Linux, and macOS devices.
 
 See docs/HARDWARE-INTELLIGENCE.md section 79.
+
+
+### 2026-11-27 — System Monitor measurement availability panel (Batch #194)
+
+- [x] Add a concise per-source availability overview for CPU, system RAM, network, midSunday process memory and disk I/O, system-wide disk I/O, storage capacity, GPU telemetry, and battery.
+- [x] Translate collector status codes into clear user-facing states while preserving distinctions between available, partial, warming-up, unavailable, and unsupported measurements.
+- [x] Show only aggregate counts and generic labels; do not expose network interface names, mount paths, GPU vendor/device identifiers, or battery identifiers.
+- [x] Explain that warming-up and unavailable readings are not zero activity.
+- [x] Keep the overview tied to the live snapshot and update it with the existing opt-in monitor polling.
+- [ ] Validate status presentation for no-battery desktops, unsupported GPU drivers, permission-limited systems, and devices with multiple adapters/volumes.
+
+See docs/HARDWARE-INTELLIGENCE.md section 80.

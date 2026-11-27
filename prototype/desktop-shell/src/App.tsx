@@ -1130,6 +1130,23 @@ export default function App() {
     return `${bytesPerSecond.toLocaleString()} B/s`;
   }
 
+  function monitorStatusLabel(status: string) {
+    const labels: Record<string, string> = {
+      detected: "Available", partial: "Partially available", warming_up: "Warming up",
+      unavailable: "Unavailable", unsupported_platform: "Not supported on this OS",
+      unsupported_driver: "Driver not supported", no_adapters: "No adapter detected",
+      no_disks: "No disks detected", no_volumes: "No volumes detected",
+      no_battery: "No battery detected", software_only: "Software adapter only",
+    };
+    return labels[status] ?? status.replaceAll("_", " ");
+  }
+
+  function monitorStatusTone(status: string) {
+    if (status === "detected") return "available";
+    if (status === "partial" || status === "warming_up") return "limited";
+    return "unavailable";
+  }
+
   async function refreshHardwareSnapshot() {
     setHardwareBusy(true);
     setHardwareError("");
@@ -1488,6 +1505,26 @@ export default function App() {
                     </div>) : <div className="system-monitor-card"><small>GPU · live monitoring</small><strong>{!liveMetrics ? "Collecting…" : liveMetrics.gpu.status === "unsupported_platform" ? "Not supported on this OS yet" : liveMetrics.gpu.status === "unsupported_driver" ? "Driver telemetry unsupported" : liveMetrics.gpu.status === "no_adapters" ? "No GPU adapter detected" : "GPU telemetry unavailable"}</strong><span>{liveMetrics?.gpu.limitations ?? "Waiting for the first GPU sample."}</span></div>}
                     <div className="system-monitor-card"><small>Battery · system-wide</small><strong>{liveMetrics?.battery.chargePercent === null || !liveMetrics ? (liveMetrics?.battery.status === "no_battery" ? "No battery detected" : liveMetrics?.battery.status === "unavailable" ? "Unavailable" : "Collecting…") : liveMetrics.battery.chargePercent.toFixed(1) + "%"}</strong>{liveMetrics?.battery.chargePercent !== null && liveMetrics && <div className="system-monitor-track" role="meter" aria-label="Aggregate battery charge" aria-valuemin={0} aria-valuemax={100} aria-valuenow={liveMetrics.battery.chargePercent}><i style={{ width: liveMetrics.battery.chargePercent + "%" }} /></div>}<span>{liveMetrics?.battery.state === "not_present" ? "This device does not report a battery" : liveMetrics?.battery.state === "unavailable" ? "Battery state unavailable" : (liveMetrics?.battery.state ?? "Waiting for battery data") + (liveMetrics?.battery.batteryCount ? " · " + liveMetrics.battery.batteryCount + " battery" + (liveMetrics.battery.batteryCount === 1 ? "" : "ies") : "")}</span></div>
                   </div>
+                  {liveMetrics && <section className="system-monitor-capabilities" aria-label="Measurement availability">
+                    <div className="system-monitor-capabilities-heading"><strong>Measurement availability</strong><span>What this computer and its current drivers report to midSunday</span></div>
+                    <div className="system-monitor-capabilities-grid">
+                      {[
+                        { label: "CPU", status: liveMetrics.cpuStatus, detail: liveMetrics.cpuCoreUsagePercent.length + " logical processors" },
+                        { label: "System memory", status: liveMetrics.totalMemoryBytes > 0 ? "detected" : "unavailable", detail: liveMetrics.totalMemoryBytes > 0 ? formatModelSize(liveMetrics.totalMemoryBytes) + " installed" : "Capacity not reported" },
+                        { label: "Network", status: liveMetrics.networkStatus, detail: liveMetrics.networkInterfaceCount + " interfaces · names are not collected" },
+                        { label: "midSunday memory", status: liveMetrics.processMemory.status, detail: "This app's process only" },
+                        { label: "midSunday disk I/O", status: liveMetrics.processDiskIoStatus, detail: "This app's own read/write activity" },
+                        { label: "System disk I/O", status: liveMetrics.systemDiskStatus, detail: liveMetrics.systemDiskCount + " disks · operating-system counters" },
+                        { label: "Storage capacity", status: liveMetrics.storageStatus, detail: liveMetrics.storageVolumes.length + " volumes · generic labels" },
+                        { label: "GPU telemetry", status: liveMetrics.gpu.status, detail: liveMetrics.gpu.adapterCount + " reported adapters" },
+                        { label: "Battery", status: liveMetrics.battery.status, detail: liveMetrics.battery.batteryCount + " reported batteries" },
+                      ].map((source) => <div className="system-monitor-capability" key={source.label}>
+                        <div><strong>{source.label}</strong><span className={"system-monitor-status system-monitor-status-" + monitorStatusTone(source.status)}>{monitorStatusLabel(source.status)}</span></div>
+                        <small>{source.detail}</small>
+                      </div>)}
+                    </div>
+                    <p>“Warming up” means a second sample is needed. “Unavailable” or “not supported” does not mean zero activity; it means the operating system or current driver did not provide a reliable reading.</p>
+                  </section>}
                   <div className="system-monitor-history"><div className="system-monitor-history-heading"><div><strong>Recent activity</strong><span>{monitorHistory.length === 0 ? "Waiting for samples" : monitorHistory.length + " samples · " + (monitorHistory.length > 1 ? Math.max(0, (monitorHistory[monitorHistory.length - 1].capturedAtUnixMillis - monitorHistory[0].capturedAtUnixMillis) / 1000).toFixed(1) + " seconds" : "just started")}</span></div><button className="secondary-action" type="button" onClick={() => setMonitorHistory([])} disabled={monitorHistory.length === 0}>Clear history</button></div>
                     <div className="system-monitor-history-row"><small>CPU</small><div>{monitorHistory.map((point, index) => point.cpu === null ? <i key={"cpu-" + index} className="system-monitor-history-gap" title="No CPU reading" /> : <i key={"cpu-" + index} title={point.cpu.toFixed(1) + "%"} style={{ height: Math.max(2, point.cpu) + "%" }} />)}</div></div>
                     {Array.from({ length: liveMetrics?.cpuCoreUsagePercent.length ?? 0 }, (_, coreIndex) => {
