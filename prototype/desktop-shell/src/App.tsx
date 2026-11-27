@@ -77,6 +77,11 @@ const MAX_HISTORY_TOTAL_BYTES = 131_072;
 const MAX_PROMPT_BYTES = 32_768;
 const MAX_SYSTEM_PROMPT_BYTES = 8_192;
 
+function normalizeBatteryState(value: string): string {
+  const allowed = ["charging", "discharging", "empty", "full", "paused", "unknown", "mixed", "not_present", "unavailable"];
+  return allowed.includes(value) ? value : "unavailable";
+}
+
 function buildCompanionSystemPrompt(personality: string, customInstructions: string, profileName = "", memoryContext = "", preferredName = "", usePreferredName = false, awarenessContext = "") {
   const foundation = [
     "You are midSunday, a local AI personal companion.",
@@ -203,7 +208,7 @@ export default function App() {
   const [liveMetrics, setLiveMetrics] = useState<LiveSystemMetrics | null>(null);
   const [monitorError, setMonitorError] = useState("");
   const [monitorExportNotice, setMonitorExportNotice] = useState("");
-  const [monitorHistory, setMonitorHistory] = useState<{ capturedAtUnixMillis: number; cpu: number | null; ram: number | null; battery: number | null; processResidentBytes: number | null; processVirtualBytes: number | null; processRead: number | null; processWrite: number | null; download: number | null; upload: number | null; diskRead: number | null; diskWrite: number | null; gpu: Record<string, number | null>; gpuMemory: Record<string, number | null>; cores: (number | null)[]; coreCount: number }[]>([]);
+  const [monitorHistory, setMonitorHistory] = useState<{ capturedAtUnixMillis: number; cpu: number | null; ram: number | null; battery: number | null; batteryState: string; processResidentBytes: number | null; processVirtualBytes: number | null; processRead: number | null; processWrite: number | null; download: number | null; upload: number | null; diskRead: number | null; diskWrite: number | null; gpu: Record<string, number | null>; gpuMemory: Record<string, number | null>; cores: (number | null)[]; coreCount: number }[]>([]);
   const [executablePath, setExecutablePath] = useState("");
   const [modelPath, setModelPath] = useState("");
   const [contextTokens, setContextTokens] = useState("2048");
@@ -249,6 +254,7 @@ export default function App() {
             cpu: clampPercent(snapshot.cpuUsagePercent),
             ram,
             battery: clampPercent(snapshot.battery.chargePercent),
+            batteryState: normalizeBatteryState(snapshot.battery.state),
             processResidentBytes: finiteNonNegative(snapshot.processMemory.residentBytes),
             processVirtualBytes: finiteNonNegative(snapshot.processMemory.virtualBytes),
             processRead: finiteNonNegative(snapshot.processReadBytesPerSecond),
@@ -1173,6 +1179,7 @@ export default function App() {
       ...Array.from({ length: coreCount }, (_, index) => "Logical processor " + (index + 1) + " utilisation (%)"),
       "System RAM utilisation (%)",
       "Battery charge (%)",
+      "Battery state",
       "midSunday resident memory (bytes)",
       "midSunday virtual address space (bytes)",
       "midSunday process disk read (bytes/s)",
@@ -1206,6 +1213,7 @@ export default function App() {
       ...Array.from({ length: coreCount }, (_, index) => point.coreCount === coreCount ? (point.cores[index] ?? null) : null),
       point.ram,
       point.battery,
+      point.batteryState,
       point.processResidentBytes,
       point.processVirtualBytes,
       point.processRead,
@@ -1379,6 +1387,15 @@ export default function App() {
     delayedIntervals: monitorCaptureIntervals.filter((elapsedMs) => elapsedMs > 2250).length,
   };
   const formatMonitorDuration = (elapsedMs: number | null) => elapsedMs === null ? "Unavailable" : elapsedMs >= 10000 ? (elapsedMs / 1000).toFixed(1) + " s" : (elapsedMs / 1000).toFixed(2) + " s";
+
+  const batteryStateCounts = monitorHistory.reduce<Record<string, number>>((counts, point) => {
+    counts[point.batteryState] = (counts[point.batteryState] ?? 0) + 1;
+    return counts;
+  }, {});
+  const batteryStateSummary = ["charging", "discharging", "full", "empty", "paused", "mixed", "unknown", "not_present", "unavailable"]
+    .filter((state) => (batteryStateCounts[state] ?? 0) > 0)
+    .map((state) => state.replace("_", " ") + ": " + batteryStateCounts[state])
+    .join(" · ");
 
   const monitorHistorySummaryRows = [
     buildMonitorHistorySummary("CPU utilisation", monitorHistory.map((point) => point.cpu), (value) => value.toFixed(1) + "%"),
@@ -1697,6 +1714,7 @@ export default function App() {
                     })}
                     <div className="system-monitor-history-row"><small>RAM</small><div role="img" aria-label="System RAM utilisation history, oldest to newest; missing samples are gaps">{monitorHistory.map((point, index) => point.ram === null ? <i key={"ram-" + index} className="system-monitor-history-gap" title={monitorHistorySampleTitle(index, "No RAM reading")} style={{ marginLeft: monitorHistoryGapBefore(index) }} /> : <i key={"ram-" + index} title={monitorHistorySampleTitle(index, point.ram.toFixed(1) + "%")} style={{ height: Math.max(2, point.ram) + "%", marginLeft: monitorHistoryGapBefore(index) }} />)}</div></div>
                     <div className="system-monitor-history-row"><small>BAT</small><div role="img" aria-label="Battery charge percentage history, oldest to newest; missing readings are gaps">{monitorHistory.map((point, index) => point.battery === null ? <i key={"battery-" + index} className="system-monitor-history-gap" title={monitorHistorySampleTitle(index, "No battery charge reading")} style={{ marginLeft: monitorHistoryGapBefore(index) }} /> : <i key={"battery-" + index} title={monitorHistorySampleTitle(index, point.battery.toFixed(1) + "% charge")} style={{ height: Math.max(2, point.battery) + "%", marginLeft: monitorHistoryGapBefore(index) }} />)}</div></div>
+                    <div className="system-monitor-history-row system-monitor-battery-state-row"><small>BAT ST</small><div role="img" aria-label="Battery operating state history, oldest to newest; each segment represents one sampled OS-reported state">{monitorHistory.map((point, index) => <i key={"battery-state-" + index} className={"system-monitor-battery-state system-monitor-battery-state-" + point.batteryState} title={monitorHistorySampleTitle(index, point.batteryState.replace("_", " "))} />)}</div></div>
                     {([
                       { key: "process-memory", label: "APP MEM", field: "processResidentBytes" as const, format: (value: number) => formatModelSize(value), unit: "resident memory" },
                       { key: "process-virtual", label: "APP VIRT", field: "processVirtualBytes" as const, format: (value: number) => formatModelSize(value), unit: "virtual address space" },
@@ -1747,12 +1765,13 @@ export default function App() {
                         </div>
                         <p className="system-monitor-capture-note">Timing uses positive differences between existing sample timestamps. Median is the middle interval (or midpoint of the two middle intervals). Median deviation is the median absolute distance from that median and describes typical timing variation; intervals over 2.25 seconds count as delayed. These values describe capture timing, not missing metric readings.</p>
                         {monitorHistory.some((point) => point.coreCount !== (monitorHistory[monitorHistory.length - 1]?.coreCount ?? 0)) && <p className="system-monitor-topology-note" role="status">The number of logical processors changed during this history. Per-processor statistics include only samples matching the newest processor count; older-topology samples are excluded, not treated as zero.</p>}
+                        {batteryStateSummary && <p className="system-monitor-battery-state-summary">Battery state samples: {batteryStateSummary}</p>}
                         <div className="system-monitor-summary-scroll"><table className="system-monitor-summary-table"><thead><tr><th scope="col">Metric</th><th scope="col">Latest</th><th scope="col">Average</th><th scope="col">Peak</th><th scope="col">Samples</th></tr></thead><tbody>{monitorHistorySummaryRows.map((row) => <tr key={row.label}><th scope="row">{row.label}</th><td>{row.latest}</td><td>{row.average}</td><td>{row.peak}</td><td>{row.samples}</td></tr>)}</tbody></table></div>
                       </>}
                       <p>Statistics use only available readings in the retained history window. Latest shows unavailable when the newest sample has no reading; averages and peaks never substitute missing samples with zero.</p>
                     </section>
                   </div>
-                  <p className="settings-footnote">CPU usage is calculated from successive operating-system samples. Network rates aggregate byte counters across interfaces without collecting or displaying interface names. System-wide disk rates aggregate OS-reported physical/volume counters and may include activity from all applications; virtual volumes, RAID, caching, and platform-specific accounting can affect readings. Storage capacity is shown per volume with generic labels only; mount paths and device identifiers are not exposed in the live monitor. The separate midSunday process disk rates describe only this app. System RAM and midSunday's own process memory remain separate. GPU telemetry is driver-dependent: Linux NVIDIA NVML reports device-wide GPU utilisation and framebuffer allocation; Linux AMDGPU reports its driver-published busy percentage; Linux Intel DRM GT reports the busiest sampled engine; and Windows PDH reports the busiest individual engine per adapter. Intel/Windows engine readings are not universal whole-GPU percentages. GPU memory history distinguishes hardware-reported dedicated VRAM from macOS Metal resource allocation relative to Apple's recommended working set; Metal values are not dedicated VRAM, whole-system memory, free memory, or AI-available capacity. macOS GPU utilisation remains unavailable. Battery charge and state are aggregated across detected batteries where the operating system provides readings; device identifiers and serial numbers are not collected.</p>
+                  <p className="settings-footnote">CPU usage is calculated from successive operating-system samples. Network rates aggregate byte counters across interfaces without collecting or displaying interface names. System-wide disk rates aggregate OS-reported physical/volume counters and may include activity from all applications; virtual volumes, RAID, caching, and platform-specific accounting can affect readings. Storage capacity is shown per volume with generic labels only; mount paths and device identifiers are not exposed in the live monitor. The separate midSunday process disk rates describe only this app. System RAM and midSunday's own process memory remain separate. GPU telemetry is driver-dependent: Linux NVIDIA NVML reports device-wide GPU utilisation and framebuffer allocation; Linux AMDGPU reports its driver-published busy percentage; Linux Intel DRM GT reports the busiest sampled engine; and Windows PDH reports the busiest individual engine per adapter. Intel/Windows engine readings are not universal whole-GPU percentages. GPU memory history distinguishes hardware-reported dedicated VRAM from macOS Metal resource allocation relative to Apple's recommended working set; Metal values are not dedicated VRAM, whole-system memory, free memory, or AI-available capacity. macOS GPU utilisation remains unavailable. Battery charge and state are aggregated across detected batteries where the operating system provides readings; device identifiers and serial numbers are not collected. The Recent activity history records the reported combined state separately from charge percentage.</p>
                   {liveMetrics && <p className="settings-footnote">Last sample: {new Date(liveMetrics.capturedAtUnixMillis).toLocaleTimeString()} · History is temporary and stays in memory; clearing it does not stop monitoring or change current readings.</p>}
                 </>}
               </div>

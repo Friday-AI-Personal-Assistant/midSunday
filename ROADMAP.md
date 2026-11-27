@@ -2222,3 +2222,16 @@ See docs/HARDWARE-INTELLIGENCE.md section 97.
 - [ ] Validate battery-equipped laptops and systems without batteries on physical Windows, Linux, and macOS devices.
 
 See docs/HARDWARE-INTELLIGENCE.md section 98.
+
+
+### 2026-11-27 — Battery operating-state history (Batch #219)
+
+- [x] Retain the combined OS-reported battery operating state in each existing bounded System Monitor history sample.
+- [x] Add a discrete BAT ST timeline with timestamped tooltips and distinct visual states for charging, discharging, full, empty, paused, mixed, unknown, not-present, and unavailable.
+- [x] Add retained-sample counts by battery state to the Window summary.
+- [x] Include a separate Battery state column in explicit local CSV exports.
+- [x] Normalise unexpected state strings to unavailable and keep battery state distinct from charge percentage.
+- [x] Reuse the existing OS snapshot, opt-in 1.5-second polling, 36-sample memory bound, and local-only export; add no battery queries or identifiers.
+- [ ] Validate real charging/discharging transitions, mixed-battery behavior, and narrow-window layout on physical Windows, Linux, and macOS devices.
+
+See docs/HARDWARE-INTELLIGENCE.md section 99.
