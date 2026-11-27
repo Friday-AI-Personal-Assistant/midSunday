@@ -2121,3 +2121,14 @@ See docs/HARDWARE-INTELLIGENCE.md section 87.
 - Keep missing metric readings visible as gaps; do not interpolate, fabricate zeroes, or imply continuous measurements.
 - Preserve the existing bounded 36-sample in-memory window, opt-in polling cadence, and local-only collection.
 - Physical validation remains required for slow collectors, system sleep/resume, app load, and narrow-window readability across Windows, Linux, and macOS.
+
+### 2026-11-27 — Per-logical-processor numeric history summary (Batch #210)
+
+- [x] Extend the System Monitor Window summary with latest, average, peak, and valid-sample count for each logical processor in the newest retained sample.
+- [x] Compare a processor index only against samples with the same logical-processor count as the newest sample; exclude mismatched topologies rather than implying processor identity across topology changes.
+- [x] Preserve missing/non-finite readings as unavailable and exclude them from statistics.
+- [x] Derive all rows from the existing 36-point in-memory history without adding polling, hardware reads, persistence, identifiers, or network activity.
+- [ ] Validate topology changes and long-table usability on physical Windows, Linux, and macOS devices.
+
+See docs/HARDWARE-INTELLIGENCE.md section 90.
+

@@ -856,3 +856,10 @@ Export is generated locally from the existing in-memory history only after the u
 The Recent activity bars now add a small, bounded horizontal separation when consecutive OS capture timestamps are more than 2.25 seconds apart (the normal target cadence is 1.5 seconds). The same timestamp-derived spacing is applied consistently to total CPU, per-logical-processor CPU, RAM, network, system disk, GPU utilisation, and GPU memory rows. Tooltips identify the elapsed time since the previous sample when a delayed interval occurs, and a short note explains that wider spaces represent longer sampling gaps. Missing metric readings remain explicit gaps and are not converted to zero or interpolated.
 
 This is a presentation-only correction derived from timestamps already attached to each in-memory sample. It adds no polling, hardware reads, persistence, identifiers, or network activity; the 36-point bound and target sampling cadence remain unchanged. Physical testing is still required to confirm the spacing and tooltip readability under real slow collectors, app load, sleep/resume, and narrow window sizes on Windows, Linux, and macOS.
+
+## 90. Per-logical-processor numeric history summary (Batch #210)
+
+The Recent activity Window summary now includes a separate latest, average, peak, and valid-sample count for each logical processor in the newest retained sample. A processor index is compared only across samples with the same logical-processor count as the newest sample. Earlier samples captured under a different CPU topology are excluded from that processor's statistics rather than being incorrectly matched by index. Missing and non-finite values remain unavailable and are not treated as zero.
+
+The rows are derived from the existing bounded, timestamped in-memory history. This adds no hardware queries, polling, persistence, identifiers, or network activity. The table remains horizontally scrollable; systems with many logical processors may produce a longer summary. Hosted CI validates compilation and tests, while physical validation is still needed for topology changes and table usability on Windows, Linux, and macOS.
+

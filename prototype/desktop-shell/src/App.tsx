@@ -1334,6 +1334,14 @@ export default function App() {
 
   const monitorHistorySummaryRows = [
     buildMonitorHistorySummary("CPU utilisation", monitorHistory.map((point) => point.cpu), (value) => value.toFixed(1) + "%"),
+    ...Array.from({ length: monitorHistory[monitorHistory.length - 1]?.coreCount ?? 0 }, (_, index) => {
+      const currentCoreCount = monitorHistory[monitorHistory.length - 1]?.coreCount ?? 0;
+      return buildMonitorHistorySummary(
+        "Logical processor " + (index + 1),
+        monitorHistory.map((point) => point.coreCount === currentCoreCount ? (point.cores[index] ?? null) : null),
+        (value) => value.toFixed(1) + "%",
+      );
+    }),
     buildMonitorHistorySummary("System RAM", monitorHistory.map((point) => point.ram), (value) => value.toFixed(1) + "%"),
     buildMonitorHistorySummary("Network download", monitorHistory.map((point) => point.download), (value) => formatTransferRate(value)),
     buildMonitorHistorySummary("Network upload", monitorHistory.map((point) => point.upload), (value) => formatTransferRate(value)),
