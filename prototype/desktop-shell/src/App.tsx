@@ -202,7 +202,7 @@ export default function App() {
   const [monitorRunning, setMonitorRunning] = useState(false);
   const [liveMetrics, setLiveMetrics] = useState<LiveSystemMetrics | null>(null);
   const [monitorError, setMonitorError] = useState("");
-  const [monitorHistory, setMonitorHistory] = useState<{ capturedAtUnixMillis: number; cpu: number | null; ram: number | null; download: number | null; upload: number | null; diskRead: number | null; diskWrite: number | null; gpu: Record<string, number | null>; cores: (number | null)[]; coreCount: number }[]>([]);
+  const [monitorHistory, setMonitorHistory] = useState<{ capturedAtUnixMillis: number; cpu: number | null; ram: number | null; download: number | null; upload: number | null; diskRead: number | null; diskWrite: number | null; gpu: Record<string, number | null>; gpuMemory: Record<string, number | null>; cores: (number | null)[]; coreCount: number }[]>([]);
   const [executablePath, setExecutablePath] = useState("");
   const [modelPath, setModelPath] = useState("");
   const [contextTokens, setContextTokens] = useState("2048");
@@ -251,6 +251,7 @@ export default function App() {
             diskRead: snapshot.systemDiskReadBytesPerSecond,
             diskWrite: snapshot.systemDiskWriteBytesPerSecond,
             gpu: Object.fromEntries(snapshot.gpu.adapters.map((adapter) => [adapter.label, adapter.utilizationPercent])),
+            gpuMemory: Object.fromEntries(snapshot.gpu.adapters.map((adapter) => [adapter.label, adapter.memoryUtilizationPercent])),
             cores: snapshot.cpuCoreUsagePercent.map((usage) => clampPercent(usage)),
             coreCount: snapshot.cpuCoreUsagePercent.length,
           }].slice(-36));
@@ -1496,7 +1497,7 @@ export default function App() {
                       </div>) : <strong>{liveMetrics?.storageStatus === "no_volumes" ? "No volumes reported" : "Collecting…"}</strong>}
                     </div>
                     {liveMetrics?.gpu.adapters.length ? liveMetrics.gpu.adapters.map((gpu) => <div className="system-monitor-card" key={gpu.label}>
-                      <small>{gpu.label} · {gpu.source.startsWith("Windows PDH") ? "peak engine" : "live GPU"}</small>
+                      <small>{gpu.label} · {gpu.source.startsWith("Windows PDH") ? "peak engine" : gpu.source.includes("Intel DRM GT") ? "busiest engine" : "GPU busy"}</small>
                       <strong>{gpu.utilizationPercent === null ? "Utilisation unavailable" : gpu.utilizationPercent.toFixed(1) + "% usage"}</strong>
                       {gpu.utilizationPercent !== null && <div className="system-monitor-track" role="meter" aria-label={gpu.label + " GPU utilisation"} aria-valuemin={0} aria-valuemax={100} aria-valuenow={gpu.utilizationPercent}><i style={{ width: gpu.utilizationPercent + "%" }} /></div>}
                       {gpu.memoryUsedBytes !== null && <><span>{gpu.memoryTotalBytes !== null ? formatModelSize(gpu.memoryUsedBytes) + " / " + formatModelSize(gpu.memoryTotalBytes) + " dedicated memory allocated" : formatModelSize(gpu.memoryUsedBytes) + " dedicated memory in use · total unavailable"}</span>{gpu.memoryUtilizationPercent !== null && <div className="system-monitor-track" role="meter" aria-label={gpu.label + " dedicated memory allocation"} aria-valuemin={0} aria-valuemax={100} aria-valuenow={gpu.memoryUtilizationPercent}><i style={{ width: gpu.memoryUtilizationPercent + "%" }} /></div>}</>}
@@ -1550,8 +1551,16 @@ export default function App() {
                         <div role="img" aria-label={gpu.label + " recent GPU activity; missing readings are shown as gaps"}>{samples.map((value, index) => <i key={gpu.label + "-" + index} className={value === null ? "system-monitor-history-gap" : undefined} title={value === null ? "No reading" : value.toFixed(1) + "%"} style={{ height: value === null ? "0%" : Math.max(2, value / peak * 100) + "%" }} />)}</div>
                       </div>;
                     })}
+                    {liveMetrics?.gpu.adapters.map((gpu) => {
+                      const samples = monitorHistory.map((point) => point.gpuMemory[gpu.label] ?? null);
+                      if (!samples.some((value) => value !== null)) return null;
+                      return <div className="system-monitor-history-row system-monitor-gpu-history" key={"gpu-memory-history-" + gpu.label}>
+                        <small>{gpu.label} MEM</small>
+                        <div role="img" aria-label={gpu.label + " recent dedicated-memory allocation; missing readings are shown as gaps"}>{samples.map((value, index) => <i key={gpu.label + "-memory-" + index} className={value === null ? "system-monitor-history-gap" : undefined} title={value === null ? "No memory reading" : value.toFixed(1) + "% allocated"} style={{ height: value === null ? "0%" : Math.max(2, Math.min(100, value)) + "%" }} />)}</div>
+                      </div>;
+                    })}
                   </div>
-                  <p className="settings-footnote">CPU usage is calculated from successive operating-system samples. Network rates aggregate byte counters across interfaces without collecting or displaying interface names. System-wide disk rates aggregate OS-reported physical/volume counters and may include activity from all applications; virtual volumes, RAID, caching, and platform-specific accounting can affect readings. Storage capacity is shown per volume with generic labels only; mount paths and device identifiers are not exposed in the live monitor. The separate midSunday process disk rates describe only this app. System RAM and midSunday's own process memory remain separate. GPU telemetry is driver-dependent: AMDGPU DRM counters on Linux and Windows PDH GPU Engine / Adapter Memory counters on Windows. Windows utilisation is the busiest individual engine per adapter, not a universal whole-GPU percentage. Battery charge and state are aggregated across detected batteries where the operating system provides readings; device identifiers and serial numbers are not collected.</p>
+                  <p className="settings-footnote">CPU usage is calculated from successive operating-system samples. Network rates aggregate byte counters across interfaces without collecting or displaying interface names. System-wide disk rates aggregate OS-reported physical/volume counters and may include activity from all applications; virtual volumes, RAID, caching, and platform-specific accounting can affect readings. Storage capacity is shown per volume with generic labels only; mount paths and device identifiers are not exposed in the live monitor. The separate midSunday process disk rates describe only this app. System RAM and midSunday's own process memory remain separate. GPU telemetry is driver-dependent: Linux AMDGPU reports its driver-published busy percentage, Linux Intel DRM GT reports the busiest sampled engine, and Windows PDH reports the busiest individual engine per adapter; neither engine metric is a universal whole-GPU percentage. GPU memory history is recorded only when the driver reports both used and total dedicated memory, and represents allocation rather than free memory or AI-available capacity. Battery charge and state are aggregated across detected batteries where the operating system provides readings; device identifiers and serial numbers are not collected.</p>
                   {liveMetrics && <p className="settings-footnote">Last sample: {new Date(liveMetrics.capturedAtUnixMillis).toLocaleTimeString()} · History is temporary and stays in memory; clearing it does not stop monitoring or change current readings.</p>}
                 </>}
               </div>
