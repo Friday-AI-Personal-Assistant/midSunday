@@ -2102,3 +2102,12 @@ See docs/HARDWARE-INTELLIGENCE.md section 86.
 - [ ] Validate table readability, horizontal scrolling, and values on physical Windows, Linux, and macOS devices.
 
 See docs/HARDWARE-INTELLIGENCE.md section 87.
+
+
+### 2026-11-27 — System Monitor CSV export (Batch #208)
+
+- Added an explicit local Export CSV action for the existing bounded Recent activity history.
+- Export covers capture timestamps, total and per-logical-processor CPU, system RAM, aggregate network throughput, system-wide disk throughput, and per-adapter GPU utilisation/memory history.
+- Preserved missing readings as empty cells and logical-processor topology changes as blank values; source-specific GPU labels distinguish Metal working-set and NVIDIA framebuffer allocation.
+- CSV generation uses only the retained in-memory samples after an explicit user click; no new polling, persistence, identifiers, process enumeration, or network transfer.
+- Added CSV quoting and spreadsheet-formula injection guards for text cells.

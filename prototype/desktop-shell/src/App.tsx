@@ -202,6 +202,7 @@ export default function App() {
   const [monitorRunning, setMonitorRunning] = useState(false);
   const [liveMetrics, setLiveMetrics] = useState<LiveSystemMetrics | null>(null);
   const [monitorError, setMonitorError] = useState("");
+  const [monitorExportNotice, setMonitorExportNotice] = useState("");
   const [monitorHistory, setMonitorHistory] = useState<{ capturedAtUnixMillis: number; cpu: number | null; ram: number | null; download: number | null; upload: number | null; diskRead: number | null; diskWrite: number | null; gpu: Record<string, number | null>; gpuMemory: Record<string, number | null>; cores: (number | null)[]; coreCount: number }[]>([]);
   const [executablePath, setExecutablePath] = useState("");
   const [modelPath, setModelPath] = useState("");
@@ -1131,6 +1132,63 @@ export default function App() {
     return `${bytesPerSecond.toLocaleString()} B/s`;
   }
 
+  function exportMonitorHistoryCsv() {
+    if (monitorHistory.length === 0) return;
+    const adapters = liveMetrics?.gpu.adapters ?? [];
+    const gpuLabels = [...new Set(monitorHistory.flatMap((point) => Object.keys(point.gpu)))];
+    const coreCount = Math.max(0, ...monitorHistory.map((point) => point.coreCount));
+    const memoryLabel = (label: string) => {
+      const adapter = adapters.find((item) => item.label === label);
+      if (adapter?.memoryKind === "metal_working_set") return "recommended working set (%)";
+      if (adapter?.source.includes("NVIDIA NVML")) return "framebuffer allocation (%)";
+      return "GPU memory allocation (%)";
+    };
+    const columns = [
+      "Captured at (local)",
+      "Captured at (UTC)",
+      "CPU utilisation (%)",
+      ...Array.from({ length: coreCount }, (_, index) => "Logical processor " + (index + 1) + " utilisation (%)"),
+      "System RAM utilisation (%)",
+      "Network download (bytes/s)",
+      "Network upload (bytes/s)",
+      "System disk read (bytes/s)",
+      "System disk write (bytes/s)",
+      ...gpuLabels.flatMap((label) => {
+        const adapter = adapters.find((item) => item.label === label);
+        const source = adapter?.source ? " · " + adapter.source : "";
+        return [label + source + " utilisation (%)", label + " " + memoryLabel(label)];
+      }),
+    ];
+    const cell = (value: string | number | null) => {
+      if (value === null || (typeof value === "number" && !Number.isFinite(value))) return "";
+      const raw = String(value);
+      const safe = typeof value === "string" && /^[\s]*[=+\-@]/.test(raw) ? "'" + raw : raw;
+      return '"' + safe.replace(/"/g, '""') + '"';
+    };
+    const rows = monitorHistory.map((point) => [
+      new Date(point.capturedAtUnixMillis).toLocaleString(),
+      new Date(point.capturedAtUnixMillis).toISOString(),
+      point.cpu,
+      ...Array.from({ length: coreCount }, (_, index) => point.coreCount === coreCount ? (point.cores[index] ?? null) : null),
+      point.ram,
+      point.download,
+      point.upload,
+      point.diskRead,
+      point.diskWrite,
+      ...gpuLabels.flatMap((label) => [point.gpu[label] ?? null, point.gpuMemory[label] ?? null]),
+    ]);
+    const csv = [columns, ...rows].map((row) => row.map(cell).join(",")).join("\r\n") + "\r\n";
+    const url = URL.createObjectURL(new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" }));
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "midsunday-system-monitor-" + new Date().toISOString().replace(/[:.]/g, "-") + ".csv";
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setMonitorExportNotice("CSV exported locally. It contains only the samples currently retained in this session.");
+  }
+
   function buildMonitorHistorySummary(label: string, values: (number | null)[], formatter: (value: number) => string) {
     const valid = values.filter((value): value is number => value !== null && Number.isFinite(value));
     const latest = values.length > 0 ? values[values.length - 1] : null;
@@ -1503,7 +1561,7 @@ export default function App() {
             <section className="settings-section">
               <div className="settings-section-title"><div><h2>System & hardware</h2><p>A local snapshot helps midSunday understand this computer. It is collected only on this device.</p></div><span className="settings-symbol">⌘</span></div>
               <div className="system-monitor-panel">
-                <div className="system-monitor-heading"><div><strong>Live System Monitor</strong><p>Local, read-only CPU, memory, GPU, network, system-wide and process disk I/O, and battery measurements. Sampling pauses when this settings view is left.</p></div><button className="secondary-action" type="button" onClick={() => { setMonitorRunning((running) => !running); if (monitorRunning) { setLiveMetrics(null); setMonitorHistory([]); setMonitorError(""); } }}>{monitorRunning ? "Stop monitoring" : "Start live monitoring"}</button></div>
+                <div className="system-monitor-heading"><div><strong>Live System Monitor</strong><p>Local, read-only CPU, memory, GPU, network, system-wide and process disk I/O, and battery measurements. Sampling pauses when this settings view is left.</p></div><button className="secondary-action" type="button" onClick={() => { setMonitorRunning((running) => !running); if (monitorRunning) { setLiveMetrics(null); setMonitorHistory([]); setMonitorError(""); setMonitorExportNotice(""); } }}>{monitorRunning ? "Stop monitoring" : "Start live monitoring"}</button></div>
                 {monitorRunning && <>
                   {monitorError && <p className="hardware-error" role="status">{monitorError}</p>}
                   <div className="system-monitor-grid">
@@ -1551,7 +1609,7 @@ export default function App() {
                     </div>
                     <p>“Warming up” means a second sample is needed. “Unavailable” or “not supported” does not mean zero activity; it means the operating system or current driver did not provide a reliable reading.</p>
                   </section>}
-                  <div className="system-monitor-history"><div className="system-monitor-history-heading"><div><strong>Recent activity</strong><span>{monitorHistory.length === 0 ? "Waiting for samples" : monitorHistory.length + " samples · " + (monitorHistory.length > 1 ? Math.max(0, (monitorHistory[monitorHistory.length - 1].capturedAtUnixMillis - monitorHistory[0].capturedAtUnixMillis) / 1000).toFixed(1) + " seconds" : "just started")}</span></div><button className="secondary-action" type="button" onClick={() => setMonitorHistory([])} disabled={monitorHistory.length === 0}>Clear history</button></div>
+                  <div className="system-monitor-history"><div className="system-monitor-history-heading"><div><strong>Recent activity</strong><span>{monitorHistory.length === 0 ? "Waiting for samples" : monitorHistory.length + " samples · " + (monitorHistory.length > 1 ? Math.max(0, (monitorHistory[monitorHistory.length - 1].capturedAtUnixMillis - monitorHistory[0].capturedAtUnixMillis) / 1000).toFixed(1) + " seconds" : "just started")}</span></div><div className="system-monitor-history-actions"><button className="secondary-action" type="button" onClick={exportMonitorHistoryCsv} disabled={monitorHistory.length === 0}>Export CSV</button><button className="secondary-action" type="button" onClick={() => { setMonitorHistory([]); setMonitorExportNotice(""); }} disabled={monitorHistory.length === 0}>Clear history</button></div></div>{monitorExportNotice && <p className="system-monitor-export-notice" role="status">{monitorExportNotice}</p>}
                     <div className="system-monitor-history-row"><small>CPU</small><div role="img" aria-label="Total CPU utilisation history, oldest to newest; missing samples are gaps">{monitorHistory.map((point, index) => point.cpu === null ? <i key={"cpu-" + index} className="system-monitor-history-gap" title={new Date(point.capturedAtUnixMillis).toLocaleTimeString() + " · No CPU reading"} /> : <i key={"cpu-" + index} title={new Date(point.capturedAtUnixMillis).toLocaleTimeString() + " · " + point.cpu.toFixed(1) + "%"} style={{ height: Math.max(2, point.cpu) + "%" }} />)}</div></div>
                     {Array.from({ length: liveMetrics?.cpuCoreUsagePercent.length ?? 0 }, (_, coreIndex) => {
                       const currentCoreCount = liveMetrics?.cpuCoreUsagePercent.length ?? 0;
