@@ -1131,6 +1131,18 @@ export default function App() {
     return `${bytesPerSecond.toLocaleString()} B/s`;
   }
 
+  function buildMonitorHistorySummary(label: string, values: (number | null)[], formatter: (value: number) => string) {
+    const valid = values.filter((value): value is number => value !== null && Number.isFinite(value));
+    const latest = values.length > 0 ? values[values.length - 1] : null;
+    return {
+      label,
+      latest: latest === null ? "Unavailable" : formatter(latest),
+      average: valid.length > 0 ? formatter(valid.reduce((sum, value) => sum + value, 0) / valid.length) : "Unavailable",
+      peak: valid.length > 0 ? formatter(Math.max(...valid)) : "Unavailable",
+      samples: valid.length + " / " + values.length,
+    };
+  }
+
   function monitorStatusLabel(status: string) {
     const labels: Record<string, string> = {
       detected: "Available", partial: "Partially available", warming_up: "Warming up",
@@ -1246,6 +1258,19 @@ export default function App() {
   }
 
   const statusLabel = backendState === "connected" ? "Core connected" : backendState === "checking" ? "Checking core" : "Core unavailable";
+
+  const monitorHistorySummaryRows = [
+    buildMonitorHistorySummary("CPU utilisation", monitorHistory.map((point) => point.cpu), (value) => value.toFixed(1) + "%"),
+    buildMonitorHistorySummary("System RAM", monitorHistory.map((point) => point.ram), (value) => value.toFixed(1) + "%"),
+    buildMonitorHistorySummary("Network download", monitorHistory.map((point) => point.download), (value) => formatTransferRate(value)),
+    buildMonitorHistorySummary("Network upload", monitorHistory.map((point) => point.upload), (value) => formatTransferRate(value)),
+    buildMonitorHistorySummary("Disk read", monitorHistory.map((point) => point.diskRead), (value) => formatTransferRate(value)),
+    buildMonitorHistorySummary("Disk write", monitorHistory.map((point) => point.diskWrite), (value) => formatTransferRate(value)),
+    ...(liveMetrics?.gpu.adapters.flatMap((gpu) => [
+      buildMonitorHistorySummary(gpu.label + " GPU", monitorHistory.map((point) => point.gpu[gpu.label] ?? null), (value) => value.toFixed(1) + "%"),
+      buildMonitorHistorySummary(gpu.label + (gpu.memoryKind === "metal_working_set" ? " working set" : gpu.source.includes("NVIDIA NVML") ? " framebuffer" : " GPU memory"), monitorHistory.map((point) => point.gpuMemory[gpu.label] ?? null), (value) => value.toFixed(1) + "%"),
+    ]) ?? []),
+  ];
 
   return (
     <main className="workspace">
@@ -1560,6 +1585,11 @@ export default function App() {
                       </div>;
                     })}
                     {monitorHistory.length > 0 && <div className="system-monitor-history-axis" aria-label="History time scale"><small>{new Date(monitorHistory[0].capturedAtUnixMillis).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })} · oldest</small><small>{new Date(monitorHistory[Math.floor((monitorHistory.length - 1) / 2)].capturedAtUnixMillis).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</small><small>{new Date(monitorHistory[monitorHistory.length - 1].capturedAtUnixMillis).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })} · newest</small></div>}
+                    <section className="system-monitor-summary" aria-label="Recent activity numeric summary">
+                      <div><strong>Window summary</strong><span>Latest value, average, and peak across the samples currently shown</span></div>
+                      {monitorHistory.length === 0 ? <p>No samples are available yet.</p> : <div className="system-monitor-summary-scroll"><table className="system-monitor-summary-table"><thead><tr><th scope="col">Metric</th><th scope="col">Latest</th><th scope="col">Average</th><th scope="col">Peak</th><th scope="col">Samples</th></tr></thead><tbody>{monitorHistorySummaryRows.map((row) => <tr key={row.label}><th scope="row">{row.label}</th><td>{row.latest}</td><td>{row.average}</td><td>{row.peak}</td><td>{row.samples}</td></tr>)}</tbody></table></div>}
+                      <p>Statistics use only available readings in the retained history window. Latest shows unavailable when the newest sample has no reading; averages and peaks never substitute missing samples with zero.</p>
+                    </section>
                   </div>
                   <p className="settings-footnote">CPU usage is calculated from successive operating-system samples. Network rates aggregate byte counters across interfaces without collecting or displaying interface names. System-wide disk rates aggregate OS-reported physical/volume counters and may include activity from all applications; virtual volumes, RAID, caching, and platform-specific accounting can affect readings. Storage capacity is shown per volume with generic labels only; mount paths and device identifiers are not exposed in the live monitor. The separate midSunday process disk rates describe only this app. System RAM and midSunday's own process memory remain separate. GPU telemetry is driver-dependent: Linux NVIDIA NVML reports device-wide GPU utilisation and framebuffer allocation; Linux AMDGPU reports its driver-published busy percentage; Linux Intel DRM GT reports the busiest sampled engine; and Windows PDH reports the busiest individual engine per adapter. Intel/Windows engine readings are not universal whole-GPU percentages. GPU memory history distinguishes hardware-reported dedicated VRAM from macOS Metal resource allocation relative to Apple's recommended working set; Metal values are not dedicated VRAM, whole-system memory, free memory, or AI-available capacity. macOS GPU utilisation remains unavailable. Battery charge and state are aggregated across detected batteries where the operating system provides readings; device identifiers and serial numbers are not collected.</p>
                   {liveMetrics && <p className="settings-footnote">Last sample: {new Date(liveMetrics.capturedAtUnixMillis).toLocaleTimeString()} · History is temporary and stays in memory; clearing it does not stop monitoring or change current readings.</p>}

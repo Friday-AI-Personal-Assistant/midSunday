@@ -2090,3 +2090,15 @@ See docs/HARDWARE-INTELLIGENCE.md section 85.
 - [ ] Validate timestamp readability and history layout at narrow and wide window sizes on physical Windows, Linux, and macOS devices.
 
 See docs/HARDWARE-INTELLIGENCE.md section 86.
+
+
+### 2026-11-27 — Numeric System Monitor history summary (Batch #207)
+
+- [x] Add a compact accessible table showing latest, average, peak, and valid-sample count for CPU and RAM.
+- [x] Include aggregate network download/upload and system-wide disk read/write history.
+- [x] Include per-adapter GPU utilisation and memory history with source-aware framebuffer/Metal labels.
+- [x] Keep unavailable newest values explicit and exclude missing/non-finite readings from averages and peaks.
+- [x] Derive all statistics from the existing bounded in-memory history; add no polling, hardware reads, persistence, identifiers, or network activity.
+- [ ] Validate table readability, horizontal scrolling, and values on physical Windows, Linux, and macOS devices.
+
+See docs/HARDWARE-INTELLIGENCE.md section 87.

@@ -555,3 +555,20 @@ h1 { margin: 0; color: #eef5ef; font-size: clamp(25px, 3vw, 34px); font-weight: 
 .system-monitor-history-axis small:nth-child(2) { text-align: center; }
 .system-monitor-history-axis small:last-child { text-align: right; }
 @media (max-width: 560px) { .system-monitor-history-axis { padding-left: 0; } }
+
+
+/* System Monitor: compact numeric summary for the same in-memory history window. */
+.system-monitor-summary { display: grid; gap: 8px; padding-top: 11px; border-top: 1px solid var(--line); }
+.system-monitor-summary > div:first-child { display: grid; gap: 3px; }
+.system-monitor-summary > div:first-child strong { color: #dce8de; font-size: 11px; }
+.system-monitor-summary > div:first-child span,
+.system-monitor-summary > p { margin: 0; color: #829287; font-size: 9px; line-height: 1.5; }
+.system-monitor-summary-scroll { max-width: 100%; overflow-x: auto; }
+.system-monitor-summary-table { width: 100%; border-collapse: collapse; font-size: 9px; text-align: right; white-space: nowrap; }
+.system-monitor-summary-table th,
+.system-monitor-summary-table td { padding: 7px 8px; border-bottom: 1px solid var(--line); color: #aebdb2; font-variant-numeric: tabular-nums; }
+.system-monitor-summary-table thead th { color: #829287; font-weight: 600; }
+.system-monitor-summary-table th:first-child { text-align: left; }
+.system-monitor-summary-table tbody th { color: #dce8de; font-weight: 600; }
+.system-monitor-summary-table tbody tr:last-child th,
+.system-monitor-summary-table tbody tr:last-child td { border-bottom: 0; }
