@@ -821,9 +821,16 @@ fn collect_live_gpu_metrics() -> GpuLiveMetrics {
         if !device.exists() { continue; }
         drm_device_count = drm_device_count.saturating_add(1);
 
-        // gpu_busy_percent is a documented AMDGPU sysfs reading. Other drivers are
-        // intentionally left unsupported until their own counter semantics are validated.
-        let utilization_percent = read_gpu_percent(&device.join("gpu_busy_percent"));
+        // AMDGPU exposes a documented instantaneous busy percentage. Intel DRM
+        // GT exposes cumulative engine busy nanoseconds; sample twice and calculate
+        // the busiest individual engine without summing concurrent engines.
+        let vendor = read_gpu_integer(&device.join("vendor"));
+        let is_intel = vendor == Some(0x8086);
+        let utilization_percent = if is_intel {
+            read_intel_gpu_utilization(&device)
+        } else {
+            read_gpu_percent(&device.join("gpu_busy_percent"))
+        };
         let memory_used = read_gpu_integer(&device.join("mem_info_vram_used"));
         let memory_total = read_gpu_integer(&device.join("mem_info_vram_total"));
         let (memory_used_bytes, memory_utilization_percent) = match (memory_used, memory_total) {
@@ -840,7 +847,7 @@ fn collect_live_gpu_metrics() -> GpuLiveMetrics {
                 memory_used_bytes,
                 memory_total_bytes,
                 memory_utilization_percent,
-                source: "Linux AMDGPU DRM sysfs".to_owned(),
+                source: if is_intel { "Linux Intel DRM GT busy counters" } else { "Linux AMDGPU DRM sysfs" }.to_owned(),
             });
         }
     }
@@ -857,8 +864,54 @@ fn collect_live_gpu_metrics() -> GpuLiveMetrics {
         status: status.to_owned(),
         adapter_count,
         adapters,
-        limitations: "This first live collector supports AMDGPU driver-published GPU busy and VRAM counters on Linux. Other Linux GPU drivers, Windows, and macOS remain explicitly unsupported until dedicated collectors are validated. Memory values are driver-reported VRAM allocation, not proof that memory is free for AI inference.".to_owned(),
+        limitations: "Linux live GPU telemetry supports AMDGPU driver-published busy/VRAM counters and Intel DRM GT cumulative engine-busy counters where the kernel driver exposes them. Intel utilisation is the busiest sampled engine, not a sum or universal whole-GPU measure. NVIDIA and other Linux drivers remain explicitly unsupported until a separately validated collector is available. Memory values are driver-reported allocations, not proof that memory is free for AI inference.".to_owned(),
     }
+}
+
+#[cfg(target_os = "linux")]
+fn read_intel_gpu_utilization(device: &std::path::Path) -> Option<f32> {
+    use std::fs;
+    use std::time::Instant;
+    let gt_root = device.join("gt");
+    let mut counters = Vec::new();
+    for gt in fs::read_dir(&gt_root).ok()?.flatten().take(16) {
+        let name = gt.file_name();
+        let name = name.to_string_lossy();
+        if !name.starts_with("gt") || !name[2..].chars().all(|c| c.is_ascii_digit()) {
+            continue;
+        }
+        for engine in fs::read_dir(gt.path()).ok()?.flatten().take(32) {
+            let path = engine.path().join("busy");
+            if path.is_file() && counters.len() < 32 {
+                if let Some(value) = read_gpu_integer(&path) {
+                    counters.push((path, value));
+                }
+            }
+        }
+    }
+    if counters.is_empty() {
+        return None;
+    }
+    let started = Instant::now();
+    std::thread::sleep(Duration::from_millis(80));
+    let elapsed = started.elapsed();
+    counters.iter().filter_map(|(path, previous)| {
+        intel_gpu_busy_percent(*previous, read_gpu_integer(path)?, elapsed)
+    }).reduce(f32::max)
+}
+
+#[cfg(target_os = "linux")]
+fn intel_gpu_busy_percent(previous_ns: u64, current_ns: u64, elapsed: Duration) -> Option<f32> {
+    let elapsed_ns = elapsed.as_nanos();
+    if elapsed_ns == 0 {
+        return None;
+    }
+    let busy_ns = current_ns.checked_sub(previous_ns)?;
+    let percent = (busy_ns as f64 * 100.0) / elapsed_ns as f64;
+    if !percent.is_finite() || !(0.0..=100.0).contains(&percent) {
+        return None;
+    }
+    Some(percent as f32)
 }
 
 #[cfg(target_os = "linux")]
@@ -1244,6 +1297,17 @@ mod tests {
             Some("luid_0x00000000_0x0000abcd".to_owned())
         );
         assert_eq!(super::gpu_adapter_key_from_instance("pid_1_eng_3D"), None);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn intel_gpu_busy_counter_rate_is_bounded_and_handles_resets() {
+        use std::time::Duration;
+        assert_eq!(super::intel_gpu_busy_percent(1_000, 51_000, Duration::from_millis(100)), Some(0.05));
+        assert_eq!(super::intel_gpu_busy_percent(10, 10, Duration::from_millis(100)), Some(0.0));
+        assert_eq!(super::intel_gpu_busy_percent(100, 50, Duration::from_millis(100)), None);
+        assert_eq!(super::intel_gpu_busy_percent(0, 200_000_000, Duration::from_millis(100)), None);
+        assert_eq!(super::intel_gpu_busy_percent(0, 1, Duration::ZERO), None);
     }
 
     #[test]
