@@ -203,7 +203,7 @@ export default function App() {
   const [liveMetrics, setLiveMetrics] = useState<LiveSystemMetrics | null>(null);
   const [monitorError, setMonitorError] = useState("");
   const [monitorExportNotice, setMonitorExportNotice] = useState("");
-  const [monitorHistory, setMonitorHistory] = useState<{ capturedAtUnixMillis: number; cpu: number | null; ram: number | null; download: number | null; upload: number | null; diskRead: number | null; diskWrite: number | null; gpu: Record<string, number | null>; gpuMemory: Record<string, number | null>; cores: (number | null)[]; coreCount: number }[]>([]);
+  const [monitorHistory, setMonitorHistory] = useState<{ capturedAtUnixMillis: number; cpu: number | null; ram: number | null; processResidentBytes: number | null; processRead: number | null; processWrite: number | null; download: number | null; upload: number | null; diskRead: number | null; diskWrite: number | null; gpu: Record<string, number | null>; gpuMemory: Record<string, number | null>; cores: (number | null)[]; coreCount: number }[]>([]);
   const [executablePath, setExecutablePath] = useState("");
   const [modelPath, setModelPath] = useState("");
   const [contextTokens, setContextTokens] = useState("2048");
@@ -243,10 +243,14 @@ export default function App() {
           setMonitorError("");
           const clampPercent = (value: number | null) => value === null || !Number.isFinite(value) ? null : Math.max(0, Math.min(100, value));
           const ram = snapshot.totalMemoryBytes > 0 ? clampPercent((snapshot.usedMemoryBytes / snapshot.totalMemoryBytes) * 100) : null;
+          const finiteNonNegative = (value: number | null) => value !== null && Number.isFinite(value) && value >= 0 ? value : null;
           setMonitorHistory((previous) => [...previous, {
             capturedAtUnixMillis: snapshot.capturedAtUnixMillis,
             cpu: clampPercent(snapshot.cpuUsagePercent),
             ram,
+            processResidentBytes: finiteNonNegative(snapshot.processMemory.residentBytes),
+            processRead: finiteNonNegative(snapshot.processReadBytesPerSecond),
+            processWrite: finiteNonNegative(snapshot.processWriteBytesPerSecond),
             download: snapshot.downloadBytesPerSecond,
             upload: snapshot.uploadBytesPerSecond,
             diskRead: snapshot.systemDiskReadBytesPerSecond,
@@ -1166,6 +1170,9 @@ export default function App() {
       "CPU utilisation (%)",
       ...Array.from({ length: coreCount }, (_, index) => "Logical processor " + (index + 1) + " utilisation (%)"),
       "System RAM utilisation (%)",
+      "midSunday resident memory (bytes)",
+      "midSunday process disk read (bytes/s)",
+      "midSunday process disk write (bytes/s)",
       "Network download (bytes/s)",
       "Network upload (bytes/s)",
       "System disk read (bytes/s)",
@@ -1194,6 +1201,9 @@ export default function App() {
       point.cpu,
       ...Array.from({ length: coreCount }, (_, index) => point.coreCount === coreCount ? (point.cores[index] ?? null) : null),
       point.ram,
+      point.processResidentBytes,
+      point.processRead,
+      point.processWrite,
       point.download,
       point.upload,
       point.diskRead,
@@ -1375,6 +1385,9 @@ export default function App() {
       );
     }),
     buildMonitorHistorySummary("System RAM", monitorHistory.map((point) => point.ram), (value) => value.toFixed(1) + "%"),
+    buildMonitorHistorySummary("midSunday resident memory", monitorHistory.map((point) => point.processResidentBytes), (value) => formatModelSize(value)),
+    buildMonitorHistorySummary("midSunday process disk read", monitorHistory.map((point) => point.processRead), (value) => formatTransferRate(value)),
+    buildMonitorHistorySummary("midSunday process disk write", monitorHistory.map((point) => point.processWrite), (value) => formatTransferRate(value)),
     buildMonitorHistorySummary("Network download", monitorHistory.map((point) => point.download), (value) => formatTransferRate(value)),
     buildMonitorHistorySummary("Network upload", monitorHistory.map((point) => point.upload), (value) => formatTransferRate(value)),
     buildMonitorHistorySummary("Disk read", monitorHistory.map((point) => point.diskRead), (value) => formatTransferRate(value)),
@@ -1675,6 +1688,18 @@ export default function App() {
                       </div>;
                     })}
                     <div className="system-monitor-history-row"><small>RAM</small><div role="img" aria-label="System RAM utilisation history, oldest to newest; missing samples are gaps">{monitorHistory.map((point, index) => point.ram === null ? <i key={"ram-" + index} className="system-monitor-history-gap" title={monitorHistorySampleTitle(index, "No RAM reading")} style={{ marginLeft: monitorHistoryGapBefore(index) }} /> : <i key={"ram-" + index} title={monitorHistorySampleTitle(index, point.ram.toFixed(1) + "%")} style={{ height: Math.max(2, point.ram) + "%", marginLeft: monitorHistoryGapBefore(index) }} />)}</div></div>
+                    {([
+                      { key: "process-memory", label: "APP MEM", field: "processResidentBytes" as const, format: (value: number) => formatModelSize(value), unit: "resident memory" },
+                      { key: "process-read", label: "APP READ", field: "processRead" as const, format: (value: number) => formatTransferRate(value), unit: "process disk read" },
+                      { key: "process-write", label: "APP WRITE", field: "processWrite" as const, format: (value: number) => formatTransferRate(value), unit: "process disk write" },
+                    ]).map((metric) => {
+                      const values = monitorHistory.map((point) => point[metric.field]);
+                      const peak = Math.max(1, ...values.filter((value): value is number => value !== null));
+                      return <div className="system-monitor-history-row" key={metric.key}>
+                        <small>{metric.label}</small>
+                        <div role="img" aria-label={"midSunday " + metric.unit + " history, oldest to newest; missing readings are gaps"}>{values.map((value, index) => value === null ? <i key={metric.key + "-" + index} className="system-monitor-history-gap" title={monitorHistorySampleTitle(index, "No " + metric.unit + " reading")} style={{ marginLeft: monitorHistoryGapBefore(index) }} /> : <i key={metric.key + "-" + index} title={monitorHistorySampleTitle(index, metric.format(value))} style={{ height: Math.max(2, value / peak * 100) + "%", marginLeft: monitorHistoryGapBefore(index) }} />)}</div>
+                      </div>;
+                    })}
                     <div className="system-monitor-history-row"><small>↓ NET</small><div role="img" aria-label="Aggregate network download rate history, oldest to newest; bar height is relative to this row’s recent peak and missing samples are gaps">{monitorHistory.map((point, index) => point.download === null ? <i key={"down-" + index} className="system-monitor-history-gap" title={monitorHistorySampleTitle(index, "No download reading")} style={{ marginLeft: monitorHistoryGapBefore(index) }} /> : <i key={"down-" + index} title={monitorHistorySampleTitle(index, formatTransferRate(point.download))} style={{ height: Math.max(2, point.download / Math.max(1, ...monitorHistory.map((sample) => sample.download ?? 0)) * 100) + "%", marginLeft: monitorHistoryGapBefore(index) }} />)}</div></div>
                     <div className="system-monitor-history-row"><small>↑ NET</small><div role="img" aria-label="Aggregate network upload rate history, oldest to newest; bar height is relative to this row’s recent peak and missing samples are gaps">{monitorHistory.map((point, index) => point.upload === null ? <i key={"up-" + index} className="system-monitor-history-gap" title={monitorHistorySampleTitle(index, "No upload reading")} style={{ marginLeft: monitorHistoryGapBefore(index) }} /> : <i key={"up-" + index} title={monitorHistorySampleTitle(index, formatTransferRate(point.upload))} style={{ height: Math.max(2, point.upload / Math.max(1, ...monitorHistory.map((sample) => sample.upload ?? 0)) * 100) + "%", marginLeft: monitorHistoryGapBefore(index) }} />)}</div></div>
                     <div className="system-monitor-history-row"><small>↓ DISK</small><div role="img" aria-label="System-wide disk read rate history, oldest to newest; bar height is relative to this row’s recent peak and missing samples are gaps">{monitorHistory.map((point, index) => point.diskRead === null ? <i key={"disk-read-" + index} className="system-monitor-history-gap" title={monitorHistorySampleTitle(index, "No disk-read reading")} style={{ marginLeft: monitorHistoryGapBefore(index) }} /> : <i key={"disk-read-" + index} title={monitorHistorySampleTitle(index, "Read " + formatTransferRate(point.diskRead))} style={{ height: Math.max(2, point.diskRead / Math.max(1, ...monitorHistory.map((sample) => sample.diskRead ?? 0)) * 100) + "%", marginLeft: monitorHistoryGapBefore(index) }} />)}</div></div>

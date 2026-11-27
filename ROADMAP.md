@@ -2187,3 +2187,15 @@ See docs/HARDWARE-INTELLIGENCE.md section 94.
 - [ ] Validate file download and spreadsheet compatibility on physical Windows, Linux, and macOS devices.
 
 See docs/HARDWARE-INTELLIGENCE.md section 95.
+
+
+### 2026-11-27 — midSunday process-resource history (Batch #216)
+
+- [x] Add per-sample midSunday resident-memory usage to the existing Recent activity timeline and numeric summary.
+- [x] Add per-sample midSunday process disk-read and disk-write rates, kept distinct from system-wide disk throughput.
+- [x] Include the three process-only metrics in explicit CSV exports with clear units and labels.
+- [x] Preserve unavailable/invalid readings as gaps and blank cells; accept only finite, non-negative values.
+- [x] Reuse the existing OS snapshot, opt-in polling, 36-sample in-memory bound, clear-history behavior, and local-only export.
+- [ ] Validate process counter semantics, CSV output, and narrow-window layout on physical Windows, Linux, and macOS devices.
+
+See docs/HARDWARE-INTELLIGENCE.md section 96.
