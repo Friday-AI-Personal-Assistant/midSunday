@@ -10,6 +10,7 @@ type LiveSystemMetrics = {
   networkStatus: string; networkInterfaceCount: number; downloadBytesPerSecond: number | null; uploadBytesPerSecond: number | null;
   processDiskIoStatus: string; processReadBytesPerSecond: number | null; processWriteBytesPerSecond: number | null;
   battery: { status: string; batteryCount: number; chargePercent: number | null; state: string };
+  systemDiskStatus: string; systemDiskCount: number; systemDiskReadBytesPerSecond: number | null; systemDiskWriteBytesPerSecond: number | null;
 };
 type Section = "chat" | "characters" | "settings";
 type Message = { id: number; role: "user" | "assistant" | "system"; text: string };
@@ -199,7 +200,7 @@ export default function App() {
   const [monitorRunning, setMonitorRunning] = useState(false);
   const [liveMetrics, setLiveMetrics] = useState<LiveSystemMetrics | null>(null);
   const [monitorError, setMonitorError] = useState("");
-  const [monitorHistory, setMonitorHistory] = useState<{ cpu: number; ram: number; download: number; upload: number }[]>([]);
+  const [monitorHistory, setMonitorHistory] = useState<{ cpu: number; ram: number; download: number; upload: number; diskRead: number; diskWrite: number }[]>([]);
   const [executablePath, setExecutablePath] = useState("");
   const [modelPath, setModelPath] = useState("");
   const [contextTokens, setContextTokens] = useState("2048");
@@ -237,7 +238,7 @@ export default function App() {
           if (snapshot.totalMemoryBytes > 0) {
             const ram = Math.max(0, Math.min(100, (snapshot.usedMemoryBytes / snapshot.totalMemoryBytes) * 100));
             const cpu = snapshot.cpuUsagePercent ?? 0;
-            setMonitorHistory((previous) => [...previous, { cpu, ram, download: snapshot.downloadBytesPerSecond ?? 0, upload: snapshot.uploadBytesPerSecond ?? 0 }].slice(-36));
+            setMonitorHistory((previous) => [...previous, { cpu, ram, download: snapshot.downloadBytesPerSecond ?? 0, upload: snapshot.uploadBytesPerSecond ?? 0, diskRead: snapshot.systemDiskReadBytesPerSecond ?? 0, diskWrite: snapshot.systemDiskWriteBytesPerSecond ?? 0 }].slice(-36));
           }
         })
         .catch(() => { if (active) setMonitorError("Live measurements are temporarily unavailable."); });
@@ -1444,7 +1445,7 @@ export default function App() {
             <section className="settings-section">
               <div className="settings-section-title"><div><h2>System & hardware</h2><p>A local snapshot helps midSunday understand this computer. It is collected only on this device.</p></div><span className="settings-symbol">⌘</span></div>
               <div className="system-monitor-panel">
-                <div className="system-monitor-heading"><div><strong>Live System Monitor</strong><p>Local, read-only CPU, memory, network, process I/O and battery measurements. Sampling pauses when this settings view is left.</p></div><button className="secondary-action" type="button" onClick={() => { setMonitorRunning((running) => !running); if (monitorRunning) { setLiveMetrics(null); setMonitorHistory([]); setMonitorError(""); } }}>{monitorRunning ? "Stop monitoring" : "Start live monitoring"}</button></div>
+                <div className="system-monitor-heading"><div><strong>Live System Monitor</strong><p>Local, read-only CPU, memory, network, system-wide and process disk I/O, and battery measurements. Sampling pauses when this settings view is left.</p></div><button className="secondary-action" type="button" onClick={() => { setMonitorRunning((running) => !running); if (monitorRunning) { setLiveMetrics(null); setMonitorHistory([]); setMonitorError(""); } }}>{monitorRunning ? "Stop monitoring" : "Start live monitoring"}</button></div>
                 {monitorRunning && <>
                   {monitorError && <p className="hardware-error" role="status">{monitorError}</p>}
                   <div className="system-monitor-grid">
@@ -1452,6 +1453,7 @@ export default function App() {
                     <div className="system-monitor-card"><small>RAM · system-wide</small><strong>{liveMetrics ? formatModelSize(liveMetrics.usedMemoryBytes) + " / " + formatModelSize(liveMetrics.totalMemoryBytes) : "Collecting…"}</strong><div className="system-monitor-track"><i style={{ width: (liveMetrics && liveMetrics.totalMemoryBytes > 0 ? (liveMetrics.usedMemoryBytes / liveMetrics.totalMemoryBytes) * 100 : 0) + "%" }} /></div><span>{liveMetrics ? formatModelSize(liveMetrics.availableMemoryBytes) + " available" : "Waiting for memory sample"}</span></div>
                     <div className="system-monitor-card"><small>midSunday · resident RAM</small><strong>{liveMetrics?.processMemory.residentBytes === null || !liveMetrics ? "Unavailable" : formatModelSize(liveMetrics.processMemory.residentBytes)}</strong><span>{liveMetrics?.processMemory.status === "detected" && liveMetrics.processMemory.virtualBytes !== null ? formatModelSize(liveMetrics.processMemory.virtualBytes) + " virtual address space" : "Own-process reading unavailable"}</span></div>
                     <div className="system-monitor-card"><small>Network · all interfaces</small><strong>↓ {formatTransferRate(liveMetrics?.downloadBytesPerSecond ?? null)}</strong><span>↑ {formatTransferRate(liveMetrics?.uploadBytesPerSecond ?? null)} · {liveMetrics?.networkStatus === "unavailable" ? "No interface counters available" : liveMetrics?.networkInterfaceCount + " interfaces · system-wide totals"}</span></div>
+                    <div className="system-monitor-card"><small>Disk · system-wide</small><strong>Read {formatTransferRate(liveMetrics?.systemDiskReadBytesPerSecond ?? null)}</strong><span>Write {formatTransferRate(liveMetrics?.systemDiskWriteBytesPerSecond ?? null)} · {liveMetrics?.systemDiskStatus === "no_disks" ? "No disks reported" : liveMetrics?.systemDiskCount + " storage devices · system-wide"}</span></div>
                     <div className="system-monitor-card"><small>midSunday · disk I/O</small><strong>Read {formatTransferRate(liveMetrics?.processReadBytesPerSecond ?? null)}</strong><span>Write {formatTransferRate(liveMetrics?.processWriteBytesPerSecond ?? null)} · own process only</span></div>
                     <div className="system-monitor-card"><small>GPU · live utilisation</small><strong>Not available yet</strong><span>GPU inventory and memory-budget evidence remain in the hardware section below.</span></div>
                     <div className="system-monitor-card"><small>Battery · system-wide</small><strong>{liveMetrics?.battery.chargePercent === null || !liveMetrics ? (liveMetrics?.battery.status === "no_battery" ? "No battery detected" : liveMetrics?.battery.status === "unavailable" ? "Unavailable" : "Collecting…") : liveMetrics.battery.chargePercent.toFixed(1) + "%"}</strong><div className="system-monitor-track"><i style={{ width: (liveMetrics?.battery.chargePercent ?? 0) + "%" }} /></div><span>{liveMetrics?.battery.state === "not_present" ? "This device does not report a battery" : liveMetrics?.battery.state === "unavailable" ? "Battery state unavailable" : (liveMetrics?.battery.state ?? "Waiting for battery data") + (liveMetrics?.battery.batteryCount ? " · " + liveMetrics.battery.batteryCount + " battery" + (liveMetrics.battery.batteryCount === 1 ? "" : "ies") : "")}</span></div>
@@ -1461,8 +1463,10 @@ export default function App() {
                     <div className="system-monitor-history-row"><small>RAM</small><div>{monitorHistory.map((point, index) => <i key={"ram-" + index} title={point.ram.toFixed(1) + "%"} style={{ height: Math.max(2, point.ram) + "%" }} />)}</div></div>
                     <div className="system-monitor-history-row"><small>↓ NET</small><div>{monitorHistory.map((point, index) => <i key={"down-" + index} title={formatTransferRate(point.download)} style={{ height: Math.max(2, point.download / Math.max(1, ...monitorHistory.map((sample) => sample.download)) * 100) + "%" }} />)}</div></div>
                     <div className="system-monitor-history-row"><small>↑ NET</small><div>{monitorHistory.map((point, index) => <i key={"up-" + index} title={formatTransferRate(point.upload)} style={{ height: Math.max(2, point.upload / Math.max(1, ...monitorHistory.map((sample) => sample.upload)) * 100) + "%" }} />)}</div></div>
+                    <div className="system-monitor-history-row"><small>↓ DISK</small><div>{monitorHistory.map((point, index) => <i key={"disk-read-" + index} title={"Read " + formatTransferRate(point.diskRead)} style={{ height: Math.max(2, point.diskRead / Math.max(1, ...monitorHistory.map((sample) => sample.diskRead)) * 100) + "%" }} />)}</div></div>
+                    <div className="system-monitor-history-row"><small>↑ DISK</small><div>{monitorHistory.map((point, index) => <i key={"disk-write-" + index} title={"Write " + formatTransferRate(point.diskWrite)} style={{ height: Math.max(2, point.diskWrite / Math.max(1, ...monitorHistory.map((sample) => sample.diskWrite)) * 100) + "%" }} />)}</div></div>
                   </div>
-                  <p className="settings-footnote">CPU usage is calculated from successive operating-system samples. Network rates aggregate byte counters across interfaces without collecting or displaying interface names. Disk I/O rates are for the midSunday process only, not the whole computer; OS caching and platform-specific accounting can affect readings. System RAM and midSunday's own process memory remain separate. GPU live utilisation is not included yet. Battery charge and state are aggregated across detected batteries where the operating system provides readings; device identifiers and serial numbers are not collected.</p>
+                  <p className="settings-footnote">CPU usage is calculated from successive operating-system samples. Network rates aggregate byte counters across interfaces without collecting or displaying interface names. System-wide disk rates aggregate OS-reported physical/volume counters and may include activity from all applications; virtual volumes, RAID, caching, and platform-specific accounting can affect readings. The separate midSunday process disk rates describe only this app. System RAM and midSunday's own process memory remain separate. GPU live utilisation is not included yet. Battery charge and state are aggregated across detected batteries where the operating system provides readings; device identifiers and serial numbers are not collected.</p>
                   {liveMetrics && <p className="settings-footnote">Last sample: {new Date(liveMetrics.capturedAtUnixMillis).toLocaleTimeString()}</p>}
                 </>}
               </div>

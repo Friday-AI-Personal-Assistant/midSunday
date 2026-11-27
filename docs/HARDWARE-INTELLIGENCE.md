@@ -705,3 +705,10 @@ The implementation reuses the existing sysinfo dependency and refreshes only the
 The Live System Monitor now uses the cross-platform `starship-battery` library to query battery state on supported Windows, Linux, and macOS systems. Charge is aggregated across detected batteries using reported current energy divided by summed full energy, rather than taking an arbitrary first battery or averaging percentages equally. State is reported as charging, discharging, empty, full, paused, unknown, or mixed when batteries disagree.
 
 No battery produces an explicit `no_battery` / `not_present` result; query failures and partial readings remain distinct. The monitor intentionally omits remaining-time estimates because they can be unstable and are not consistently trustworthy across devices. Battery vendor, model, and serial identifiers are not collected. Sampling remains opt-in, local, read-only, and active only while the Settings monitor is visible. CI checks compilation and pure aggregation behavior; physical-device testing is still required.
+
+
+## 71. Live system-wide disk activity (Batch #182)
+
+The Live System Monitor now refreshes OS-reported disk I/O counters through sysinfo's `Disks` API and aggregates read/write throughput across the detected storage devices. The aggregate deliberately does not expose mount paths, volume labels, device names, or serial identifiers. It is a separate metric from the midSunday process's own I/O counters, which remain visible independently.
+
+The first sample is a warm-up; an idle system can correctly report zero bytes per second, while an empty device list is reported separately. Values reflect the operating system's disk/volume accounting and may include activity from all applications. Virtual volumes, RAID, filesystem caches, drivers, and platform-specific accounting can change what is counted; this is not guaranteed to represent raw physical-device traffic. Sampling remains opt-in, local, read-only, bounded, and paused when the Settings monitor is not visible. Physical-device validation remains necessary.

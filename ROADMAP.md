@@ -1871,7 +1871,7 @@ See docs/HARDWARE-INTELLIGENCE.md section 68.
 - [x] Restrict process refreshes to the current midSunday process; do not enumerate unrelated applications.
 - [x] Add an opt-in Settings → System & hardware live panel with a 1.5-second polling target, bounded recent CPU/RAM history, and an explicit stop control.
 - [x] Pause sampling when the user leaves Settings and clear the live session when monitoring is stopped.
-- [x] Keep GPU live utilisation, network throughput, battery, and live disk activity explicitly marked as not yet implemented; existing GPU inventory and storage-capacity snapshots remain separate.
+- [x] Keep GPU live utilisation explicitly marked as not yet implemented; network throughput, battery telemetry, and live system-wide disk activity are now implemented in the opt-in monitor.
 - [ ] Validate real metric accuracy on physical Windows, Linux, and macOS devices; hosted CI validates builds/tests, not sensor accuracy.
 
 This is the first vertical slice of the roadmap feature, not the completed System Monitor. See the Live System Monitor section in ROADMAP.md.
@@ -1884,7 +1884,8 @@ This is the first vertical slice of the roadmap feature, not the completed Syste
 - [x] Add midSunday-only disk read/write rates using the current process's I/O counters; do not enumerate or expose other processes.
 - [x] Extend the bounded live history with download/upload activity.
 - [x] Add regression tests for rate calculations, counter resets, serialization, and absence of interface-name fields.
-- [ ] Add system-wide disk activity, live GPU utilisation/memory, and battery telemetry in later platform-aware batches.
+- [x] Add system-wide disk read/write activity from operating-system disk counters, separately from midSunday process I/O.
+- [ ] Add live GPU utilisation/memory using platform-aware collectors and explicit unsupported states.
 - [ ] Validate network and process I/O accuracy on physical Windows, Linux, and macOS devices.
 
 
@@ -1897,3 +1898,14 @@ This is the first vertical slice of the roadmap feature, not the completed Syste
 - [x] Display battery charge and state in the opt-in live monitor; retain explicit local-only sampling and bounded history.
 - [x] Add regression tests for mixed battery states, valid charge bounds, and snapshot serialization.
 - [ ] Validate battery readings on physical laptops across Windows, Linux, and macOS; desktop CI cannot prove battery hardware availability or accuracy.
+
+
+### 2026-11-27 — System-wide disk activity (Batch #182)
+
+- [x] Add OS-reported disk read/write throughput across detected storage devices using sysinfo disk I/O counters.
+- [x] Keep system-wide disk activity separate from midSunday process-only disk I/O.
+- [x] Sum per-device deltas without exposing mount paths, volume labels, device names, or serial identifiers.
+- [x] Add explicit first-sample warm-up and no-disk states; keep idle zero-throughput distinct from unavailable data.
+- [x] Extend bounded recent-activity history with system-wide disk read/write samples.
+- [x] Add regression tests for elapsed-time handling, idle I/O, rate conversion, and snapshot serialization.
+- [ ] Validate counter accuracy on physical Windows, Linux, and macOS devices; OS caching, virtual volumes, RAID, and driver reporting can affect readings.

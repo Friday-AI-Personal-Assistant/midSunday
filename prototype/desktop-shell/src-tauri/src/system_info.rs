@@ -3,7 +3,7 @@
 //! device serial numbers, or private user files.
 use serde::Serialize;
 use starship_battery::{Manager as BatteryManager, State as BatteryState};
-use sysinfo::{get_current_pid, CpuRefreshKind, Disks, Networks, Pid, ProcessRefreshKind, ProcessesToUpdate, System};
+use sysinfo::{get_current_pid, CpuRefreshKind, DiskRefreshKind, Disks, Networks, Pid, ProcessRefreshKind, ProcessesToUpdate, System};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
@@ -585,6 +585,7 @@ pub struct SystemMonitor {
 struct SystemMonitorState {
     system: System,
     networks: Networks,
+    disks: Disks,
     samples: u64,
     previous_network_totals: Option<(u64, u64)>,
     previous_sample_at: Option<Instant>,
@@ -608,6 +609,10 @@ pub struct LiveSystemMetrics {
     pub process_disk_io_status: String,
     pub process_read_bytes_per_second: Option<u64>,
     pub process_write_bytes_per_second: Option<u64>,
+    pub system_disk_status: String,
+    pub system_disk_count: usize,
+    pub system_disk_read_bytes_per_second: Option<u64>,
+    pub system_disk_write_bytes_per_second: Option<u64>,
     pub battery: BatteryMetrics,
 }
 
@@ -626,7 +631,8 @@ impl Default for SystemMonitor {
         system.refresh_cpu_list(CpuRefreshKind::everything());
         system.refresh_memory();
         let networks = Networks::new_with_refreshed_list();
-        Self { state: Mutex::new(SystemMonitorState { system, networks, samples: 0, previous_network_totals: None, previous_sample_at: None }) }
+        let disks = Disks::new_with_refreshed_list_specifics(DiskRefreshKind::nothing().with_io_usage());
+        Self { state: Mutex::new(SystemMonitorState { system, networks, disks, samples: 0, previous_network_totals: None, previous_sample_at: None }) }
     }
 }
 
@@ -665,6 +671,14 @@ impl SystemMonitor {
             "warming_up"
         }.to_owned();
         state.previous_network_totals = Some(network_totals);
+        state.disks.refresh_specifics(true, DiskRefreshKind::nothing().with_io_usage());
+        let system_disk_count = state.disks.len();
+        let disk_io_totals = state.disks.iter().fold((0_u64, 0_u64), |(read, written), disk| {
+            let usage = disk.usage();
+            (read.saturating_add(usage.read_bytes), written.saturating_add(usage.written_bytes))
+        });
+        let (system_disk_read_bytes_per_second, system_disk_write_bytes_per_second) = disk_io_rates(disk_io_totals.0, disk_io_totals.1, elapsed);
+        let system_disk_status = if system_disk_count == 0 { "no_disks" } else if system_disk_read_bytes_per_second.is_some() && system_disk_write_bytes_per_second.is_some() { "detected" } else { "warming_up" }.to_owned();
         let process_result = match get_current_pid() {
             Ok(pid) => {
                 state.system.refresh_processes_specifics(
@@ -712,6 +726,10 @@ impl SystemMonitor {
             process_disk_io_status,
             process_read_bytes_per_second,
             process_write_bytes_per_second,
+            system_disk_status,
+            system_disk_count,
+            system_disk_read_bytes_per_second,
+            system_disk_write_bytes_per_second,
             battery: collect_battery_metrics(),
         }
     }
@@ -787,6 +805,11 @@ fn combined_battery_state(states: &[&str]) -> String {
     if states.iter().all(|state| state == first) { (*first).to_owned() } else { "mixed".to_owned() }
 }
 
+fn disk_io_rates(read_bytes: u64, written_bytes: u64, elapsed: Option<Duration>) -> (Option<u64>, Option<u64>) {
+    let Some(duration) = elapsed else { return (None, None); };
+    (rate_bytes_per_second(read_bytes, duration), rate_bytes_per_second(written_bytes, duration))
+}
+
 fn normalise_cpu_usage_percent(value: f32) -> f32 {
     if value.is_finite() { value.clamp(0.0, 100.0) } else { 0.0 }
 }
@@ -806,6 +829,13 @@ fn counter_rate_bytes_per_second(current: u64, previous: u64, elapsed: Duration)
 #[cfg(test)]
 mod tests {
     #[test]
+    fn system_disk_rates_require_an_elapsed_sample_and_handle_idle_io() {
+        assert_eq!(super::disk_io_rates(1500, 3000, None), (None, None));
+        assert_eq!(super::disk_io_rates(0, 0, Some(std::time::Duration::from_secs(2))), (Some(0), Some(0)));
+        assert_eq!(super::disk_io_rates(4096, 2048, Some(std::time::Duration::from_secs(2))), (Some(2048), Some(1024)));
+    }
+
+    #[test]
     fn battery_states_are_combined_without_hiding_mixed_devices() {
         assert_eq!(super::combined_battery_state(&[]), "unknown");
         assert_eq!(super::combined_battery_state(&["charging", "charging"]), "charging");
@@ -822,6 +852,9 @@ mod tests {
         assert!(matches!(snapshot.battery.state.as_str(), "charging" | "discharging" | "empty" | "full" | "paused" | "unknown" | "mixed" | "not_present" | "unavailable"));
         let json = serde_json::to_value(&snapshot).expect("battery metrics should serialize");
         assert!(json.get("battery").and_then(|value| value.get("chargePercent")).is_some());
+        assert!(json.get("systemDiskReadBytesPerSecond").is_some());
+        assert!(json.get("systemDiskWriteBytesPerSecond").is_some());
+        assert!(json.get("systemDiskCount").is_some());
     }
 
     #[test]

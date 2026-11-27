@@ -378,7 +378,7 @@ h1 { margin: 0; color: #eef5ef; font-size: clamp(25px, 3vw, 34px); font-weight: 
 .model-memory-evidence-kv_cache_below_available_ram { border-color: var(--border-subtle, rgba(128,128,128,.25)); }
 .model-memory-evidence-insufficient_model_metadata, .model-memory-evidence-hardware_memory_unavailable { border-style: dashed; }
 
-/* First live System Monitor slice */
+/* Live System Monitor dashboard */
 .system-monitor-panel { display: grid; gap: 12px; margin: 14px 0 18px; padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: rgba(255,255,255,.025); }
 .system-monitor-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .system-monitor-heading > div { display: grid; gap: 4px; }

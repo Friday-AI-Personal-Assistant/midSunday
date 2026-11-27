@@ -220,3 +220,6 @@ All notable project changes are recorded here. The project is in foundation/prot
 
 
 - Added cross-platform battery telemetry to the opt-in System Monitor, including energy-weighted charge aggregation and combined battery state. No battery identifiers are collected; no-battery and unavailable states remain explicit.
+
+
+- Added system-wide disk read/write throughput to the opt-in System Monitor, distinct from midSunday process I/O, with bounded history and no exposed volume or device identifiers.
