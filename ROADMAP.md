@@ -2353,3 +2353,16 @@ See docs/STARTUP-AND-LAUNCH.md.
 - [ ] Validate pause/resume timing, history retention, export while paused, navigation lifecycle, and clear/restart behaviour on physical Windows, Linux, and macOS.
 
 See docs/HARDWARE-INTELLIGENCE.md section 107.
+
+
+### 2026-11-27 — Appearance themes and local mode preferences (Batch #231)
+
+- [x] Add five selectable built-in themes: Sunday Green (default), Midnight Blue, Lavender Dream, Rose Blossom, and Warm Sand.
+- [x] Add Follow system, Light, and Dark appearance modes; Follow system uses the operating system's preferred colour scheme.
+- [x] Apply shared theme tokens to the app shell, navigation, typography, surfaces, focus/accent elements, and appearance controls; retain semantic status colours.
+- [x] Persist the selected theme and mode in device-local WebView storage with safe defaults if preferences are missing, malformed, or unavailable.
+- [x] Make theme selection immediate and keyboard/screen-reader accessible with pressed states and labels.
+- [x] Keep theme preferences local; add no account, cloud service, network call, or paid dependency.
+- [ ] Validate all theme/mode combinations, contrast, narrow-window layouts, and restart persistence on physical Windows, Linux, and macOS devices.
+
+See Settings → Appearance & themes.

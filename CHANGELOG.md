@@ -228,3 +228,7 @@ All notable project changes are recorded here. The project is in foundation/prot
 
 - Added opt-in, cross-platform launch-at-sign-in registration for Windows, Linux, and macOS. The setting reads the operating-system state, confirms changes, reports failures, and remains disabled unless the user enables it.
 - Added separate Pause sampling, Resume sampling, and Stop & clear controls to the local System Monitor. Pausing retains the bounded in-memory history without collecting additional readings; navigating away from Settings still pauses sampling automatically.
+
+
+## 2026-11-27
+- Added five built-in Appearance & Themes choices (Sunday Green, Midnight Blue, Lavender Dream, Rose Blossom, Warm Sand), plus Follow system / Light / Dark modes. Preferences apply immediately and are stored locally on the device; no account, network connection, or paid service is used.

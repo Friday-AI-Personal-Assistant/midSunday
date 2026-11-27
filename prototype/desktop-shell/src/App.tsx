@@ -15,6 +15,15 @@ type LiveSystemMetrics = {
   storageStatus: string; storageVolumes: { label: string; totalBytes: number; availableBytes: number; usedPercent: number | null; status: string }[];
   gpu: { status: string; adapterCount: number; adapters: { label: string; status: string; utilizationPercent: number | null; memoryUsedBytes: number | null; memoryTotalBytes: number | null; memoryUtilizationPercent: number | null; memoryKind: string; source: string }[]; limitations: string };
 };
+type ThemeId = "sunday-green" | "midnight-blue" | "lavender-dream" | "rose-blossom" | "warm-sand";
+type AppearanceMode = "system" | "light" | "dark";
+const APPEARANCE_THEMES: { id: ThemeId; name: string; description: string; swatch: string }[] = [
+  { id: "sunday-green", name: "Sunday Green", description: "Calm, modern and distinctly midSunday", swatch: "#176b45" },
+  { id: "midnight-blue", name: "Midnight Blue", description: "Deep navy with cool blue highlights", swatch: "#315b9a" },
+  { id: "lavender-dream", name: "Lavender Dream", description: "Soft lavender with gentle purple accents", swatch: "#8064b5" },
+  { id: "rose-blossom", name: "Rose Blossom", description: "Warm blush and rose accents", swatch: "#c05a7a" },
+  { id: "warm-sand", name: "Warm Sand", description: "Cream, beige and understated warmth", swatch: "#94734e" },
+];
 type Section = "chat" | "characters" | "settings";
 type Message = { id: number; role: "user" | "assistant" | "system"; text: string };
 type RuntimeStartupMemoryReport = { status: string; startupDurationMs: number; initialResidentBytes: number | null; initialVirtualBytes: number | null; peakResidentBytes: number | null; peakVirtualBytes: number | null; peakResidentGrowthBytes: number | null; peakVirtualGrowthBytes: number | null; sampleCount: number; samplingIntervalMs: number; capturedAtUnixSeconds: number };
@@ -229,6 +238,8 @@ export default function App() {
   const [userProfileDraft, setUserProfileDraft] = useState<UserProfile>(DEFAULT_USER_PROFILE);
   const [userProfileBusy, setUserProfileBusy] = useState(false);
   const [userProfileNotice, setUserProfileNotice] = useState("");
+  const [appearanceTheme, setAppearanceTheme] = useState<ThemeId>("sunday-green");
+  const [appearanceMode, setAppearanceMode] = useState<AppearanceMode>("system");
   const [launchAtLogin, setLaunchAtLogin] = useState(false);
   const [launchAtLoginBusy, setLaunchAtLoginBusy] = useState(false);
   const [launchAtLoginError, setLaunchAtLoginError] = useState("");
@@ -339,6 +350,29 @@ export default function App() {
     const timer = window.setInterval(poll, 1500);
     return () => { active = false; window.clearInterval(timer); };
   }, [monitorRunning, monitorPaused, section]);
+
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem("midsunday-appearance-v1");
+      if (saved) {
+        const parsed = JSON.parse(saved) as { theme?: string; mode?: string };
+        if (APPEARANCE_THEMES.some((theme) => theme.id === parsed.theme)) setAppearanceTheme(parsed.theme as ThemeId);
+        if (["system", "light", "dark"].includes(parsed.mode ?? "")) setAppearanceMode(parsed.mode as AppearanceMode);
+      }
+    } catch {
+      // Invalid or unavailable local preferences fall back to the built-in defaults.
+    }
+  }, []);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = appearanceTheme;
+    document.documentElement.dataset.mode = appearanceMode;
+    try {
+      window.localStorage.setItem("midsunday-appearance-v1", JSON.stringify({ theme: appearanceTheme, mode: appearanceMode }));
+    } catch {
+      // Appearance remains active for this session if local storage is unavailable.
+    }
+  }, [appearanceTheme, appearanceMode]);
 
   useEffect(() => {
     let active = true;
@@ -1695,6 +1729,20 @@ export default function App() {
         {section === "settings" && (
           <div className="page-content settings-page">
             <p className="eyebrow">YOUR CONTROL CENTRE</p><h1>Settings.</h1><p className="page-lead">Clear controls. No surprises.</p>
+            <section className="settings-section appearance-section">
+              <div className="settings-section-title"><div><h2>Appearance & themes</h2><p>Make midSunday feel like your space. Changes apply immediately and stay on this device.</p></div><span className="settings-symbol">◐</span></div>
+              <div className="appearance-theme-grid" role="group" aria-label="Choose a colour theme">
+                {APPEARANCE_THEMES.map((theme) => <button key={theme.id} type="button" className={appearanceTheme === theme.id ? "appearance-theme-option selected" : "appearance-theme-option"} aria-pressed={appearanceTheme === theme.id} onClick={() => setAppearanceTheme(theme.id)}>
+                  <span className="appearance-theme-swatch" style={{ backgroundColor: theme.swatch }} />
+                  <span className="appearance-theme-copy"><strong>{theme.name}</strong><small>{theme.description}</small></span>
+                  <span className="appearance-theme-check" aria-hidden="true">{appearanceTheme === theme.id ? "✓" : ""}</span>
+                </button>)}
+              </div>
+              <div className="appearance-mode-row"><div><strong>Appearance mode</strong><p>Follow your operating system or choose a mode manually.</p></div><div className="appearance-mode-options" role="group" aria-label="Choose appearance mode">
+                {(["system", "light", "dark"] as AppearanceMode[]).map((mode) => <button key={mode} type="button" className={appearanceMode === mode ? "appearance-mode-option active" : "appearance-mode-option"} aria-pressed={appearanceMode === mode} onClick={() => setAppearanceMode(mode)}>{mode === "system" ? "Follow system" : mode === "light" ? "Light" : "Dark"}</button>)}
+              </div></div>
+              <p className="settings-footnote">Theme and mode preferences are stored locally in this app. They do not change your conversations, companion personality, privacy settings, or model behaviour.</p>
+            </section>
             <section className="settings-section">
               <div className="settings-section-title"><div><h2>About you</h2><p>Choose how midSunday addresses you. This profile stays on this device.</p></div><span className="settings-symbol">◎</span></div>
               <div className="path-field"><label htmlFor="preferred-name">What should midSunday call you?</label><input id="preferred-name" value={userProfileDraft.preferredName} onChange={(event) => setUserProfileDraft((current) => ({ ...current, preferredName: event.target.value }))} maxLength={48} placeholder="Your name or nickname" autoComplete="off" /></div>
