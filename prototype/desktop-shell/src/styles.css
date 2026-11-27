@@ -580,3 +580,12 @@ h1 { margin: 0; color: #eef5ef; font-size: clamp(25px, 3vw, 34px); font-weight: 
 /* System Monitor history: preserve visible time gaps when polling is delayed. */
 .system-monitor-history-row i { margin-left: 0; }
 .system-monitor-timeline-note { margin: 0; color: #829287; font-size: 9px; line-height: 1.5; }
+
+
+/* System Monitor: transparent capture-interval quality summary. */
+.system-monitor-capture-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 7px; }
+.system-monitor-capture-summary > div { display: grid; gap: 4px; min-width: 0; padding: 8px; border: 1px solid var(--line); border-radius: 7px; }
+.system-monitor-capture-summary small { color: #829287; font-size: 8px; line-height: 1.35; }
+.system-monitor-capture-summary strong { color: #dce8de; font-size: 10px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.system-monitor-capture-note { margin: 0; color: #829287; font-size: 9px; line-height: 1.5; }
+@media (max-width: 560px) { .system-monitor-capture-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

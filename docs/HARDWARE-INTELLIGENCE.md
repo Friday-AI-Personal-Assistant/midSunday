@@ -869,3 +869,10 @@ When retained System Monitor samples contain more than one logical-processor cou
 
 This disclosure is derived from the existing in-memory sample metadata. It adds no hardware queries, polling, persistence, identifiers, or network activity, and does not change the statistics or CSV export. Physical validation should cover processor hotplug/topology changes where supported, plus narrow-window readability across Windows, Linux, and macOS.
 
+
+
+## 92. System Monitor capture-timing quality summary (Batch #212)
+
+The Recent activity Window summary now reports the number of valid adjacent capture intervals, their average duration, the longest observed interval, and the number of delayed intervals. An interval is counted only when the difference between adjacent retained sample timestamps is finite and positive; intervals longer than 2.25 seconds are classified as delayed, matching the existing visible sampling-gap cues. With fewer than two usable timestamps, timing values remain unavailable rather than being shown as zero.
+
+This is a presentation-only summary derived from timestamps already held in the bounded in-memory history. It does not infer missing metric readings, alter sample values, interpolate gaps, add polling, query hardware, persist data, collect identifiers, or send network activity. The summary reflows to two columns on narrow windows; physical readability and unusual clock/timestamp behavior still require validation on Windows, Linux, and macOS.

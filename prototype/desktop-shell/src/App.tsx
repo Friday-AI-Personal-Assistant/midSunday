@@ -1332,6 +1332,15 @@ export default function App() {
 
   const statusLabel = backendState === "connected" ? "Core connected" : backendState === "checking" ? "Checking core" : "Core unavailable";
 
+  const monitorCaptureIntervals = monitorHistory.slice(1).map((point, index) => point.capturedAtUnixMillis - monitorHistory[index].capturedAtUnixMillis).filter((elapsedMs) => Number.isFinite(elapsedMs) && elapsedMs > 0);
+  const monitorCaptureTiming = {
+    intervalCount: monitorCaptureIntervals.length,
+    averageIntervalMs: monitorCaptureIntervals.length > 0 ? monitorCaptureIntervals.reduce((total, elapsedMs) => total + elapsedMs, 0) / monitorCaptureIntervals.length : null,
+    longestGapMs: monitorCaptureIntervals.length > 0 ? Math.max(...monitorCaptureIntervals) : null,
+    delayedIntervals: monitorCaptureIntervals.filter((elapsedMs) => elapsedMs > 2250).length,
+  };
+  const formatMonitorDuration = (elapsedMs: number | null) => elapsedMs === null ? "Unavailable" : elapsedMs >= 10000 ? (elapsedMs / 1000).toFixed(1) + " s" : (elapsedMs / 1000).toFixed(2) + " s";
+
   const monitorHistorySummaryRows = [
     buildMonitorHistorySummary("CPU utilisation", monitorHistory.map((point) => point.cpu), (value) => value.toFixed(1) + "%"),
     ...Array.from({ length: monitorHistory[monitorHistory.length - 1]?.coreCount ?? 0 }, (_, index) => {
@@ -1669,6 +1678,13 @@ export default function App() {
                     <section className="system-monitor-summary" aria-label="Recent activity numeric summary">
                       <div><strong>Window summary</strong><span>Latest value, average, and peak across the samples currently shown</span></div>
                       {monitorHistory.length === 0 ? <p>No samples are available yet.</p> : <>
+                        <div className="system-monitor-capture-summary" aria-label="Capture timing summary">
+                          <div><small>Valid intervals</small><strong>{monitorCaptureTiming.intervalCount}</strong></div>
+                          <div><small>Average interval</small><strong>{formatMonitorDuration(monitorCaptureTiming.averageIntervalMs)}</strong></div>
+                          <div><small>Longest gap</small><strong>{formatMonitorDuration(monitorCaptureTiming.longestGapMs)}</strong></div>
+                          <div><small>Delayed intervals</small><strong>{monitorCaptureTiming.intervalCount === 0 ? "Unavailable" : monitorCaptureTiming.delayedIntervals}</strong></div>
+                        </div>
+                        <p className="system-monitor-capture-note">Timing uses positive differences between existing sample timestamps. Intervals over 2.25 seconds count as delayed; this describes capture timing, not missing metric readings.</p>
                         {monitorHistory.some((point) => point.coreCount !== (monitorHistory[monitorHistory.length - 1]?.coreCount ?? 0)) && <p className="system-monitor-topology-note" role="status">The number of logical processors changed during this history. Per-processor statistics include only samples matching the newest processor count; older-topology samples are excluded, not treated as zero.</p>}
                         <div className="system-monitor-summary-scroll"><table className="system-monitor-summary-table"><thead><tr><th scope="col">Metric</th><th scope="col">Latest</th><th scope="col">Average</th><th scope="col">Peak</th><th scope="col">Samples</th></tr></thead><tbody>{monitorHistorySummaryRows.map((row) => <tr key={row.label}><th scope="row">{row.label}</th><td>{row.latest}</td><td>{row.average}</td><td>{row.peak}</td><td>{row.samples}</td></tr>)}</tbody></table></div>
                       </>}

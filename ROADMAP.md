@@ -2142,3 +2142,14 @@ See docs/HARDWARE-INTELLIGENCE.md section 90.
 
 See docs/HARDWARE-INTELLIGENCE.md section 91.
 
+
+
+### 2026-11-27 — System Monitor capture-timing quality summary (Batch #212)
+
+- [x] Show the count of valid adjacent capture intervals, average interval duration, longest observed interval, and delayed-interval count in the Recent activity Window summary.
+- [x] Accept only finite, positive timestamp differences; classify intervals over 2.25 seconds as delayed to match existing timeline gap cues.
+- [x] Keep timing values unavailable when no valid interval exists; do not misrepresent unavailable timing as zero.
+- [x] Derive the summary from existing bounded in-memory timestamps only, with no new polling, hardware queries, persistence, identifiers, or network activity.
+- [ ] Validate narrow-window layout and timestamp behavior on physical Windows, Linux, and macOS devices.
+
+See docs/HARDWARE-INTELLIGENCE.md section 92.
