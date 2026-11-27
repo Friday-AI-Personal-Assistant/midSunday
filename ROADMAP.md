@@ -2379,3 +2379,15 @@ See Settings → Appearance & themes.
 - [ ] Validate text legibility, keyboard navigation, zoom/layout behaviour and reduced-motion behaviour on physical Windows, Linux and macOS devices.
 
 See Settings → Appearance & themes → Accessibility.
+
+
+### 2026-11-27 — First-launch local setup guide (Batch #233)
+
+- [x] Add an in-workspace setup guide for users who have not started a local model.
+- [x] Show live, locally-derived readiness for the configured llama.cpp executable, selected GGUF model path, and running engine.
+- [x] Provide direct navigation to Local AI settings and companion selection.
+- [x] Explain that users supply compatible local files; the prototype does not silently download models or require an account/cloud service.
+- [x] Keep the guide responsive and accessible, with text labels as well as visual completion states.
+- [ ] Validate first-run, partially configured, ready, keyboard, and narrow-window states on physical Windows, Linux, and macOS devices.
+
+The guide is a lightweight onboarding slice, not a complete first-launch wizard. It performs no network checks and does not infer that a model is compatible merely because a path is configured.

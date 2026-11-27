@@ -1700,6 +1700,16 @@ export default function App() {
                   <div className="orb-wrap"><div className="orb"><span>m</span></div><i className="orb-spark spark-one">✦</i><i className="orb-spark spark-two">✧</i></div>
                   <h2>What’s on your mind?</h2>
                   <p>Start with a thought, a question, or something you want to get done.</p>
+                  {runtimeStatus.status !== "ready" && <section className="setup-guide" aria-labelledby="setup-guide-title">
+                    <div className="setup-guide-heading"><div><span className="eyebrow">FIRST STEPS</span><h3 id="setup-guide-title">Get your local companion ready</h3><p>midSunday runs models stored on your device. No account, cloud model, or automatic download is required.</p></div><span className="setup-guide-mark" aria-hidden="true">✦</span></div>
+                    <div className="setup-guide-steps">
+                      <div className={executablePath.trim() ? "setup-guide-step complete" : "setup-guide-step"}><span className="setup-guide-number">1</span><div><strong>Choose your local AI server</strong><small>{executablePath.trim() ? "A server executable path is configured." : "Select an existing compatible llama.cpp server executable in Settings."}</small></div><span className="setup-guide-state">{executablePath.trim() ? "Ready" : "To do"}</span></div>
+                      <div className={modelPath.trim() ? "setup-guide-step complete" : "setup-guide-step"}><span className="setup-guide-number">2</span><div><strong>Select a GGUF model</strong><small>{modelPath.trim() ? "A model file path is configured." : "Choose a GGUF model already stored on this device."}{localModels.length > 0 ? " " + localModels.length + " model(s) in your catalogue." : ""}</small></div><span className="setup-guide-state">{modelPath.trim() ? "Ready" : "To do"}</span></div>
+                      <div className={runtimeStatus.status === "ready" ? "setup-guide-step complete" : "setup-guide-step"}><span className="setup-guide-number">3</span><div><strong>Start your local engine</strong><small>{runtimeStatus.status === "ready" ? "Your local engine is ready for a conversation." : "Start the engine from Local AI engine settings when both paths are configured."}</small></div><span className="setup-guide-state">{runtimeStatus.status === "ready" ? "Ready" : "To do"}</span></div>
+                    </div>
+                    <div className="setup-guide-actions"><button type="button" className="primary-action" onClick={() => setSection("settings")}>Open local AI settings</button><button type="button" className="secondary-action" onClick={() => setSection("characters")}>Choose a companion</button></div>
+                    <p className="setup-guide-note">You can explore themes and companions before connecting a model. A compatible server and model are not bundled with this prototype.</p>
+                  </section>}
                   <div className="suggestion-grid">
                     <button onClick={() => setDraft("Help me organise my day")}><span>↗</span><strong>Plan my day</strong><small>Turn a busy day into a clear plan</small></button>
                     <button onClick={() => setDraft("I want to think through an idea")}><span>✧</span><strong>Explore an idea</strong><small>Work through a thought together</small></button>

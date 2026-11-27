@@ -236,3 +236,7 @@ All notable project changes are recorded here. The project is in foundation/prot
 
 ## 2026-11-27
 - Added local accessibility preferences: Standard/Large/Largest interface text, Comfortable/Compact settings spacing, and Reduce motion. Existing theme preferences now load before being written, preventing first-launch defaults from overwriting saved choices.
+
+
+## 2026-11-27
+- Added a first-launch setup guide to the empty conversation workspace. It reflects the configured local llama.cpp executable, GGUF model path, and live engine readiness, with direct links to local AI settings and companion selection. The guide explains that compatible files are user-supplied and introduces no downloads, account, cloud dependency, or network check.
