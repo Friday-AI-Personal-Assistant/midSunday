@@ -2341,3 +2341,15 @@ See docs/HARDWARE-INTELLIGENCE.md section 106.
 - [ ] Validate enable/disable, uninstall cleanup, and login behavior on physical Windows, Linux desktop environments, and macOS.
 
 See docs/STARTUP-AND-LAUNCH.md.
+
+### 2026-11-27 — System Monitor pause and resume controls (Batch #230)
+
+- [x] Add an explicit Pause sampling action that stops the existing polling loop while retaining the latest snapshot and bounded history.
+- [x] Add Resume sampling to continue collection and append to the retained history.
+- [x] Separate Stop & clear from Pause so users can intentionally end monitoring and clear the live snapshot, history, and transient notices.
+- [x] Display clear monitoring states for stopped, sampling, manually paused, and paused while Settings is closed.
+- [x] Preserve the 1.5-second cadence, 36-sample in-memory cap, local-only collection, explicit CSV export, and existing automatic pause when leaving Settings.
+- [x] Add no hardware queries, persistence, identifiers, or network activity.
+- [ ] Validate pause/resume timing, history retention, export while paused, navigation lifecycle, and clear/restart behaviour on physical Windows, Linux, and macOS.
+
+See docs/HARDWARE-INTELLIGENCE.md section 107.

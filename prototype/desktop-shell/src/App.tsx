@@ -243,6 +243,7 @@ export default function App() {
   const [hardwareBusy, setHardwareBusy] = useState(false);
   const [hardwareError, setHardwareError] = useState("");
   const [monitorRunning, setMonitorRunning] = useState(false);
+  const [monitorPaused, setMonitorPaused] = useState(false);
   const [liveMetrics, setLiveMetrics] = useState<LiveSystemMetrics | null>(null);
   const [monitorError, setMonitorError] = useState("");
   const [monitorExportNotice, setMonitorExportNotice] = useState("");
@@ -273,7 +274,7 @@ export default function App() {
   const memoryImportFileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (!monitorRunning || section !== "settings") return;
+    if (!monitorRunning || monitorPaused || section !== "settings") return;
     let active = true;
     let pollInFlight = false;
     const poll = () => {
@@ -337,7 +338,7 @@ export default function App() {
     poll();
     const timer = window.setInterval(poll, 1500);
     return () => { active = false; window.clearInterval(timer); };
-  }, [monitorRunning, section]);
+  }, [monitorRunning, monitorPaused, section]);
 
   useEffect(() => {
     let active = true;
@@ -1833,7 +1834,7 @@ export default function App() {
             <section className="settings-section">
               <div className="settings-section-title"><div><h2>System & hardware</h2><p>A local snapshot helps midSunday understand this computer. It is collected only on this device.</p></div><span className="settings-symbol">⌘</span></div>
               <div className="system-monitor-panel">
-                <div className="system-monitor-heading"><div><strong>Live System Monitor</strong><p>Local, read-only CPU, memory, GPU, network, system-wide and process disk I/O, and battery measurements. Sampling pauses when this settings view is left.</p></div><button className="secondary-action" type="button" onClick={() => { setMonitorRunning((running) => !running); if (monitorRunning) { setLiveMetrics(null); setMonitorHistory([]); setMonitorError(""); setMonitorExportNotice(""); } }}>{monitorRunning ? "Stop monitoring" : "Start live monitoring"}</button></div>
+                <div className="system-monitor-heading"><div><strong>Live System Monitor</strong><p>Local, read-only CPU, memory, GPU, network, system-wide and process disk I/O, and battery measurements. Sampling pauses when this settings view is left.</p><span className="system-monitor-live-state" role="status">{!monitorRunning ? "Monitoring stopped" : monitorPaused ? "Paused · history retained" : section !== "settings" ? "Paused while settings are closed" : "Sampling live"}</span></div><div className="system-monitor-controls">{monitorRunning && <button className="secondary-action" type="button" onClick={() => setMonitorPaused((paused) => !paused)}>{monitorPaused ? "Resume sampling" : "Pause sampling"}</button>}<button className="secondary-action" type="button" onClick={() => { if (monitorRunning) { setMonitorRunning(false); setMonitorPaused(false); setLiveMetrics(null); setMonitorHistory([]); setMonitorError(""); setMonitorExportNotice(""); } else { setMonitorPaused(false); setMonitorRunning(true); } }}>{monitorRunning ? "Stop & clear" : "Start live monitoring"}</button></div></div>
                 {monitorRunning && <>
                   {monitorError && <p className="hardware-error" role="status">{monitorError}</p>}
                   <div className="system-monitor-grid">

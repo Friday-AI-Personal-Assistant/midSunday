@@ -381,6 +381,8 @@ h1 { margin: 0; color: #eef5ef; font-size: clamp(25px, 3vw, 34px); font-weight: 
 /* Live System Monitor dashboard */
 .system-monitor-panel { display: grid; gap: 12px; margin: 14px 0 18px; padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: rgba(255,255,255,.025); }
 .system-monitor-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.system-monitor-controls { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 7px; }
+.system-monitor-live-state { color: #829287; font-size: 9px; line-height: 1.5; }
 .system-monitor-heading > div { display: grid; gap: 4px; }
 .system-monitor-heading strong, .system-monitor-history strong { color: #dce8de; font-size: 11px; }
 .system-monitor-heading p, .system-monitor-history span { margin: 0; color: #829287; font-size: 9px; line-height: 1.5; }
@@ -408,7 +410,7 @@ h1 { margin: 0; color: #eef5ef; font-size: clamp(25px, 3vw, 34px); font-weight: 
 .system-monitor-history-row i.system-monitor-battery-state-unavailable,
 .system-monitor-history-row i.system-monitor-battery-state-unknown { background: #68766d; }
 .system-monitor-battery-state-summary { margin: 0; color: #9aab9f; font-size: 9px; line-height: 1.5; }
-@media (max-width: 560px) { .system-monitor-heading { align-items: flex-start; flex-direction: column; } .system-monitor-grid { grid-template-columns: 1fr; } .system-monitor-history > div:first-child { flex-direction: column; gap: 3px; } }
+@media (max-width: 560px) { .system-monitor-heading { align-items: flex-start; flex-direction: column; } .system-monitor-controls { width: 100%; justify-content: flex-start; } .system-monitor-grid { grid-template-columns: 1fr; } .system-monitor-history > div:first-child { flex-direction: column; gap: 3px; } }
 
 .system-monitor-history-row > small { white-space: nowrap; }
 
