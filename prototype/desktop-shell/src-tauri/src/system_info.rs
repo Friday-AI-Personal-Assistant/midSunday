@@ -1164,15 +1164,6 @@ fn max_gpu_engine_utilization(values: &[f64]) -> Option<f32> {
     }).reduce(f32::max)
 }
 
-#[cfg(target_os = "windows")]
-fn gpu_adapter_key_from_instance(instance: &str) -> Option<String> {
-    let start = instance.to_ascii_lowercase().find("luid_")?;
-    let tail = &instance[start..];
-    let end = tail.find("_phys_").unwrap_or(tail.len());
-    if end <= "luid_".len() { return None; }
-    Some(tail[..end].to_owned())
-}
-
 fn parse_gpu_percent_text(value: &str) -> Option<f32> {
     let parsed = value.trim().parse::<u64>().ok()?;
     if parsed > 100 { return None; }
