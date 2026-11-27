@@ -876,3 +876,10 @@ This disclosure is derived from the existing in-memory sample metadata. It adds 
 The Recent activity Window summary now reports the number of valid adjacent capture intervals, their average duration, the longest observed interval, and the number of delayed intervals. An interval is counted only when the difference between adjacent retained sample timestamps is finite and positive; intervals longer than 2.25 seconds are classified as delayed, matching the existing visible sampling-gap cues. With fewer than two usable timestamps, timing values remain unavailable rather than being shown as zero.
 
 This is a presentation-only summary derived from timestamps already held in the bounded in-memory history. It does not infer missing metric readings, alter sample values, interpolate gaps, add polling, query hardware, persist data, collect identifiers, or send network activity. The summary reflows to two columns on narrow windows; physical readability and unusual clock/timestamp behavior still require validation on Windows, Linux, and macOS.
+
+
+## 93. Robust capture-interval distribution summary (Batch #213)
+
+The Recent activity capture-timing summary now includes the fastest and median valid interval in addition to the existing valid-interval count, arithmetic average, longest gap, and delayed-interval count. The median is calculated from a sorted copy of the positive, finite adjacent timestamp differences; for an even number of intervals it is the arithmetic midpoint of the two central values. The fastest and median figures help distinguish typical sampling cadence from occasional long pauses that can pull the average upward.
+
+All values are derived from the existing bounded in-memory timestamps. No new sampling, hardware queries, persistence, identifiers, or network activity are introduced. When no valid intervals exist, duration values remain unavailable. The six summary cells use a three-column layout that collapses to two columns on narrow windows. Hosted CI checks cross-platform compilation; physical readability and timing behavior still require validation on Windows, Linux, and macOS.

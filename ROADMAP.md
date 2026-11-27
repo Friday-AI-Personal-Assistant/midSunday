@@ -2153,3 +2153,14 @@ See docs/HARDWARE-INTELLIGENCE.md section 91.
 - [ ] Validate narrow-window layout and timestamp behavior on physical Windows, Linux, and macOS devices.
 
 See docs/HARDWARE-INTELLIGENCE.md section 92.
+
+
+### 2026-11-27 — Robust System Monitor capture-interval distribution (Batch #213)
+
+- [x] Extend capture timing quality with fastest and median valid interval values alongside average, longest gap, delayed count, and valid interval count.
+- [x] Calculate median from a sorted copy of finite, positive adjacent timestamp differences; average the two central values for even-sized samples.
+- [x] Keep timing derived from existing bounded in-memory timestamps only; add no polling, hardware queries, persistence, identifiers, or network activity.
+- [x] Reflow the six timing indicators into three columns, then two columns on narrow windows.
+- [ ] Validate timing summary readability and real capture distributions on physical Windows, Linux, and macOS devices.
+
+See docs/HARDWARE-INTELLIGENCE.md section 93.
