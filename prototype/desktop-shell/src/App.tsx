@@ -1950,7 +1950,7 @@ export default function App() {
                         {cpuStateSummary && <p className="system-monitor-battery-state-summary">CPU telemetry samples: {cpuStateSummary}</p>}
                         {processMemoryStateSummary && <p className="system-monitor-battery-state-summary">midSunday process memory samples: {processMemoryStateSummary}</p>}
                         {gpuStateSummary && <p className="system-monitor-battery-state-summary">GPU telemetry samples: {gpuStateSummary}</p>}
-                        {batteryStateSummary && <p className="system-monitor-battery-state-summary">Battery state samples: {batteryStateSummary}</p>
+                        {batteryStateSummary && <p className="system-monitor-battery-state-summary">Battery state samples: {batteryStateSummary}</p>}
                         {networkStateSummary && <p className="system-monitor-battery-state-summary">Network telemetry samples: {networkStateSummary}</p>}
                         {systemDiskStateSummary && <p className="system-monitor-battery-state-summary">System disk telemetry samples: {systemDiskStateSummary}</p>}
                         {processDiskIoStateSummary && <p className="system-monitor-battery-state-summary">midSunday process disk I/O samples: {processDiskIoStateSummary}</p>}
