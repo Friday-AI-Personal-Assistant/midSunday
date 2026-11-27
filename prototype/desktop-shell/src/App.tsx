@@ -1161,6 +1161,8 @@ export default function App() {
     const columns = [
       "Captured at (local)",
       "Captured at (UTC)",
+      "Elapsed since previous sample (ms)",
+      "Delayed interval (>2250 ms)",
       "CPU utilisation (%)",
       ...Array.from({ length: coreCount }, (_, index) => "Logical processor " + (index + 1) + " utilisation (%)"),
       "System RAM utilisation (%)",
@@ -1180,9 +1182,15 @@ export default function App() {
       const safe = typeof value === "string" && /^[\s]*[=+\-@]/.test(raw) ? "'" + raw : raw;
       return '"' + safe.replace(/"/g, '""') + '"';
     };
-    const rows = monitorHistory.map((point) => [
+    const rows = monitorHistory.map((point, index) => {
+      const previous = index > 0 ? monitorHistory[index - 1] : null;
+      const elapsedMs = previous ? point.capturedAtUnixMillis - previous.capturedAtUnixMillis : null;
+      const validElapsedMs = elapsedMs !== null && Number.isFinite(elapsedMs) && elapsedMs > 0 ? elapsedMs : null;
+      return [
       new Date(point.capturedAtUnixMillis).toLocaleString(),
       new Date(point.capturedAtUnixMillis).toISOString(),
+      validElapsedMs,
+      validElapsedMs === null ? null : validElapsedMs > 2250 ? "Yes" : "No",
       point.cpu,
       ...Array.from({ length: coreCount }, (_, index) => point.coreCount === coreCount ? (point.cores[index] ?? null) : null),
       point.ram,
@@ -1191,7 +1199,8 @@ export default function App() {
       point.diskRead,
       point.diskWrite,
       ...gpuLabels.flatMap((label) => [point.gpu[label] ?? null, point.gpuMemory[label] ?? null]),
-    ]);
+      ];
+    });
     const csv = [columns, ...rows].map((row) => row.map(cell).join(",")).join("\r\n") + "\r\n";
     const url = URL.createObjectURL(new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" }));
     const anchor = document.createElement("a");

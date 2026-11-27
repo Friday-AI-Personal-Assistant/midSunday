@@ -2175,3 +2175,15 @@ See docs/HARDWARE-INTELLIGENCE.md section 93.
 - [ ] Validate timing summary layout and real-world sampling behavior on physical Windows, Linux, and macOS devices.
 
 See docs/HARDWARE-INTELLIGENCE.md section 94.
+
+
+### 2026-11-27 — Capture-interval context in System Monitor CSV exports (Batch #215)
+
+- [x] Add elapsed milliseconds since the preceding retained sample to each exported CSV row.
+- [x] Add a delayed-interval flag using the same greater-than-2.25-second threshold as the Recent activity timeline.
+- [x] Leave the first row and invalid/non-positive timestamp intervals blank; never fabricate elapsed time or a delay state.
+- [x] Derive both columns from existing in-memory timestamps only when the user explicitly exports; preserve local-only behavior and the 36-sample bound.
+- [x] Preserve existing CSV quoting, spreadsheet-formula injection guards, and missing metric semantics.
+- [ ] Validate file download and spreadsheet compatibility on physical Windows, Linux, and macOS devices.
+
+See docs/HARDWARE-INTELLIGENCE.md section 95.
