@@ -605,3 +605,11 @@ h1 { margin: 0; color: #eef5ef; font-size: clamp(25px, 3vw, 34px); font-weight: 
 
 /* Storage history uses anonymous capacity ranks, never mount paths or volume IDs. */
 .system-monitor-storage-history { grid-template-columns: 48px minmax(0, 1fr); }
+
+
+/* Per-volume headroom state timeline shares the battery's discrete-state strip. */
+.system-monitor-history-row i.system-monitor-storage-state-healthy { background: #49a879; }
+.system-monitor-history-row i.system-monitor-storage-state-low { background: #d49a55; }
+.system-monitor-history-row i.system-monitor-storage-state-critical { background: #c86d6d; }
+.system-monitor-history-row i.system-monitor-storage-state-unknown { background: #68766d; }
+.system-monitor-storage-state-row { margin-top: -5px; }

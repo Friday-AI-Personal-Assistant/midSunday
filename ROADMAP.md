@@ -2261,3 +2261,16 @@ See docs/HARDWARE-INTELLIGENCE.md section 100.
 - [ ] Validate volume enumeration, removable/network volumes, topology changes, CSV output, and narrow-window layout on physical Windows, Linux, and macOS devices.
 
 See docs/HARDWARE-INTELLIGENCE.md section 101.
+
+
+### 2026-11-27 — RAM capacity and storage headroom history (Batch #222)
+
+- [x] Capture exact OS-reported total system RAM bytes alongside used and available RAM, using the existing snapshot.
+- [x] Add RAM CAP timeline, numeric summary, and explicit local CSV column.
+- [x] Retain each anonymous storage capacity rank's existing `healthy`, `low`, `critical`, or `unknown` headroom state.
+- [x] Add discrete storage-state timeline strips, per-rank state counts, and CSV state columns.
+- [x] Document that storage labels describe free-space headroom only, not disk health or failure prediction.
+- [x] Preserve existing polling, 36-sample in-memory cap, anonymous volume ranks, and local-only explicit export.
+- [ ] Validate Windows, Linux, and macOS physical storage configurations, removable/network volumes, and narrow-window layout.
+
+See docs/HARDWARE-INTELLIGENCE.md section 102.
