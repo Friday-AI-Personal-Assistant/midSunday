@@ -5,7 +5,7 @@
 > **Roadmap version:** 0.1  
 > **Status:** Foundation / planning  
 > **Repository:** `Friday-AI-Personal-Assistant/midSunday`  
-> **Last updated:** 2026-11-26  
+> **Last updated:** 2026-11-27  
 > **Decision rule:** User-confirmed requirements are binding. Technical choices in this roadmap are proposals until validated and approved.
 
 This document is the long-term project map and recovery reference for midSunday. It is deliberately comprehensive so development can continue even if a ChatGPT conversation is lost, corrupted, or moved. Update this file whenever scope, decisions, priorities, or completion status change.
@@ -2078,3 +2078,15 @@ See docs/HARDWARE-INTELLIGENCE.md section 84.
 - [x] Preserve opt-in polling, missing-sample gaps, generic labels, and bounded in-memory history without adding hardware reads or telemetry.
 
 See docs/HARDWARE-INTELLIGENCE.md section 85.
+
+
+### 2026-11-27 — Time-aware System Monitor history (Batch #206)
+
+- [x] Add oldest, midpoint, and newest local-time anchors to the shared Recent activity timeline using existing sample timestamps.
+- [x] Include the capture time and measured value/state in individual history-bar hover descriptions.
+- [x] Add accessible descriptions to CPU, RAM, network, and system-wide disk history rows.
+- [x] Explain that network and disk throughput bar heights are relative to each row's recent peak, not a shared absolute scale.
+- [x] Preserve the existing 36-point bound, timestamped samples, polling cadence, missing-value gaps, opt-in behavior, and in-memory-only retention.
+- [ ] Validate timestamp readability and history layout at narrow and wide window sizes on physical Windows, Linux, and macOS devices.
+
+See docs/HARDWARE-INTELLIGENCE.md section 86.

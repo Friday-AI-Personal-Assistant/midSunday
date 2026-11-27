@@ -547,3 +547,11 @@ h1 { margin: 0; color: #eef5ef; font-size: clamp(25px, 3vw, 34px); font-weight: 
 .system-monitor-status-limited { color: #e4c68b; background: rgba(196,157,82,.14); }
 @media (max-width: 700px) { .system-monitor-capabilities-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 420px) { .system-monitor-capabilities-grid { grid-template-columns: 1fr; } }
+
+
+/* System Monitor history: visible time anchors for the shared sample timeline. */
+.system-monitor-history-axis { display: flex; justify-content: space-between; gap: 8px; padding-left: 40px; color: #829287; }
+.system-monitor-history-axis small { font-size: 8px; line-height: 1.4; }
+.system-monitor-history-axis small:nth-child(2) { text-align: center; }
+.system-monitor-history-axis small:last-child { text-align: right; }
+@media (max-width: 560px) { .system-monitor-history-axis { padding-left: 0; } }
