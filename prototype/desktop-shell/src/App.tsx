@@ -1138,7 +1138,7 @@ export default function App() {
       no_disks: "No disks detected", no_volumes: "No volumes detected",
       no_battery: "No battery detected", software_only: "Software adapter only",
     };
-    return labels[status] ?? status.replaceAll("_", " ");
+    return labels[status] ?? status.split("_").join(" ");
   }
 
   function monitorStatusTone(status: string) {
