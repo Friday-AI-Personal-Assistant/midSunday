@@ -863,3 +863,9 @@ The Recent activity Window summary now includes a separate latest, average, peak
 
 The rows are derived from the existing bounded, timestamped in-memory history. This adds no hardware queries, polling, persistence, identifiers, or network activity. The table remains horizontally scrollable; systems with many logical processors may produce a longer summary. Hosted CI validates compilation and tests, while physical validation is still needed for topology changes and table usability on Windows, Linux, and macOS.
 
+## 91. Visible CPU-topology change disclosure (Batch #211)
+
+When retained System Monitor samples contain more than one logical-processor count, the Window summary now displays a status note explaining that CPU topology changed during the history. It clarifies that per-logical-processor statistics are calculated only from samples matching the newest sample's processor count, and that older-topology samples are excluded rather than interpreted as zero. The note is hidden when all retained samples share the same logical-processor count.
+
+This disclosure is derived from the existing in-memory sample metadata. It adds no hardware queries, polling, persistence, identifiers, or network activity, and does not change the statistics or CSV export. Physical validation should cover processor hotplug/topology changes where supported, plus narrow-window readability across Windows, Linux, and macOS.
+

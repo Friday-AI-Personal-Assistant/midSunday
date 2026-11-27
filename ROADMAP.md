@@ -2132,3 +2132,13 @@ See docs/HARDWARE-INTELLIGENCE.md section 87.
 
 See docs/HARDWARE-INTELLIGENCE.md section 90.
 
+### 2026-11-27 — Visible CPU-topology change disclosure (Batch #211)
+
+- [x] Detect whether retained System Monitor samples contain different logical-processor counts.
+- [x] Display a clear status note when CPU topology changed during the retained history.
+- [x] Explain that per-processor statistics use only samples matching the newest processor count and exclude older-topology samples.
+- [x] Keep the note hidden when processor count is consistent; derive it only from existing in-memory sample metadata.
+- [ ] Validate hotplug/topology-change scenarios where supported and narrow-window readability on physical Windows, Linux, and macOS devices.
+
+See docs/HARDWARE-INTELLIGENCE.md section 91.
+
