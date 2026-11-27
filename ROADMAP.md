@@ -2287,3 +2287,18 @@ See docs/HARDWARE-INTELLIGENCE.md section 102.
 - [ ] Validate interface hotplug, disconnected systems, sleep/resume, CSV output, and narrow-window layout on physical Windows, Linux, and macOS devices.
 
 See docs/HARDWARE-INTELLIGENCE.md section 103.
+
+
+### 2026-11-27 — System disk and process disk-I/O collector history (Batch #225)
+
+- [x] Retain the existing OS-reported system disk count and system-wide disk telemetry state in bounded System Monitor samples.
+- [x] Add a DSK # count timeline and DSK ST collector-state timeline with timestamped tooltips.
+- [x] Retain the existing current-process disk-I/O collector state separately from system-wide disk telemetry.
+- [x] Add an APP DSK state timeline for midSunday's own disk-I/O collector.
+- [x] Add latest/average/peak/sample-count statistics for reported system disk count and retained-sample counts for both collector states.
+- [x] Include reported system disk count, system disk telemetry state, and midSunday process disk-I/O telemetry state in explicit local CSV exports.
+- [x] Normalise unexpected states to unavailable; keep collector readiness distinct from disk health or failure predictions.
+- [x] Preserve privacy: no disk names, mount paths, volume labels, device IDs, process lists, or file paths; reuse existing polling and 36-sample local history.
+- [ ] Validate disk enumeration, collector warm-up, permissions, and narrow-window layout on physical Windows, Linux, and macOS devices.
+
+See docs/HARDWARE-INTELLIGENCE.md section 104.

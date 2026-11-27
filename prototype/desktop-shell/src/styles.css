@@ -619,3 +619,13 @@ h1 { margin: 0; color: #eef5ef; font-size: clamp(25px, 3vw, 34px); font-weight: 
 .system-monitor-history-row i.system-monitor-network-state-detected { background: #49a879; }
 .system-monitor-history-row i.system-monitor-network-state-warming_up { background: #d49a55; }
 .system-monitor-history-row i.system-monitor-network-state-unavailable { background: #68766d; }
+
+
+/* System-disk and current-app disk-I/O collector states reuse the discrete timeline strip. */
+.system-monitor-history-row i.system-monitor-system-disk-state-detected,
+.system-monitor-history-row i.system-monitor-process-disk-state-detected { background: #49a879; }
+.system-monitor-history-row i.system-monitor-system-disk-state-warming_up,
+.system-monitor-history-row i.system-monitor-process-disk-state-warming_up { background: #d49a55; }
+.system-monitor-history-row i.system-monitor-system-disk-state-no_disks { background: #829287; }
+.system-monitor-history-row i.system-monitor-system-disk-state-unavailable,
+.system-monitor-history-row i.system-monitor-process-disk-state-unavailable { background: #68766d; }
