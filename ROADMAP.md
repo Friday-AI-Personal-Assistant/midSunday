@@ -2034,3 +2034,12 @@ See docs/HARDWARE-INTELLIGENCE.md section 80.
 - [ ] Add a separately validated NVIDIA collector; NVIDIA remains explicitly unsupported in this batch.
 
 See docs/HARDWARE-INTELLIGENCE.md section 81.
+
+
+### 2026-11-27 — System Monitor GPU memory history (Batch #200)
+
+- [x] Add a separate bounded history row for per-adapter dedicated-GPU-memory allocation, using only driver readings with both used and non-zero total capacity.
+- [x] Keep GPU memory allocation history separate from GPU compute/utilisation history; missing values remain visible gaps, never fabricated zeroes.
+- [x] Reuse the existing 36-sample, timestamped, in-memory history and existing opt-in polling cycle; no extra sampling or persistence.
+- [x] Label Linux Intel engine readings as the busiest sampled engine, Windows PDH readings as the busiest/peak engine, and AMDGPU's driver value as GPU busy.
+- [ ] Validate adapter reordering/replacement and memory reporting on physical Windows, Linux, and macOS devices. macOS live GPU telemetry is still unsupported.
