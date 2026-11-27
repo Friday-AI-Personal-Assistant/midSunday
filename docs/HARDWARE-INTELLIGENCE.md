@@ -789,3 +789,12 @@ The live dashboard now includes a Measurement availability overview for CPU, sys
 Each source displays its existing collector status in plain language: available, partially available, warming up, unavailable, or a specific no-device/unsupported state. The panel also shows limited aggregate context such as logical processor count, interface count, disk count, generic volume count, GPU adapter count, and battery count. It does not expose interface names, mount paths, GPU vendor/device identifiers, battery identifiers, or unrelated process details.
 
 The panel explicitly explains that warming-up requires another sample and that unavailable/unsupported readings are not zero activity. It is driven by the same live snapshot as the metric cards, so no extra polling, background service, persistence, or network transfer is introduced. This is a reporting/clarity improvement, not a claim that additional hardware collectors have been implemented. Physical-device validation remains necessary for driver and permission-specific states.
+
+
+## 81. Linux Intel DRM GT live GPU telemetry (Batch #197)
+
+On Linux systems whose Intel DRM kernel driver exposes the GT engine `busy` counters, the live System Monitor now samples those cumulative nanosecond counters twice and calculates a utilisation rate over the measured interval. It reports the busiest individual engine per generic GPU adapter label; it does not sum concurrent engines, expose engine names, or claim a universal whole-GPU utilisation percentage. The collector is bounded to a limited number of GT/engine entries and uses local read-only sysfs access.
+
+Where the same adapter also exposes driver-published dedicated-memory used/total counters, those values may be shown separately. Missing or zero total capacity never produces a percentage. Unsupported kernels/drivers, inaccessible counters, counter resets, and invalid rates remain unavailable/partial rather than being converted to zero. AMDGPU's existing `gpu_busy_percent` path remains unchanged. NVIDIA and other Linux drivers remain explicitly unsupported until a dedicated collector is implemented and validated.
+
+The sampling interval introduces a small delay in the live snapshot when an Intel GT counter is available. This collector has regression coverage for rate bounds and counter resets, but hosted CI cannot validate physical sensor accuracy, driver counter availability, hybrid-GPU attribution, or kernel-version differences. Physical-device testing remains required before making broad hardware-support claims.
