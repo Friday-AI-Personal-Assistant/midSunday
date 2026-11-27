@@ -2302,3 +2302,17 @@ See docs/HARDWARE-INTELLIGENCE.md section 103.
 - [ ] Validate disk enumeration, collector warm-up, permissions, and narrow-window layout on physical Windows, Linux, and macOS devices.
 
 See docs/HARDWARE-INTELLIGENCE.md section 104.
+
+
+### 2026-11-27 — CPU, process-memory and GPU collector history (Batch #226)
+
+- [x] Retain CPU telemetry readiness from the existing live snapshot and add a CPU ST history strip.
+- [x] Retain midSunday's own process-memory collector state and add a MEM ST history strip.
+- [x] Retain GPU telemetry state and add a GPU ST readiness strip.
+- [x] Add a GPU # timeline and latest/average/peak/sample-count summary for OS-reported adapter count.
+- [x] Add CPU, process-memory, GPU state and GPU adapter count columns to explicit local CSV exports.
+- [x] Normalise unknown collector values to unavailable and document that telemetry readiness is not hardware health or compatibility.
+- [x] Preserve privacy: no GPU adapter names/IDs or unrelated process enumeration; reuse existing polling and 36-sample local history.
+- [ ] Validate real CPU/GPU collector states, adapter counts, driver permissions and layout on physical Windows, Linux and macOS devices.
+
+See docs/HARDWARE-INTELLIGENCE.md section 105.

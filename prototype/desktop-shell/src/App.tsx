@@ -102,6 +102,21 @@ function normalizeProcessDiskIoState(value: string): string {
   return allowed.includes(value) ? value : "unavailable";
 }
 
+function normalizeCpuState(value: string): string {
+  const allowed = ["detected", "warming_up", "unavailable"];
+  return allowed.includes(value) ? value : "unavailable";
+}
+
+function normalizeProcessMemoryState(value: string): string {
+  const allowed = ["detected", "unavailable"];
+  return allowed.includes(value) ? value : "unavailable";
+}
+
+function normalizeGpuState(value: string): string {
+  const allowed = ["detected", "partial", "software_only", "warming_up", "no_adapters", "unsupported_platform", "unsupported_driver", "unavailable"];
+  return allowed.includes(value) ? value : "unavailable";
+}
+
 function buildCompanionSystemPrompt(personality: string, customInstructions: string, profileName = "", memoryContext = "", preferredName = "", usePreferredName = false, awarenessContext = "") {
   const foundation = [
     "You are midSunday, a local AI personal companion.",
@@ -228,7 +243,7 @@ export default function App() {
   const [liveMetrics, setLiveMetrics] = useState<LiveSystemMetrics | null>(null);
   const [monitorError, setMonitorError] = useState("");
   const [monitorExportNotice, setMonitorExportNotice] = useState("");
-  const [monitorHistory, setMonitorHistory] = useState<{ capturedAtUnixMillis: number; cpu: number | null; ram: number | null; systemUsedMemoryBytes: number | null; systemAvailableMemoryBytes: number | null; systemTotalMemoryBytes: number | null; battery: number | null; batteryState: string; networkState: string; networkInterfaceCount: number | null; systemDiskState: string; systemDiskCount: number | null; processDiskIoState: string; processResidentBytes: number | null; processVirtualBytes: number | null; processRead: number | null; processWrite: number | null; download: number | null; upload: number | null; diskRead: number | null; diskWrite: number | null; gpu: Record<string, number | null>; gpuMemory: Record<string, number | null>; cores: (number | null)[]; coreCount: number; storageVolumeCount: number; storageVolumes: { totalBytes: number | null; usedBytes: number | null; availableBytes: number | null; usedPercent: number | null; status: string }[] }[]>([]);
+  const [monitorHistory, setMonitorHistory] = useState<{ capturedAtUnixMillis: number; cpu: number | null; ram: number | null; systemUsedMemoryBytes: number | null; systemAvailableMemoryBytes: number | null; systemTotalMemoryBytes: number | null; battery: number | null; batteryState: string; cpuState: string; processMemoryState: string; gpuState: string; gpuAdapterCount: number | null; networkState: string; networkInterfaceCount: number | null; systemDiskState: string; systemDiskCount: number | null; processDiskIoState: string; processResidentBytes: number | null; processVirtualBytes: number | null; processRead: number | null; processWrite: number | null; download: number | null; upload: number | null; diskRead: number | null; diskWrite: number | null; gpu: Record<string, number | null>; gpuMemory: Record<string, number | null>; cores: (number | null)[]; coreCount: number; storageVolumeCount: number; storageVolumes: { totalBytes: number | null; usedBytes: number | null; availableBytes: number | null; usedPercent: number | null; status: string }[] }[]>([]);
   const [executablePath, setExecutablePath] = useState("");
   const [modelPath, setModelPath] = useState("");
   const [contextTokens, setContextTokens] = useState("2048");
@@ -290,6 +305,10 @@ export default function App() {
               .slice(0, 16),
             battery: clampPercent(snapshot.battery.chargePercent),
             batteryState: normalizeBatteryState(snapshot.battery.state),
+            cpuState: normalizeCpuState(snapshot.cpuStatus),
+            processMemoryState: normalizeProcessMemoryState(snapshot.processMemory.status),
+            gpuState: normalizeGpuState(snapshot.gpu.status),
+            gpuAdapterCount: Number.isSafeInteger(snapshot.gpu.adapterCount) && snapshot.gpu.adapterCount >= 0 ? snapshot.gpu.adapterCount : null,
             networkState: normalizeNetworkState(snapshot.networkStatus),
             networkInterfaceCount: Number.isSafeInteger(snapshot.networkInterfaceCount) && snapshot.networkInterfaceCount >= 0 ? snapshot.networkInterfaceCount : null,
             systemDiskState: normalizeSystemDiskState(snapshot.systemDiskStatus),
@@ -1228,6 +1247,10 @@ export default function App() {
       }).flat(),
       "Battery charge (%)",
       "Battery state",
+      "CPU telemetry state",
+      "midSunday process memory telemetry state",
+      "GPU telemetry state",
+      "Reported GPU adapter count",
       "Network interface count",
       "Network telemetry state",
       "Reported system disk count",
@@ -1275,6 +1298,10 @@ export default function App() {
       }).flat(),
       point.battery,
       point.batteryState,
+      point.cpuState,
+      point.processMemoryState,
+      point.gpuState,
+      point.gpuAdapterCount,
       point.networkInterfaceCount,
       point.networkState,
       point.systemDiskCount,
@@ -1454,6 +1481,25 @@ export default function App() {
   };
   const formatMonitorDuration = (elapsedMs: number | null) => elapsedMs === null ? "Unavailable" : elapsedMs >= 10000 ? (elapsedMs / 1000).toFixed(1) + " s" : (elapsedMs / 1000).toFixed(2) + " s";
 
+  const cpuStateCounts = monitorHistory.reduce<Record<string, number>>((counts, point) => {
+    counts[point.cpuState] = (counts[point.cpuState] ?? 0) + 1;
+    return counts;
+  }, {});
+  const cpuStateSummary = ["detected", "warming_up", "unavailable"].filter((state) => (cpuStateCounts[state] ?? 0) > 0).map((state) => state.replace("_", " ") + ": " + cpuStateCounts[state]).join(" · ");
+  const processMemoryStateCounts = monitorHistory.reduce<Record<string, number>>((counts, point) => {
+    counts[point.processMemoryState] = (counts[point.processMemoryState] ?? 0) + 1;
+    return counts;
+  }, {});
+  const processMemoryStateSummary = ["detected", "unavailable"].filter((state) => (processMemoryStateCounts[state] ?? 0) > 0).map((state) => state.replace("_", " ") + ": " + processMemoryStateCounts[state]).join(" · ");
+  const gpuStateCounts = monitorHistory.reduce<Record<string, number>>((counts, point) => {
+    counts[point.gpuState] = (counts[point.gpuState] ?? 0) + 1;
+    return counts;
+  }, {});
+  const gpuStateSummary = ["detected", "partial", "software_only", "warming_up", "no_adapters", "unsupported_platform", "unsupported_driver", "unavailable"]
+    .filter((state) => (gpuStateCounts[state] ?? 0) > 0)
+    .map((state) => state.replace("_", " ") + ": " + gpuStateCounts[state])
+    .join(" · ");
+
   const batteryStateCounts = monitorHistory.reduce<Record<string, number>>((counts, point) => {
     counts[point.batteryState] = (counts[point.batteryState] ?? 0) + 1;
     return counts;
@@ -1515,6 +1561,7 @@ export default function App() {
       ];
     }).flat(),
     buildMonitorHistorySummary("Battery charge", monitorHistory.map((point) => point.battery), (value) => value.toFixed(1) + "%"),
+    buildMonitorHistorySummary("Reported GPU adapter count", monitorHistory.map((point) => point.gpuAdapterCount), (value) => String(Math.round(value))),
     buildMonitorHistorySummary("Network interface count", monitorHistory.map((point) => point.networkInterfaceCount), (value) => String(Math.round(value))),
     buildMonitorHistorySummary("midSunday resident memory", monitorHistory.map((point) => point.processResidentBytes), (value) => formatModelSize(value)),
     buildMonitorHistorySummary("midSunday virtual address space", monitorHistory.map((point) => point.processVirtualBytes), (value) => formatModelSize(value)),
@@ -1823,6 +1870,10 @@ export default function App() {
                     <div className="system-monitor-history-row"><small>BAT</small><div role="img" aria-label="Battery charge percentage history, oldest to newest; missing readings are gaps">{monitorHistory.map((point, index) => point.battery === null ? <i key={"battery-" + index} className="system-monitor-history-gap" title={monitorHistorySampleTitle(index, "No battery charge reading")} style={{ marginLeft: monitorHistoryGapBefore(index) }} /> : <i key={"battery-" + index} title={monitorHistorySampleTitle(index, point.battery.toFixed(1) + "% charge")} style={{ height: Math.max(2, point.battery) + "%", marginLeft: monitorHistoryGapBefore(index) }} />)}</div></div>
                     <div className="system-monitor-history-row"><small>RAM CAP</small><div role="img" aria-label="Operating-system-reported total system RAM capacity history, oldest to newest; missing readings are gaps">{monitorHistory.map((point, index) => point.systemTotalMemoryBytes === null ? <i key={"ram-cap-" + index} className="system-monitor-history-gap" title={monitorHistorySampleTitle(index, "No total system RAM reading")} style={{ marginLeft: monitorHistoryGapBefore(index) }} /> : <i key={"ram-cap-" + index} title={monitorHistorySampleTitle(index, formatModelSize(point.systemTotalMemoryBytes))} style={{ height: Math.max(2, point.systemTotalMemoryBytes / Math.max(1, ...monitorHistory.map((sample) => sample.systemTotalMemoryBytes ?? 0)) * 100) + "%", marginLeft: monitorHistoryGapBefore(index) }} />)}</div></div>
                     <div className="system-monitor-history-row system-monitor-battery-state-row"><small>BAT ST</small><div role="img" aria-label="Battery operating state history, oldest to newest; each segment represents one sampled OS-reported state">{monitorHistory.map((point, index) => <i key={"battery-state-" + index} className={"system-monitor-battery-state system-monitor-battery-state-" + point.batteryState} title={monitorHistorySampleTitle(index, point.batteryState.replace("_", " "))} />)}</div></div>
+                    <div className="system-monitor-history-row system-monitor-battery-state-row"><small>CPU ST</small><div role="img" aria-label="CPU telemetry collector state history, oldest to newest">{monitorHistory.map((point, index) => <i key={"cpu-state-" + index} className={"system-monitor-battery-state system-monitor-cpu-state-" + point.cpuState} title={monitorHistorySampleTitle(index, point.cpuState.replace("_", " "))} />)}</div></div>
+                    <div className="system-monitor-history-row system-monitor-battery-state-row"><small>MEM ST</small><div role="img" aria-label="midSunday process memory collector state history, oldest to newest">{monitorHistory.map((point, index) => <i key={"process-memory-state-" + index} className={"system-monitor-battery-state system-monitor-process-memory-state-" + point.processMemoryState} title={monitorHistorySampleTitle(index, point.processMemoryState.replace("_", " "))} />)}</div></div>
+                    <div className="system-monitor-history-row"><small>GPU #</small><div role="img" aria-label="Operating-system-reported GPU adapter count history, oldest to newest; adapter identifiers are not retained">{monitorHistory.map((point, index) => point.gpuAdapterCount === null ? <i key={"gpu-count-" + index} className="system-monitor-history-gap" title={monitorHistorySampleTitle(index, "No GPU adapter count")} style={{ marginLeft: monitorHistoryGapBefore(index) }} /> : <i key={"gpu-count-" + index} title={monitorHistorySampleTitle(index, point.gpuAdapterCount + " reported adapters")} style={{ height: point.gpuAdapterCount === 0 ? "0%" : Math.max(2, point.gpuAdapterCount / Math.max(1, ...monitorHistory.map((sample) => sample.gpuAdapterCount ?? 0)) * 100) + "%", marginLeft: monitorHistoryGapBefore(index) }} />)}</div></div>
+                    <div className="system-monitor-history-row system-monitor-battery-state-row"><small>GPU ST</small><div role="img" aria-label="GPU telemetry collector state history, oldest to newest">{monitorHistory.map((point, index) => <i key={"gpu-state-" + index} className={"system-monitor-battery-state system-monitor-gpu-state-" + point.gpuState} title={monitorHistorySampleTitle(index, point.gpuState.replace("_", " "))} />)}</div></div>
                     {Array.from({ length: Math.min(16, monitorHistory[monitorHistory.length - 1]?.storageVolumeCount ?? 0) }, (_, rank) => {
                       const currentCount = monitorHistory[monitorHistory.length - 1]?.storageVolumeCount ?? 0;
                       const values = monitorHistory.map((point) => point.storageVolumeCount === currentCount ? point.storageVolumes[rank]?.usedPercent ?? null : null);
@@ -1896,7 +1947,10 @@ export default function App() {
                         </div>
                         <p className="system-monitor-capture-note">Timing uses positive differences between existing sample timestamps. Median is the middle interval (or midpoint of the two middle intervals). Median deviation is the median absolute distance from that median and describes typical timing variation; intervals over 2.25 seconds count as delayed. These values describe capture timing, not missing metric readings.</p>
                         {monitorHistory.some((point) => point.coreCount !== (monitorHistory[monitorHistory.length - 1]?.coreCount ?? 0)) && <p className="system-monitor-topology-note" role="status">The number of logical processors changed during this history. Per-processor statistics include only samples matching the newest processor count; older-topology samples are excluded, not treated as zero.</p>}
-                        {batteryStateSummary && <p className="system-monitor-battery-state-summary">Battery state samples: {batteryStateSummary}</p>}
+                        {cpuStateSummary && <p className="system-monitor-battery-state-summary">CPU telemetry samples: {cpuStateSummary}</p>}
+                        {processMemoryStateSummary && <p className="system-monitor-battery-state-summary">midSunday process memory samples: {processMemoryStateSummary}</p>}
+                        {gpuStateSummary && <p className="system-monitor-battery-state-summary">GPU telemetry samples: {gpuStateSummary}</p>}
+                        {batteryStateSummary && <p className="system-monitor-battery-state-summary">Battery state samples: {batteryStateSummary}</p>
                         {networkStateSummary && <p className="system-monitor-battery-state-summary">Network telemetry samples: {networkStateSummary}</p>}
                         {systemDiskStateSummary && <p className="system-monitor-battery-state-summary">System disk telemetry samples: {systemDiskStateSummary}</p>}
                         {processDiskIoStateSummary && <p className="system-monitor-battery-state-summary">midSunday process disk I/O samples: {processDiskIoStateSummary}</p>}

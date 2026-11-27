@@ -629,3 +629,19 @@ h1 { margin: 0; color: #eef5ef; font-size: clamp(25px, 3vw, 34px); font-weight: 
 .system-monitor-history-row i.system-monitor-system-disk-state-no_disks { background: #829287; }
 .system-monitor-history-row i.system-monitor-system-disk-state-unavailable,
 .system-monitor-history-row i.system-monitor-process-disk-state-unavailable { background: #68766d; }
+
+
+/* CPU, process-memory and GPU collector readiness strips in System Monitor history. */
+.system-monitor-history-row i.system-monitor-cpu-state-detected,
+.system-monitor-history-row i.system-monitor-process-memory-state-detected,
+.system-monitor-history-row i.system-monitor-gpu-state-detected { background: #49a879; }
+.system-monitor-history-row i.system-monitor-cpu-state-warming_up,
+.system-monitor-history-row i.system-monitor-gpu-state-warming_up,
+.system-monitor-history-row i.system-monitor-gpu-state-partial { background: #d49a55; }
+.system-monitor-history-row i.system-monitor-process-memory-state-unavailable,
+.system-monitor-history-row i.system-monitor-cpu-state-unavailable,
+.system-monitor-history-row i.system-monitor-gpu-state-unavailable,
+.system-monitor-history-row i.system-monitor-gpu-state-unsupported_platform,
+.system-monitor-history-row i.system-monitor-gpu-state-unsupported_driver { background: #68766d; }
+.system-monitor-history-row i.system-monitor-gpu-state-no_adapters,
+.system-monitor-history-row i.system-monitor-gpu-state-software_only { background: #829287; }
