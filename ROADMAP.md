@@ -1909,3 +1909,19 @@ This is the first vertical slice of the roadmap feature, not the completed Syste
 - [x] Extend bounded recent-activity history with system-wide disk read/write samples.
 - [x] Add regression tests for elapsed-time handling, idle I/O, rate conversion, and snapshot serialization.
 - [ ] Validate counter accuracy on physical Windows, Linux, and macOS devices; OS caching, virtual volumes, RAID, and driver reporting can affect readings.
+
+
+### 2026-11-27 — Live GPU telemetry foundation (Batch #183)
+
+- [x] Add a stable live GPU snapshot with explicit overall and per-adapter status, utilisation, VRAM allocation, source, and limitations fields.
+- [x] Add a bounded, read-only Linux AMDGPU DRM sysfs collector for driver-reported GPU busy percentage and VRAM used/total bytes.
+- [x] Keep adapter labels generic; do not expose GPU names, PCI identifiers, or serial/device identifiers in live monitoring.
+- [x] Reject malformed/out-of-range utilisation and zero-capacity memory readings; clamp used VRAM to the reported total.
+- [x] Display live GPU utilisation and allocated VRAM as distinct values in the System Monitor.
+- [x] Preserve explicit unsupported-platform, unsupported-driver, no-adapter, partial, and unavailable states rather than presenting zero as a fabricated reading.
+- [ ] Add and validate Windows GPU Engine / adapter-memory collectors.
+- [ ] Add and validate macOS GPU telemetry using supported public or carefully reviewed platform interfaces.
+- [ ] Add Linux Intel and NVIDIA collectors with driver-specific semantics and tests.
+- [ ] Validate live readings on physical hardware; hosted CI cannot validate sensor accuracy.
+
+This is the first GPU telemetry slice, not universal GPU support. The initial live collector reads documented AMDGPU driver counters on Linux. Windows and macOS remain explicitly unsupported in this batch; the existing Windows DXGI inventory and process-scoped memory-budget snapshot are separate from system-wide live utilisation. See docs/HARDWARE-INTELLIGENCE.md section 72.

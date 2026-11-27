@@ -613,7 +613,29 @@ pub struct LiveSystemMetrics {
     pub system_disk_count: usize,
     pub system_disk_read_bytes_per_second: Option<u64>,
     pub system_disk_write_bytes_per_second: Option<u64>,
+    pub gpu: GpuLiveMetrics,
     pub battery: BatteryMetrics,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct GpuLiveAdapterMetrics {
+    pub label: String,
+    pub status: String,
+    pub utilization_percent: Option<f32>,
+    pub memory_used_bytes: Option<u64>,
+    pub memory_total_bytes: Option<u64>,
+    pub memory_utilization_percent: Option<f32>,
+    pub source: String,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct GpuLiveMetrics {
+    pub status: String,
+    pub adapter_count: usize,
+    pub adapters: Vec<GpuLiveAdapterMetrics>,
+    pub limitations: String,
 }
 
 #[derive(Clone, Debug, Serialize, PartialEq)]
@@ -730,11 +752,99 @@ impl SystemMonitor {
             system_disk_count,
             system_disk_read_bytes_per_second,
             system_disk_write_bytes_per_second,
+            gpu: collect_live_gpu_metrics(),
             battery: collect_battery_metrics(),
         }
     }
 }
 
+
+/// Collects only driver-published GPU telemetry. Adapter names, PCI identifiers, and
+/// serial/device identifiers are deliberately not exposed by the live monitor.
+#[cfg(target_os = "linux")]
+fn collect_live_gpu_metrics() -> GpuLiveMetrics {
+    use std::fs;
+    use std::path::Path;
+
+    let root = Path::new("/sys/class/drm");
+    let entries = match fs::read_dir(root) {
+        Ok(entries) => entries,
+        Err(_) => return GpuLiveMetrics {
+            status: "unavailable".to_owned(), adapter_count: 0, adapters: Vec::new(),
+            limitations: "Linux DRM telemetry could not be read. GPU driver permissions or kernel support may limit measurements.".to_owned(),
+        },
+    };
+
+    let mut adapters = Vec::new();
+    let mut drm_device_count = 0_usize;
+    for entry in entries.flatten() {
+        let card_name = entry.file_name();
+        let card_name = card_name.to_string_lossy();
+        let Some(number) = card_name.strip_prefix("card") else { continue };
+        if number.is_empty() || !number.chars().all(|character| character.is_ascii_digit()) { continue; }
+        let device = entry.path().join("device");
+        if !device.exists() { continue; }
+        drm_device_count = drm_device_count.saturating_add(1);
+
+        // gpu_busy_percent is a documented AMDGPU sysfs reading. Other drivers are
+        // intentionally left unsupported until their own counter semantics are validated.
+        let utilization_percent = read_gpu_percent(&device.join("gpu_busy_percent"));
+        let memory_used = read_gpu_integer(&device.join("mem_info_vram_used"));
+        let memory_total = read_gpu_integer(&device.join("mem_info_vram_total"));
+        let (memory_used_bytes, memory_utilization_percent) = match (memory_used, memory_total) {
+            (Some(used), Some(total)) => gpu_memory_usage(used, total),
+            _ => (None, None),
+        };
+        let memory_total_bytes = memory_total.filter(|total| *total > 0);
+        if utilization_percent.is_some() || memory_used_bytes.is_some() || memory_total_bytes.is_some() {
+            let has_utilization = utilization_percent.is_some();
+            adapters.push(GpuLiveAdapterMetrics {
+                label: format!("GPU {}", adapters.len() + 1),
+                status: if has_utilization { "detected" } else { "partial" }.to_owned(),
+                utilization_percent,
+                memory_used_bytes,
+                memory_total_bytes,
+                memory_utilization_percent,
+                source: "Linux AMDGPU DRM sysfs".to_owned(),
+            });
+        }
+    }
+
+    let adapter_count = adapters.len();
+    let status = if adapter_count == 0 {
+        if drm_device_count == 0 { "no_adapters" } else { "unsupported_driver" }
+    } else if adapters.iter().all(|adapter| adapter.utilization_percent.is_some()) {
+        "detected"
+    } else {
+        "partial"
+    };
+    GpuLiveMetrics {
+        status: status.to_owned(),
+        adapter_count,
+        adapters,
+        limitations: "This first live collector supports AMDGPU driver-published GPU busy and VRAM counters on Linux. Other Linux GPU drivers, Windows, and macOS remain explicitly unsupported until dedicated collectors are validated. Memory values are driver-reported VRAM allocation, not proof that memory is free for AI inference.".to_owned(),
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn read_gpu_integer(path: &std::path::Path) -> Option<u64> {
+    std::fs::read_to_string(path).ok()?.trim().parse::<u64>().ok()
+}
+
+#[cfg(target_os = "linux")]
+fn read_gpu_percent(path: &std::path::Path) -> Option<f32> {
+    parse_gpu_percent_text(&std::fs::read_to_string(path).ok()?)
+}
+
+#[cfg(not(target_os = "linux"))]
+fn collect_live_gpu_metrics() -> GpuLiveMetrics {
+    GpuLiveMetrics {
+        status: "unsupported_platform".to_owned(),
+        adapter_count: 0,
+        adapters: Vec::new(),
+        limitations: "A live GPU telemetry collector is not yet available for this operating system. Existing GPU inventory and Windows memory-budget evidence are separate point-in-time hardware information.".to_owned(),
+    }
+}
 
 /// Reads aggregate battery telemetry without exposing vendor, model, or serial identifiers.
 /// Charge is energy-weighted across installed batteries; remaining time is intentionally omitted.
@@ -810,6 +920,18 @@ fn disk_io_rates(read_bytes: u64, written_bytes: u64, elapsed: Option<Duration>)
     (rate_bytes_per_second(read_bytes, duration), rate_bytes_per_second(written_bytes, duration))
 }
 
+fn parse_gpu_percent_text(value: &str) -> Option<f32> {
+    let parsed = value.trim().parse::<u64>().ok()?;
+    if parsed > 100 { return None; }
+    Some(parsed as f32)
+}
+
+fn gpu_memory_usage(used_bytes: u64, total_bytes: u64) -> (Option<u64>, Option<f32>) {
+    if total_bytes == 0 { return (None, None); }
+    let used = used_bytes.min(total_bytes);
+    (Some(used), Some(((used as u128 * 100) / total_bytes as u128) as f32))
+}
+
 fn normalise_cpu_usage_percent(value: f32) -> f32 {
     if value.is_finite() { value.clamp(0.0, 100.0) } else { 0.0 }
 }
@@ -828,6 +950,21 @@ fn counter_rate_bytes_per_second(current: u64, previous: u64, elapsed: Duration)
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn gpu_live_percent_parser_rejects_out_of_range_and_malformed_values() {
+        assert_eq!(super::parse_gpu_percent_text("0"), Some(0.0));
+        assert_eq!(super::parse_gpu_percent_text("100\\n"), Some(100.0));
+        assert_eq!(super::parse_gpu_percent_text("101"), None);
+        assert_eq!(super::parse_gpu_percent_text("not-a-number"), None);
+    }
+
+    #[test]
+    fn gpu_memory_usage_is_clamped_and_requires_a_nonzero_total() {
+        assert_eq!(super::gpu_memory_usage(120, 100), (Some(100), Some(100.0)));
+        assert_eq!(super::gpu_memory_usage(25, 100), (Some(25), Some(25.0)));
+        assert_eq!(super::gpu_memory_usage(25, 0), (None, None));
+    }
+
     #[test]
     fn system_disk_rates_require_an_elapsed_sample_and_handle_idle_io() {
         assert_eq!(super::disk_io_rates(1500, 3000, None), (None, None));

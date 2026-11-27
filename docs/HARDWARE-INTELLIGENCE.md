@@ -712,3 +712,12 @@ No battery produces an explicit `no_battery` / `not_present` result; query failu
 The Live System Monitor now refreshes OS-reported disk I/O counters through sysinfo's `Disks` API and aggregates read/write throughput across the detected storage devices. The aggregate deliberately does not expose mount paths, volume labels, device names, or serial identifiers. It is a separate metric from the midSunday process's own I/O counters, which remain visible independently.
 
 The first sample is a warm-up; an idle system can correctly report zero bytes per second, while an empty device list is reported separately. Values reflect the operating system's disk/volume accounting and may include activity from all applications. Virtual volumes, RAID, filesystem caches, drivers, and platform-specific accounting can change what is counted; this is not guaranteed to represent raw physical-device traffic. Sampling remains opt-in, local, read-only, bounded, and paused when the Settings monitor is not visible. Physical-device validation remains necessary.
+
+
+## 72. Live GPU telemetry foundation (Batch #183)
+
+The opt-in System Monitor now has a dedicated per-adapter live GPU schema. The first native collector targets Linux systems whose AMDGPU DRM driver exposes `gpu_busy_percent`, `mem_info_vram_used`, and `mem_info_vram_total` under `/sys/class/drm/card*/device`. Utilisation is validated to the 0–100 range. VRAM allocation is clamped to the reported capacity, and a zero or missing capacity is not converted into a percentage.
+
+The collector uses generic labels such as GPU 1 and does not expose adapter names, PCI identifiers, serial numbers, or other device identifiers in live metrics. It reads only a small fixed set of driver-published files during the existing opt-in sample cycle. No process enumeration, privileged helper, shell command, network access, or persistent history is introduced.
+
+GPU utilisation and VRAM allocation are separate readings. Allocated VRAM is not free memory, an inference-fit guarantee, or proof that the local model runtime can offload to that adapter. Unsupported drivers, missing sysfs data, no adapters, and unsupported operating systems have explicit states. This first collector does not yet support Linux Intel/NVIDIA, Windows, or macOS live GPU telemetry; Windows DXGI inventory and process-specific reservation-budget snapshots remain distinct evidence. Further native collectors and physical-device validation are required.

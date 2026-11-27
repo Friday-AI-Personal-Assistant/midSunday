@@ -399,3 +399,7 @@ h1 { margin: 0; color: #eef5ef; font-size: clamp(25px, 3vw, 34px); font-weight: 
 @media (max-width: 560px) { .system-monitor-heading { align-items: flex-start; flex-direction: column; } .system-monitor-grid { grid-template-columns: 1fr; } .system-monitor-history > div:first-child { flex-direction: column; gap: 3px; } }
 
 .system-monitor-history-row > small { white-space: nowrap; }
+
+
+/* Live GPU cards use the same compact resource-meter treatment as CPU and RAM. */
+.system-monitor-card .gpu-source { color: #829287; font-size: 8px; line-height: 1.5; overflow-wrap: anywhere; }
