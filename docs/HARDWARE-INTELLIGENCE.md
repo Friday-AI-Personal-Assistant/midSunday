@@ -771,3 +771,12 @@ The history rows use the current operating-system-reported logical-processor cou
 Each CPU history point now records the logical-processor count reported with that sample. When the current reported count differs from a historical point, per-processor history for that point is rendered as a gap rather than mapping an old ordinal (for example C4) onto a potentially different processor in the changed topology. Samples with matching counts retain their readings, including genuine 0% idle values; missing readings remain gaps.
 
 The monitor deliberately uses generic ordinal labels, not hardware IDs. An unchanged count does not prove that the operating system's processor ordering is stable after every hot-plug or topology event, because the cross-platform metrics interface does not provide a portable persistent identity for each logical processor. The display therefore remains an ordinal view, not a physical-core identity map. Sampling remains opt-in, local, bounded, and read-only. Physical-device validation is still required for hot-plug and topology-change behavior.
+
+
+## 79. System Monitor history controls and sampling integrity (Batch #193)
+
+Each retained System Monitor history point now carries the capture timestamp supplied by the live operating-system snapshot. The Recent activity heading calculates and displays the elapsed time between the oldest and newest retained samples, rather than describing 36 samples as a fixed 54-second window even when the collector or operating system responds more slowly.
+
+The polling loop now allows only one live-metrics request at a time. If a sample takes longer than the nominal 1.5-second interval, subsequent timer ticks are skipped until that request settles; this avoids piling up concurrent collector requests and prevents out-of-order samples from distorting the bounded timeline. A completed request still releases the guard after success or failure.
+
+A Clear history control removes only the temporary 36-point chart history. It does not stop sampling, erase the current live metric cards, or affect hardware inventory. The history remains in memory only and is discarded when monitoring stops or the app session ends. No samples are persisted or transmitted. Physical-device testing is still required to validate actual collector latency and timing behavior across supported operating systems.

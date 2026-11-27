@@ -504,3 +504,28 @@ h1 { margin: 0; color: #eef5ef; font-size: clamp(25px, 3vw, 34px); font-weight: 
 
 /* Per-logical-processor history uses compact labels without implying physical-core identity. */
 .system-monitor-core-history { grid-template-columns: 32px minmax(0, 1fr); }
+
+
+/* System Monitor history controls and accurate session-window labels. */
+.system-monitor-history-heading {
+  align-items: center !important;
+}
+.system-monitor-history-heading > div {
+  display: grid;
+  gap: 3px;
+}
+.system-monitor-history-heading .secondary-action {
+  flex: 0 0 auto;
+  padding: 6px 9px;
+  font-size: 9px;
+}
+.system-monitor-history-heading .secondary-action:disabled {
+  opacity: .45;
+  cursor: not-allowed;
+}
+@media (max-width: 560px) {
+  .system-monitor-history-heading {
+    align-items: flex-start !important;
+    flex-direction: row !important;
+  }
+}

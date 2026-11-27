@@ -1997,3 +1997,15 @@ See docs/HARDWARE-INTELLIGENCE.md section 77.
 - [ ] Validate CPU topology changes and hot-plug behavior on physical devices; the OS-provided logical-processor ordering is not a persistent hardware identity.
 
 See docs/HARDWARE-INTELLIGENCE.md section 78.
+
+
+### 2026-11-27 — System Monitor history controls and sampling integrity (Batch #193)
+
+- [x] Timestamp each in-memory history point using the operating-system snapshot's capture time.
+- [x] Show the actual elapsed span represented by the retained history instead of assuming every poll completed exactly on schedule.
+- [x] Prevent overlapping live-metrics requests when a platform collector takes longer than the nominal 1.5-second polling interval.
+- [x] Add a user-controlled Clear history action that clears only the temporary chart history; it does not stop monitoring or alter current metric cards.
+- [x] Keep the history bounded to 36 points and local to the active app session; do not persist or transmit samples.
+- [ ] Validate timing, slow collector behavior, and history controls on physical Windows, Linux, and macOS devices.
+
+See docs/HARDWARE-INTELLIGENCE.md section 79.

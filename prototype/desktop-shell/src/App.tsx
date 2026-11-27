@@ -202,7 +202,7 @@ export default function App() {
   const [monitorRunning, setMonitorRunning] = useState(false);
   const [liveMetrics, setLiveMetrics] = useState<LiveSystemMetrics | null>(null);
   const [monitorError, setMonitorError] = useState("");
-  const [monitorHistory, setMonitorHistory] = useState<{ cpu: number | null; ram: number | null; download: number | null; upload: number | null; diskRead: number | null; diskWrite: number | null; gpu: Record<string, number | null>; cores: (number | null)[]; coreCount: number }[]>([]);
+  const [monitorHistory, setMonitorHistory] = useState<{ capturedAtUnixMillis: number; cpu: number | null; ram: number | null; download: number | null; upload: number | null; diskRead: number | null; diskWrite: number | null; gpu: Record<string, number | null>; cores: (number | null)[]; coreCount: number }[]>([]);
   const [executablePath, setExecutablePath] = useState("");
   const [modelPath, setModelPath] = useState("");
   const [contextTokens, setContextTokens] = useState("2048");
@@ -231,7 +231,10 @@ export default function App() {
   useEffect(() => {
     if (!monitorRunning || section !== "settings") return;
     let active = true;
+    let pollInFlight = false;
     const poll = () => {
+      if (pollInFlight) return;
+      pollInFlight = true;
       invoke<LiveSystemMetrics>("get_live_system_metrics")
         .then((snapshot) => {
           if (!active) return;
@@ -240,6 +243,7 @@ export default function App() {
           const clampPercent = (value: number | null) => value === null || !Number.isFinite(value) ? null : Math.max(0, Math.min(100, value));
           const ram = snapshot.totalMemoryBytes > 0 ? clampPercent((snapshot.usedMemoryBytes / snapshot.totalMemoryBytes) * 100) : null;
           setMonitorHistory((previous) => [...previous, {
+            capturedAtUnixMillis: snapshot.capturedAtUnixMillis,
             cpu: clampPercent(snapshot.cpuUsagePercent),
             ram,
             download: snapshot.downloadBytesPerSecond,
@@ -251,7 +255,8 @@ export default function App() {
             coreCount: snapshot.cpuCoreUsagePercent.length,
           }].slice(-36));
         })
-        .catch(() => { if (active) setMonitorError("Live measurements are temporarily unavailable."); });
+        .catch(() => { if (active) setMonitorError("Live measurements are temporarily unavailable."); })
+        .finally(() => { pollInFlight = false; });
     };
     poll();
     const timer = window.setInterval(poll, 1500);
@@ -1483,7 +1488,7 @@ export default function App() {
                     </div>) : <div className="system-monitor-card"><small>GPU · live monitoring</small><strong>{!liveMetrics ? "Collecting…" : liveMetrics.gpu.status === "unsupported_platform" ? "Not supported on this OS yet" : liveMetrics.gpu.status === "unsupported_driver" ? "Driver telemetry unsupported" : liveMetrics.gpu.status === "no_adapters" ? "No GPU adapter detected" : "GPU telemetry unavailable"}</strong><span>{liveMetrics?.gpu.limitations ?? "Waiting for the first GPU sample."}</span></div>}
                     <div className="system-monitor-card"><small>Battery · system-wide</small><strong>{liveMetrics?.battery.chargePercent === null || !liveMetrics ? (liveMetrics?.battery.status === "no_battery" ? "No battery detected" : liveMetrics?.battery.status === "unavailable" ? "Unavailable" : "Collecting…") : liveMetrics.battery.chargePercent.toFixed(1) + "%"}</strong>{liveMetrics?.battery.chargePercent !== null && liveMetrics && <div className="system-monitor-track" role="meter" aria-label="Aggregate battery charge" aria-valuemin={0} aria-valuemax={100} aria-valuenow={liveMetrics.battery.chargePercent}><i style={{ width: liveMetrics.battery.chargePercent + "%" }} /></div>}<span>{liveMetrics?.battery.state === "not_present" ? "This device does not report a battery" : liveMetrics?.battery.state === "unavailable" ? "Battery state unavailable" : (liveMetrics?.battery.state ?? "Waiting for battery data") + (liveMetrics?.battery.batteryCount ? " · " + liveMetrics.battery.batteryCount + " battery" + (liveMetrics.battery.batteryCount === 1 ? "" : "ies") : "")}</span></div>
                   </div>
-                  <div className="system-monitor-history"><div><strong>Recent activity</strong><span>Last 36 samples · approximately 54 seconds</span></div>
+                  <div className="system-monitor-history"><div className="system-monitor-history-heading"><div><strong>Recent activity</strong><span>{monitorHistory.length === 0 ? "Waiting for samples" : monitorHistory.length + " samples · " + (monitorHistory.length > 1 ? Math.max(0, (monitorHistory[monitorHistory.length - 1].capturedAtUnixMillis - monitorHistory[0].capturedAtUnixMillis) / 1000).toFixed(1) + " seconds" : "just started")}</span></div><button className="secondary-action" type="button" onClick={() => setMonitorHistory([])} disabled={monitorHistory.length === 0}>Clear history</button></div>
                     <div className="system-monitor-history-row"><small>CPU</small><div>{monitorHistory.map((point, index) => point.cpu === null ? <i key={"cpu-" + index} className="system-monitor-history-gap" title="No CPU reading" /> : <i key={"cpu-" + index} title={point.cpu.toFixed(1) + "%"} style={{ height: Math.max(2, point.cpu) + "%" }} />)}</div></div>
                     {Array.from({ length: liveMetrics?.cpuCoreUsagePercent.length ?? 0 }, (_, coreIndex) => {
                       const currentCoreCount = liveMetrics?.cpuCoreUsagePercent.length ?? 0;
@@ -1510,7 +1515,7 @@ export default function App() {
                     })}
                   </div>
                   <p className="settings-footnote">CPU usage is calculated from successive operating-system samples. Network rates aggregate byte counters across interfaces without collecting or displaying interface names. System-wide disk rates aggregate OS-reported physical/volume counters and may include activity from all applications; virtual volumes, RAID, caching, and platform-specific accounting can affect readings. Storage capacity is shown per volume with generic labels only; mount paths and device identifiers are not exposed in the live monitor. The separate midSunday process disk rates describe only this app. System RAM and midSunday's own process memory remain separate. GPU telemetry is driver-dependent: AMDGPU DRM counters on Linux and Windows PDH GPU Engine / Adapter Memory counters on Windows. Windows utilisation is the busiest individual engine per adapter, not a universal whole-GPU percentage. Battery charge and state are aggregated across detected batteries where the operating system provides readings; device identifiers and serial numbers are not collected.</p>
-                  {liveMetrics && <p className="settings-footnote">Last sample: {new Date(liveMetrics.capturedAtUnixMillis).toLocaleTimeString()}</p>}
+                  {liveMetrics && <p className="settings-footnote">Last sample: {new Date(liveMetrics.capturedAtUnixMillis).toLocaleTimeString()} · History is temporary and stays in memory; clearing it does not stop monitoring or change current readings.</p>}
                 </>}
               </div>
               <div className="hardware-actions"><button className="secondary-action" type="button" onClick={() => void refreshHardwareSnapshot()} disabled={hardwareBusy}>{hardwareBusy ? "Checking…" : "Refresh hardware information"}</button><span>{hardwareSnapshot ? "Last checked " + new Date(hardwareSnapshot.capturedAtUnixSeconds * 1000).toLocaleString() : "Not checked yet"}</span></div>
