@@ -1951,3 +1951,15 @@ Windows readings are driver/build-dependent. The displayed percentage is the bus
 - [ ] Validate reported capacity and volume enumeration on physical Windows, Linux, and macOS devices; virtual volumes, network mounts, permissions, and filesystem semantics may differ.
 
 See docs/HARDWARE-INTELLIGENCE.md section 74.
+
+
+### 2026-11-27 — GPU monitor clarity and per-adapter history (Batch #189)
+
+- [x] Show dedicated-memory allocation as a separate visual meter only when both used and total capacity are available.
+- [x] Keep used-byte readings visible when total dedicated-memory capacity is unavailable; do not invent a percentage.
+- [x] Add accessible, labelled meter semantics to supported GPU utilisation and dedicated-memory readings.
+- [x] Record bounded recent utilisation history independently for each generic GPU label; preserve missing samples as gaps instead of treating them as zero.
+- [x] Keep adapter labels generic and avoid exposing hardware identifiers.
+- [ ] Validate live GPU utilisation and memory readings against physical devices and driver tools on supported platforms; history inherits each collector's platform-specific measurement semantics.
+
+See docs/HARDWARE-INTELLIGENCE.md section 75.

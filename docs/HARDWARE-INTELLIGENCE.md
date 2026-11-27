@@ -739,3 +739,12 @@ The opt-in Live System Monitor now reports each enumerated storage volume's tota
 Capacity is calculated from the operating system's reported total and available space. Zero-capacity or otherwise unknown readings do not produce a fabricated percentage. Existing conservative free-space classifications are reused for low/critical headroom hints. This is a per-volume capacity view, distinct from aggregate system-wide disk throughput and midSunday's own process-only disk I/O. It does not identify which volume contains a model or guarantee that a model download, conversion, or runtime workload will fit.
 
 Collection remains local, read-only, opt-in, and active only while the monitor is running in Settings. The live payload contains generic labels and byte counts only. Hosted CI validates compilation, serialization, and calculation behavior; physical-device validation is still required across Windows, Linux, and macOS, especially for network mounts, virtual volumes, permissions, and filesystem-specific reporting.
+
+
+## 75. GPU monitor clarity and per-adapter history (Batch #189)
+
+The Live System Monitor presents GPU utilisation and dedicated-memory allocation as separate measurements. A dedicated-memory percentage meter appears only when the collector provides both used bytes and a reliable total capacity. If used bytes exist but total capacity does not, the UI shows the byte count and explicitly says the total is unavailable; it never fabricates a percentage. GPU utilisation and memory-allocation meters expose accessible labels and bounded 0–100 values.
+
+Recent GPU activity is retained separately for each generic adapter label in the same bounded 36-sample, approximately 54-second local history used by the monitor. A missing reading is represented as a visual gap, not a zero-utilisation sample. Adapter labels remain generic and no vendor, model, PCI, LUID, or serial identifiers are added to the UI or history.
+
+The history is observational only. It inherits each platform collector's meaning: for example, Windows reports the busiest individual GPU engine rather than universal whole-GPU utilisation. Cross-platform values should not be compared as if their counter semantics were identical. Sampling remains opt-in, local, read-only, and paused when the user leaves the Settings view. Hosted CI checks compilation and frontend integration, not physical sensor accuracy.
