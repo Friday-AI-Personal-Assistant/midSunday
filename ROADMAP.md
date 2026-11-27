@@ -2210,3 +2210,15 @@ See docs/HARDWARE-INTELLIGENCE.md section 96.
 - [ ] Validate process virtual-memory counter semantics, CSV output, and narrow-window layout on physical Windows, Linux, and macOS devices.
 
 See docs/HARDWARE-INTELLIGENCE.md section 97.
+
+### 2026-11-27 — Battery charge history (Batch #218)
+
+- [x] Capture aggregate OS-reported battery charge percentage in the existing opt-in System Monitor history.
+- [x] Add a dedicated BAT timeline row with timestamps and charge tooltips.
+- [x] Add latest, average, peak, and sample-count battery statistics to the Window summary.
+- [x] Include Battery charge (%) in explicit local CSV exports.
+- [x] Clamp valid percentages to 0–100 and preserve missing/unavailable values as gaps and blank CSV cells.
+- [x] Reuse the existing OS snapshot, 1.5-second polling, 36-sample memory bound, and local-only export; collect no battery identifiers or serial numbers.
+- [ ] Validate battery-equipped laptops and systems without batteries on physical Windows, Linux, and macOS devices.
+
+See docs/HARDWARE-INTELLIGENCE.md section 98.
