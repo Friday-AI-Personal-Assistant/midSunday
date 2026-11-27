@@ -649,6 +649,9 @@ pub struct GpuLiveAdapterMetrics {
     pub memory_used_bytes: Option<u64>,
     pub memory_total_bytes: Option<u64>,
     pub memory_utilization_percent: Option<f32>,
+    /// "dedicated_vram" for hardware-reported VRAM; "metal_working_set" for Apple's
+    /// process-visible Metal allocation compared with its recommended working set.
+    pub memory_kind: String,
     pub source: String,
 }
 
@@ -847,6 +850,7 @@ fn collect_live_gpu_metrics() -> GpuLiveMetrics {
                 memory_used_bytes,
                 memory_total_bytes,
                 memory_utilization_percent,
+                memory_kind: "dedicated_vram".to_owned(),
                 source: if is_intel { "Linux Intel DRM GT busy counters" } else { "Linux AMDGPU DRM sysfs" }.to_owned(),
             });
         }
@@ -1114,6 +1118,7 @@ fn assemble_windows_gpu_metrics(engine_values: Vec<(String, f64)>, memory_values
                 memory_used_bytes: bounded_used,
                 memory_total_bytes,
                 memory_utilization_percent,
+                memory_kind: "dedicated_vram".to_owned(),
                 source: "Windows PDH GPU Engine / Adapter Memory".to_owned(),
             });
         }
@@ -1161,7 +1166,47 @@ fn gpu_adapter_key_from_instance(instance: &str) -> Option<String> {
     Some(tail[..end].to_ascii_lowercase())
 }
 
-#[cfg(not(any(target_os = "linux", target_os = "windows")))]
+/// Reads process-visible Metal resource allocation on macOS. This is not a
+/// whole-system GPU memory measurement and does not provide GPU utilisation.
+#[cfg(target_os = "macos")]
+fn collect_live_gpu_metrics() -> GpuLiveMetrics {
+    let devices = metal::Device::all();
+    if devices.is_empty() {
+        return GpuLiveMetrics {
+            status: "unsupported_driver".to_owned(),
+            adapter_count: 0,
+            adapters: Vec::new(),
+            limitations: "Metal did not expose a GPU device to midSunday. No GPU utilisation or memory values are fabricated.".to_owned(),
+        };
+    }
+
+    let mut adapters = Vec::with_capacity(devices.len());
+    for device in devices {
+        let allocated = device.current_allocated_size() as u64;
+        let recommended = device.recommended_max_working_set_size();
+        let (memory_used_bytes, memory_utilization_percent) = gpu_working_set_usage(allocated, recommended);
+        let memory_total_bytes = (recommended > 0).then_some(recommended);
+        adapters.push(GpuLiveAdapterMetrics {
+            label: format!("GPU {}", adapters.len() + 1),
+            status: "partial".to_owned(),
+            utilization_percent: None,
+            memory_used_bytes,
+            memory_total_bytes,
+            memory_utilization_percent,
+            memory_kind: "metal_working_set".to_owned(),
+            source: "Apple Metal currentAllocatedSize / recommendedMaxWorkingSetSize".to_owned(),
+        });
+    }
+
+    GpuLiveMetrics {
+        status: "partial".to_owned(),
+        adapter_count: adapters.len(),
+        adapters,
+        limitations: "macOS Metal reports resource allocation visible to midSunday and compares it with Apple's recommended working-set size. This is not dedicated VRAM capacity, whole-system GPU memory usage, free memory, or GPU utilisation; unified-memory Macs share physical memory between CPU and GPU. Device names and registry identifiers are not collected.".to_owned(),
+    }
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "windows", target_os = "macos")))]
 fn collect_live_gpu_metrics() -> GpuLiveMetrics {
     GpuLiveMetrics {
         status: "unsupported_platform".to_owned(),
@@ -1264,6 +1309,15 @@ fn gpu_memory_usage(used_bytes: u64, total_bytes: u64) -> (Option<u64>, Option<f
     (Some(used), Some(((used as u128 * 100) / total_bytes as u128) as f32))
 }
 
+/// Preserves Apple's reported allocation even when it exceeds the recommended
+/// working-set threshold; the visual percentage is capped at 100%.
+fn gpu_working_set_usage(allocated_bytes: u64, recommended_bytes: u64) -> (Option<u64>, Option<f32>) {
+    if recommended_bytes == 0 { return (Some(allocated_bytes), None); }
+    let percent = ((allocated_bytes as f64 / recommended_bytes as f64) * 100.0)
+        .clamp(0.0, 100.0) as f32;
+    (Some(allocated_bytes), Some(percent))
+}
+
 fn normalise_cpu_usage_percent(value: f32) -> f32 {
     if value.is_finite() { value.clamp(0.0, 100.0) } else { 0.0 }
 }
@@ -1323,6 +1377,14 @@ mod tests {
         assert_eq!(super::gpu_memory_usage(120, 100), (Some(100), Some(100.0)));
         assert_eq!(super::gpu_memory_usage(25, 100), (Some(25), Some(25.0)));
         assert_eq!(super::gpu_memory_usage(25, 0), (None, None));
+    }
+
+    #[test]
+    fn metal_working_set_preserves_actual_allocation_and_caps_only_the_visual_ratio() {
+        assert_eq!(super::gpu_working_set_usage(25, 100), (Some(25), Some(25.0)));
+        assert_eq!(super::gpu_working_set_usage(100, 100), (Some(100), Some(100.0)));
+        assert_eq!(super::gpu_working_set_usage(150, 100), (Some(150), Some(100.0)));
+        assert_eq!(super::gpu_working_set_usage(25, 0), (Some(25), None));
     }
 
     #[test]

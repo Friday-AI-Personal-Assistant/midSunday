@@ -2043,3 +2043,15 @@ See docs/HARDWARE-INTELLIGENCE.md section 81.
 - [x] Reuse the existing 36-sample, timestamped, in-memory history and existing opt-in polling cycle; no extra sampling or persistence.
 - [x] Label Linux Intel engine readings as the busiest sampled engine, Windows PDH readings as the busiest/peak engine, and AMDGPU's driver value as GPU busy.
 - [ ] Validate adapter reordering/replacement and memory reporting on physical Windows, Linux, and macOS devices. macOS live GPU telemetry is still unsupported.
+
+
+### 2026-11-27 — macOS Metal resource-allocation telemetry (Batch #203)
+
+- [x] Add a macOS-only Metal collector using Apple's current allocated resource size and recommended working-set threshold.
+- [x] Show Metal allocation separately from dedicated VRAM, with explicit labels and a distinct working-set history row.
+- [x] Preserve actual allocation bytes if they exceed the recommended threshold; cap only the visual ratio.
+- [x] Keep GPU utilisation unavailable on macOS; do not infer whole-system activity from resource allocation.
+- [x] Avoid GPU workloads, extra polling, device identifiers, persistence, and network transfer.
+- [ ] Validate readings on physical Apple silicon and Intel Macs, including multi-GPU configurations and OS versions.
+
+See docs/HARDWARE-INTELLIGENCE.md section 83.
