@@ -2055,3 +2055,16 @@ See docs/HARDWARE-INTELLIGENCE.md section 81.
 - [ ] Validate readings on physical Apple silicon and Intel Macs, including multi-GPU configurations and OS versions.
 
 See docs/HARDWARE-INTELLIGENCE.md section 83.
+
+
+### 2026-11-27 — Linux NVIDIA NVML live GPU telemetry (Batch #204)
+
+- [x] Add an optional Linux-only NVML wrapper that dynamically loads the NVIDIA driver-provided library at runtime; do not bundle NVML, install drivers, invoke nvidia-smi, or require CUDA Toolkit.
+- [x] Cache NVML initialisation once per process and bound enumeration to 16 devices.
+- [x] Read device-wide NVIDIA GPU utilisation and framebuffer used/total memory where supported.
+- [x] Keep generic labels and avoid GPU names, UUIDs, PCI IDs, serials, and process lists.
+- [x] Preserve unsupported, unavailable, partial, and out-of-range states without fabricating zero readings.
+- [x] Reuse existing opt-in polling and bounded local history.
+- [ ] Validate telemetry on physical NVIDIA GPUs across driver branches, GPU generations, hybrid systems, and permission configurations.
+
+See docs/HARDWARE-INTELLIGENCE.md section 84.

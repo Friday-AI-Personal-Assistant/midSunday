@@ -813,8 +813,9 @@ fn collect_live_gpu_metrics() -> GpuLiveMetrics {
         },
     };
 
-    let mut adapters = Vec::new();
+    let mut adapters = collect_linux_nvidia_metrics();
     let mut drm_device_count = 0_usize;
+    let mut nvidia_drm_count = 0_usize;
     for entry in entries.flatten() {
         let card_name = entry.file_name();
         let card_name = card_name.to_string_lossy();
@@ -824,11 +825,18 @@ fn collect_live_gpu_metrics() -> GpuLiveMetrics {
         if !device.exists() { continue; }
         drm_device_count = drm_device_count.saturating_add(1);
 
+        let vendor = read_gpu_integer(&device.join("vendor"));
+        if vendor == Some(0x10de) {
+            nvidia_drm_count = nvidia_drm_count.saturating_add(1);
+            continue;
+        }
+
         // AMDGPU exposes a documented instantaneous busy percentage. Intel DRM
         // GT exposes cumulative engine busy nanoseconds; sample twice and calculate
         // the busiest individual engine without summing concurrent engines.
-        let vendor = read_gpu_integer(&device.join("vendor"));
         let is_intel = vendor == Some(0x8086);
+        let is_amd = vendor == Some(0x1002);
+        if !is_intel && !is_amd { continue; }
         let utilization_percent = if is_intel {
             read_intel_gpu_utilization(&device)
         } else {
@@ -857,19 +865,65 @@ fn collect_live_gpu_metrics() -> GpuLiveMetrics {
     }
 
     let adapter_count = adapters.len();
+    let nvidia_unavailable = nvidia_drm_count > 0 && !LINUX_NVML.get().is_some_and(|value| value.is_some());
     let status = if adapter_count == 0 {
-        if drm_device_count == 0 { "no_adapters" } else { "unsupported_driver" }
-    } else if adapters.iter().all(|adapter| adapter.utilization_percent.is_some()) {
-        "detected"
-    } else {
+        if nvidia_unavailable { "unsupported_driver" }
+        else if drm_device_count == 0 { "no_adapters" }
+        else { "unsupported_driver" }
+    } else if nvidia_unavailable || adapters.iter().any(|adapter| adapter.utilization_percent.is_none()) {
         "partial"
+    } else {
+        "detected"
     };
     GpuLiveMetrics {
         status: status.to_owned(),
         adapter_count,
         adapters,
-        limitations: "Linux live GPU telemetry supports AMDGPU driver-published busy/VRAM counters and Intel DRM GT cumulative engine-busy counters where the kernel driver exposes them. Intel utilisation is the busiest sampled engine, not a sum or universal whole-GPU measure. NVIDIA and other Linux drivers remain explicitly unsupported until a separately validated collector is available. Memory values are driver-reported allocations, not proof that memory is free for AI inference.".to_owned(),
+        limitations: "Linux NVIDIA telemetry uses the NVIDIA Management Library (NVML) when its driver-provided shared library is available. NVML reports device-wide GPU utilisation and framebuffer memory; unsupported queries remain unavailable. AMDGPU uses driver-published busy/VRAM counters. Intel DRM GT reports the busiest sampled engine, not a sum or universal whole-GPU measure. No process lists, GPU names, PCI identifiers, or serials are collected. Driver-reported memory allocation is not proof that memory is free for AI inference.".to_owned(),
     }
+}
+
+#[cfg(target_os = "linux")]
+static LINUX_NVML: std::sync::OnceLock<Option<nvml_wrapper::Nvml>> = std::sync::OnceLock::new();
+
+#[cfg(target_os = "linux")]
+fn collect_linux_nvidia_metrics() -> Vec<GpuLiveAdapterMetrics> {
+    let nvml = LINUX_NVML.get_or_init(|| nvml_wrapper::Nvml::init().ok());
+    let Some(nvml) = nvml.as_ref() else { return Vec::new(); };
+    let Ok(device_count) = nvml.device_count() else { return Vec::new(); };
+    let mut adapters = Vec::new();
+    for index in 0..device_count.min(16) {
+        let Ok(device) = nvml.device_by_index(index) else { continue; };
+        let utilization_percent = device.utilization_rates().ok()
+            .and_then(|rates| nvidia_gpu_percent(rates.gpu));
+        let memory = device.memory_info().ok();
+        let (memory_used_bytes, memory_total_bytes, memory_utilization_percent) = match memory {
+            Some(info) if info.total > 0 => {
+                let (used, percent) = gpu_memory_usage(info.used, info.total);
+                (used, Some(info.total), percent)
+            }
+            _ => (None, None, None),
+        };
+        if utilization_percent.is_some() || memory_used_bytes.is_some() || memory_total_bytes.is_some() {
+            let complete = utilization_percent.is_some() && memory_used_bytes.is_some();
+            adapters.push(GpuLiveAdapterMetrics {
+                label: format!("GPU {}", adapters.len() + 1),
+                status: if complete { "detected" } else { "partial" }.to_owned(),
+                utilization_percent,
+                memory_used_bytes,
+                memory_total_bytes,
+                memory_utilization_percent,
+                memory_kind: "dedicated_vram".to_owned(),
+                source: "Linux NVIDIA NVML device counters".to_owned(),
+            });
+        }
+    }
+    adapters
+}
+
+#[cfg(target_os = "linux")]
+fn nvidia_gpu_percent(value: u32) -> Option<f32> {
+    if value <= 100 { Some(value as f32) } else { None }
 }
 
 #[cfg(target_os = "linux")]
@@ -1809,6 +1863,15 @@ mod gpu_tests {
         assert_eq!(assess_gpu_inventory(&source_partial).status, "partial");
         assert_eq!(assess_gpu_memory_headroom(&source_partial).status, "partial");
         assert_eq!(assess_gpu_memory_headroom(&GpuDetection { status: "unsupported_platform".to_owned(), adapters: vec![] }).status, "unsupported_platform");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn nvidia_gpu_utilization_rejects_out_of_range_values() {
+        assert_eq!(nvidia_gpu_percent(0), Some(0.0));
+        assert_eq!(nvidia_gpu_percent(73), Some(73.0));
+        assert_eq!(nvidia_gpu_percent(100), Some(100.0));
+        assert_eq!(nvidia_gpu_percent(101), None);
     }
 
     #[test]
