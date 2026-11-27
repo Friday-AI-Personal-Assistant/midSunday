@@ -1771,14 +1771,14 @@ export default function App() {
                       const peak = Math.max(1, ...values.filter((value): value is number => value !== null));
                       const label = rank === 0 ? "VOL 1" : rank === 1 ? "VOL 2" : "VOL " + (rank + 1);
                       const description = rank === 0 ? "largest-capacity volume" : "capacity rank " + (rank + 1) + " volume";
-                      return <div className="system-monitor-history-row system-monitor-storage-history" key={"storage-rank-" + rank}>
+                      return <><div className="system-monitor-history-row system-monitor-storage-history" key={"storage-rank-" + rank}>
                         <small>{label}</small>
                         <div role="img" aria-label={description + " used-capacity history, ranked by total capacity at each sample; gaps indicate a changed reported volume count or unavailable reading"}>{values.map((value, index) => value === null ? <i key={"storage-" + rank + "-" + index} className="system-monitor-history-gap" title={monitorHistorySampleTitle(index, "No matching storage-capacity reading")} style={{ marginLeft: monitorHistoryGapBefore(index) }} /> : <i key={"storage-" + rank + "-" + index} title={monitorHistorySampleTitle(index, value.toFixed(1) + "% used")} style={{ height: Math.max(2, value / peak * 100) + "%", marginLeft: monitorHistoryGapBefore(index) }} />)}</div>
                       </div>
                       <div className="system-monitor-history-row system-monitor-battery-state-row system-monitor-storage-state-row" key={"storage-state-" + rank}><small>{label} ST</small><div role="img" aria-label={description + " storage headroom state history, oldest to newest"}>{monitorHistory.map((point, index) => {
                         const state = point.storageVolumeCount === currentCount ? point.storageVolumes[rank]?.status ?? null : null;
                         return state === null ? <i key={"storage-state-" + rank + "-" + index} className="system-monitor-history-gap" title={monitorHistorySampleTitle(index, "No matching storage state")} /> : <i key={"storage-state-" + rank + "-" + index} className={"system-monitor-battery-state system-monitor-storage-state-" + state} title={monitorHistorySampleTitle(index, state + " storage headroom")} />;
-                      })}</div></div>;
+                      })}</div></div></>;
                     })}
                     {monitorHistory.some((point) => point.storageVolumeCount !== (monitorHistory[monitorHistory.length - 1]?.storageVolumeCount ?? 0)) && <p className="system-monitor-timeline-note">Storage volume count changed during this history. Capacity-rank comparisons and summary statistics use only samples with the current volume count.</p>}
                     {([
