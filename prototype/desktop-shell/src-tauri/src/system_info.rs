@@ -613,8 +613,31 @@ pub struct LiveSystemMetrics {
     pub system_disk_count: usize,
     pub system_disk_read_bytes_per_second: Option<u64>,
     pub system_disk_write_bytes_per_second: Option<u64>,
+    pub storage_status: String,
+    pub storage_volumes: Vec<LiveStorageVolume>,
     pub gpu: GpuLiveMetrics,
     pub battery: BatteryMetrics,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct LiveStorageVolume {
+    pub label: String,
+    pub total_bytes: u64,
+    pub available_bytes: u64,
+    pub used_percent: Option<u8>,
+    pub status: String,
+}
+
+fn live_storage_volume(label: String, total_bytes: u64, available_bytes: u64) -> LiveStorageVolume {
+    let available_bytes = available_bytes.min(total_bytes);
+    let used_percent = if total_bytes == 0 {
+        None
+    } else {
+        Some((100_u128.saturating_sub(available_bytes as u128 * 100 / total_bytes as u128)) as u8)
+    };
+    let (_, status) = assess_storage_status(total_bytes, available_bytes);
+    LiveStorageVolume { label, total_bytes, available_bytes, used_percent, status }
 }
 
 #[derive(Clone, Debug, Serialize, PartialEq)]
@@ -701,6 +724,16 @@ impl SystemMonitor {
         });
         let (system_disk_read_bytes_per_second, system_disk_write_bytes_per_second) = disk_io_rates(disk_io_totals.0, disk_io_totals.1, elapsed);
         let system_disk_status = if system_disk_count == 0 { "no_disks" } else if system_disk_read_bytes_per_second.is_some() && system_disk_write_bytes_per_second.is_some() { "detected" } else { "warming_up" }.to_owned();
+        // Capacity is presented per volume with generic labels only. Mount paths and
+        // filesystem/device identifiers stay out of the live-monitor payload.
+        let storage_volumes = state.disks.iter().enumerate()
+            .map(|(index, disk)| live_storage_volume(
+                format!("Volume {}", index + 1),
+                disk.total_space(),
+                disk.available_space(),
+            ))
+            .collect::<Vec<_>>();
+        let storage_status = if storage_volumes.is_empty() { "no_volumes" } else if storage_volumes.iter().all(|volume| volume.status == "unknown") { "unavailable" } else { "detected" }.to_owned();
         let process_result = match get_current_pid() {
             Ok(pid) => {
                 state.system.refresh_processes_specifics(
@@ -752,6 +785,8 @@ impl SystemMonitor {
             system_disk_count,
             system_disk_read_bytes_per_second,
             system_disk_write_bytes_per_second,
+            storage_status,
+            storage_volumes,
             gpu: collect_live_gpu_metrics(),
             battery: collect_battery_metrics(),
         }
@@ -1227,6 +1262,23 @@ mod tests {
     }
 
     #[test]
+    fn live_storage_volume_percentages_are_bounded_and_zero_capacity_is_unknown() {
+        let gib = 1024_u64 * 1024 * 1024;
+        let volume = super::live_storage_volume("Volume 1".to_owned(), 100 * gib, 25 * gib);
+        assert_eq!(volume.used_percent, Some(75));
+        assert_eq!(volume.available_bytes, 25 * gib);
+        assert_eq!(volume.status, "healthy");
+        let full = super::live_storage_volume("Volume 2".to_owned(), 100 * gib, 100 * gib);
+        assert_eq!(full.used_percent, Some(0));
+        let overreported = super::live_storage_volume("Volume 3".to_owned(), 100 * gib, 120 * gib);
+        assert_eq!(overreported.used_percent, Some(0));
+        assert_eq!(overreported.available_bytes, 100 * gib);
+        let unknown = super::live_storage_volume("Volume 4".to_owned(), 0, 0);
+        assert_eq!(unknown.used_percent, None);
+        assert_eq!(unknown.status, "unknown");
+    }
+
+    #[test]
     fn system_disk_rates_require_an_elapsed_sample_and_handle_idle_io() {
         assert_eq!(super::disk_io_rates(1500, 3000, None), (None, None));
         assert_eq!(super::disk_io_rates(0, 0, Some(std::time::Duration::from_secs(2))), (Some(0), Some(0)));
@@ -1253,6 +1305,8 @@ mod tests {
         assert!(json.get("systemDiskReadBytesPerSecond").is_some());
         assert!(json.get("systemDiskWriteBytesPerSecond").is_some());
         assert!(json.get("systemDiskCount").is_some());
+        assert!(json.get("storageStatus").is_some());
+        assert!(json.get("storageVolumes").is_some());
     }
 
     #[test]

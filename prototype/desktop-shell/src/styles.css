@@ -403,3 +403,33 @@ h1 { margin: 0; color: #eef5ef; font-size: clamp(25px, 3vw, 34px); font-weight: 
 
 /* Live GPU cards use the same compact resource-meter treatment as CPU and RAM. */
 .system-monitor-card .gpu-source { color: #829287; font-size: 8px; line-height: 1.5; overflow-wrap: anywhere; }
+
+
+/* Live System Monitor: anonymised per-volume capacity rows. */
+.system-monitor-storage-card {
+  grid-column: 1 / -1;
+}
+.system-monitor-volume {
+  display: grid;
+  gap: 7px;
+  padding-top: 10px;
+}
+.system-monitor-volume + .system-monitor-volume {
+  margin-top: 10px;
+  border-top: 1px solid var(--border-subtle, rgba(120, 130, 120, 0.2));
+}
+.system-monitor-volume > div:first-child {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.system-monitor-volume > div:first-child strong {
+  font-size: 0.88rem;
+}
+.system-monitor-volume > div:first-child span,
+.system-monitor-volume > small {
+  color: var(--text-muted, #718078);
+  font-size: 0.78rem;
+}

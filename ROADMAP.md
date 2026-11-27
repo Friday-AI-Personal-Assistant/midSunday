@@ -1834,7 +1834,7 @@ See docs/HARDWARE-INTELLIGENCE.md section 68.
 - [ ] RAM: show total, used, available, and percentage, with definitions consistent across operating systems.
 - [ ] CPU: show overall utilisation and, where reliable, per-core utilisation; explain that readings are sampled over an interval.
 - [ ] GPU: show per-physical-adapter utilisation and memory usage/budget where reliable APIs expose them; show temperature, engine breakdown, and vendor details only when supported.
-- [ ] Storage: show volume capacity/used/free space, and add read/write activity rates where reliable and useful.
+- [x] Storage: show per-volume capacity, used/free space, and system-wide read/write activity rates with generic volume labels; keep mount paths and device identifiers out of the live monitor.
 - [x] Network: show aggregate system-wide upload/download throughput without collecting interface names; clearly label scope and unavailable/warming-up states.
 - [x] Battery: show aggregate charge percentage and charging/discharging state where reported; do not invent remaining-time estimates.
 - [ ] Provide clear unavailable/unsupported/permission-limited states instead of fabricated, stale, or misleading zero values.
@@ -1939,3 +1939,15 @@ This is the first GPU telemetry slice, not universal GPU support. The initial li
 - [ ] Add and validate macOS GPU telemetry and Linux Intel/NVIDIA collectors.
 
 Windows readings are driver/build-dependent. The displayed percentage is the busiest individual engine, not a universal whole-GPU utilisation value. See docs/HARDWARE-INTELLIGENCE.md section 73.
+
+
+### 2026-11-27 — Live storage capacity monitoring (Batch #188)
+
+- [x] Add per-volume total, used, and available capacity to the opt-in live System Monitor.
+- [x] Use generic labels such as Volume 1; do not expose mount paths, volume labels, filesystem names, device names, or serial identifiers in live metrics.
+- [x] Reuse the existing conservative free-space thresholds; represent zero-capacity readings as unknown rather than a fabricated percentage.
+- [x] Keep per-volume capacity separate from aggregate system-wide disk read/write throughput and midSunday process-only disk I/O.
+- [x] Add serialization and boundary regression coverage for the storage snapshot.
+- [ ] Validate reported capacity and volume enumeration on physical Windows, Linux, and macOS devices; virtual volumes, network mounts, permissions, and filesystem semantics may differ.
+
+See docs/HARDWARE-INTELLIGENCE.md section 74.
