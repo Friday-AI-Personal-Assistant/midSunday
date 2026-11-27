@@ -2235,3 +2235,16 @@ See docs/HARDWARE-INTELLIGENCE.md section 98.
 - [ ] Validate real charging/discharging transitions, mixed-battery behavior, and narrow-window layout on physical Windows, Linux, and macOS devices.
 
 See docs/HARDWARE-INTELLIGENCE.md section 99.
+
+
+### 2026-11-27 — System RAM capacity history (Batch #220)
+
+- [x] Retain exact OS-reported system RAM used bytes and available bytes in each existing System Monitor history sample.
+- [x] Add RAM USED and RAM FREE timeline rows with timestamped values and per-row relative scaling.
+- [x] Add latest, average, peak, and sample-count statistics for used and available system RAM.
+- [x] Add System RAM used (bytes) and System RAM available (bytes) columns to explicit local CSV exports.
+- [x] Keep system RAM separate from midSunday process resident/virtual memory and GPU memory; preserve missing values as gaps and blank CSV cells.
+- [x] Reuse the existing OS snapshot, opt-in 1.5-second polling, 36-sample in-memory bound, and local-only export without extra polling or memory queries.
+- [ ] Validate platform memory-accounting semantics, CSV output, and narrow-window layout on physical Windows, Linux, and macOS devices.
+
+See docs/HARDWARE-INTELLIGENCE.md section 100.

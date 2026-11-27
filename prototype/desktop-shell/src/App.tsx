@@ -208,7 +208,7 @@ export default function App() {
   const [liveMetrics, setLiveMetrics] = useState<LiveSystemMetrics | null>(null);
   const [monitorError, setMonitorError] = useState("");
   const [monitorExportNotice, setMonitorExportNotice] = useState("");
-  const [monitorHistory, setMonitorHistory] = useState<{ capturedAtUnixMillis: number; cpu: number | null; ram: number | null; battery: number | null; batteryState: string; processResidentBytes: number | null; processVirtualBytes: number | null; processRead: number | null; processWrite: number | null; download: number | null; upload: number | null; diskRead: number | null; diskWrite: number | null; gpu: Record<string, number | null>; gpuMemory: Record<string, number | null>; cores: (number | null)[]; coreCount: number }[]>([]);
+  const [monitorHistory, setMonitorHistory] = useState<{ capturedAtUnixMillis: number; cpu: number | null; ram: number | null; systemUsedMemoryBytes: number | null; systemAvailableMemoryBytes: number | null; battery: number | null; batteryState: string; processResidentBytes: number | null; processVirtualBytes: number | null; processRead: number | null; processWrite: number | null; download: number | null; upload: number | null; diskRead: number | null; diskWrite: number | null; gpu: Record<string, number | null>; gpuMemory: Record<string, number | null>; cores: (number | null)[]; coreCount: number }[]>([]);
   const [executablePath, setExecutablePath] = useState("");
   const [modelPath, setModelPath] = useState("");
   const [contextTokens, setContextTokens] = useState("2048");
@@ -253,6 +253,8 @@ export default function App() {
             capturedAtUnixMillis: snapshot.capturedAtUnixMillis,
             cpu: clampPercent(snapshot.cpuUsagePercent),
             ram,
+            systemUsedMemoryBytes: finiteNonNegative(snapshot.usedMemoryBytes),
+            systemAvailableMemoryBytes: finiteNonNegative(snapshot.availableMemoryBytes),
             battery: clampPercent(snapshot.battery.chargePercent),
             batteryState: normalizeBatteryState(snapshot.battery.state),
             processResidentBytes: finiteNonNegative(snapshot.processMemory.residentBytes),
@@ -1178,6 +1180,8 @@ export default function App() {
       "CPU utilisation (%)",
       ...Array.from({ length: coreCount }, (_, index) => "Logical processor " + (index + 1) + " utilisation (%)"),
       "System RAM utilisation (%)",
+      "System RAM used (bytes)",
+      "System RAM available (bytes)",
       "Battery charge (%)",
       "Battery state",
       "midSunday resident memory (bytes)",
@@ -1212,6 +1216,8 @@ export default function App() {
       point.cpu,
       ...Array.from({ length: coreCount }, (_, index) => point.coreCount === coreCount ? (point.cores[index] ?? null) : null),
       point.ram,
+      point.systemUsedMemoryBytes,
+      point.systemAvailableMemoryBytes,
       point.battery,
       point.batteryState,
       point.processResidentBytes,
@@ -1408,6 +1414,8 @@ export default function App() {
       );
     }),
     buildMonitorHistorySummary("System RAM", monitorHistory.map((point) => point.ram), (value) => value.toFixed(1) + "%"),
+    buildMonitorHistorySummary("System RAM used", monitorHistory.map((point) => point.systemUsedMemoryBytes), (value) => formatModelSize(value)),
+    buildMonitorHistorySummary("System RAM available", monitorHistory.map((point) => point.systemAvailableMemoryBytes), (value) => formatModelSize(value)),
     buildMonitorHistorySummary("Battery charge", monitorHistory.map((point) => point.battery), (value) => value.toFixed(1) + "%"),
     buildMonitorHistorySummary("midSunday resident memory", monitorHistory.map((point) => point.processResidentBytes), (value) => formatModelSize(value)),
     buildMonitorHistorySummary("midSunday virtual address space", monitorHistory.map((point) => point.processVirtualBytes), (value) => formatModelSize(value)),
@@ -1716,6 +1724,8 @@ export default function App() {
                     <div className="system-monitor-history-row"><small>BAT</small><div role="img" aria-label="Battery charge percentage history, oldest to newest; missing readings are gaps">{monitorHistory.map((point, index) => point.battery === null ? <i key={"battery-" + index} className="system-monitor-history-gap" title={monitorHistorySampleTitle(index, "No battery charge reading")} style={{ marginLeft: monitorHistoryGapBefore(index) }} /> : <i key={"battery-" + index} title={monitorHistorySampleTitle(index, point.battery.toFixed(1) + "% charge")} style={{ height: Math.max(2, point.battery) + "%", marginLeft: monitorHistoryGapBefore(index) }} />)}</div></div>
                     <div className="system-monitor-history-row system-monitor-battery-state-row"><small>BAT ST</small><div role="img" aria-label="Battery operating state history, oldest to newest; each segment represents one sampled OS-reported state">{monitorHistory.map((point, index) => <i key={"battery-state-" + index} className={"system-monitor-battery-state system-monitor-battery-state-" + point.batteryState} title={monitorHistorySampleTitle(index, point.batteryState.replace("_", " "))} />)}</div></div>
                     {([
+                      { key: "system-ram-used", label: "RAM USED", field: "systemUsedMemoryBytes" as const, format: (value: number) => formatModelSize(value), unit: "system RAM used" },
+                      { key: "system-ram-available", label: "RAM FREE", field: "systemAvailableMemoryBytes" as const, format: (value: number) => formatModelSize(value), unit: "system RAM available" },
                       { key: "process-memory", label: "APP MEM", field: "processResidentBytes" as const, format: (value: number) => formatModelSize(value), unit: "resident memory" },
                       { key: "process-virtual", label: "APP VIRT", field: "processVirtualBytes" as const, format: (value: number) => formatModelSize(value), unit: "virtual address space" },
                       { key: "process-read", label: "APP READ", field: "processRead" as const, format: (value: number) => formatTransferRate(value), unit: "process disk read" },
