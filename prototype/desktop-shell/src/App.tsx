@@ -82,6 +82,11 @@ function normalizeBatteryState(value: string): string {
   return allowed.includes(value) ? value : "unavailable";
 }
 
+function normalizeNetworkState(value: string): string {
+  const allowed = ["detected", "warming_up", "unavailable"];
+  return allowed.includes(value) ? value : "unavailable";
+}
+
 function normalizeStorageState(value: string): string {
   const allowed = ["healthy", "low", "critical", "unknown"];
   return allowed.includes(value) ? value : "unknown";
@@ -213,7 +218,7 @@ export default function App() {
   const [liveMetrics, setLiveMetrics] = useState<LiveSystemMetrics | null>(null);
   const [monitorError, setMonitorError] = useState("");
   const [monitorExportNotice, setMonitorExportNotice] = useState("");
-  const [monitorHistory, setMonitorHistory] = useState<{ capturedAtUnixMillis: number; cpu: number | null; ram: number | null; systemUsedMemoryBytes: number | null; systemAvailableMemoryBytes: number | null; systemTotalMemoryBytes: number | null; battery: number | null; batteryState: string; processResidentBytes: number | null; processVirtualBytes: number | null; processRead: number | null; processWrite: number | null; download: number | null; upload: number | null; diskRead: number | null; diskWrite: number | null; gpu: Record<string, number | null>; gpuMemory: Record<string, number | null>; cores: (number | null)[]; coreCount: number; storageVolumeCount: number; storageVolumes: { totalBytes: number | null; usedBytes: number | null; availableBytes: number | null; usedPercent: number | null; status: string }[] }[]>([]);
+  const [monitorHistory, setMonitorHistory] = useState<{ capturedAtUnixMillis: number; cpu: number | null; ram: number | null; systemUsedMemoryBytes: number | null; systemAvailableMemoryBytes: number | null; systemTotalMemoryBytes: number | null; battery: number | null; batteryState: string; networkState: string; networkInterfaceCount: number | null; processResidentBytes: number | null; processVirtualBytes: number | null; processRead: number | null; processWrite: number | null; download: number | null; upload: number | null; diskRead: number | null; diskWrite: number | null; gpu: Record<string, number | null>; gpuMemory: Record<string, number | null>; cores: (number | null)[]; coreCount: number; storageVolumeCount: number; storageVolumes: { totalBytes: number | null; usedBytes: number | null; availableBytes: number | null; usedPercent: number | null; status: string }[] }[]>([]);
   const [executablePath, setExecutablePath] = useState("");
   const [modelPath, setModelPath] = useState("");
   const [contextTokens, setContextTokens] = useState("2048");
@@ -275,6 +280,8 @@ export default function App() {
               .slice(0, 16),
             battery: clampPercent(snapshot.battery.chargePercent),
             batteryState: normalizeBatteryState(snapshot.battery.state),
+            networkState: normalizeNetworkState(snapshot.networkStatus),
+            networkInterfaceCount: Number.isSafeInteger(snapshot.networkInterfaceCount) && snapshot.networkInterfaceCount >= 0 ? snapshot.networkInterfaceCount : null,
             processResidentBytes: finiteNonNegative(snapshot.processMemory.residentBytes),
             processVirtualBytes: finiteNonNegative(snapshot.processMemory.virtualBytes),
             processRead: finiteNonNegative(snapshot.processReadBytesPerSecond),
@@ -1208,6 +1215,8 @@ export default function App() {
       }).flat(),
       "Battery charge (%)",
       "Battery state",
+      "Network interface count",
+      "Network telemetry state",
       "midSunday resident memory (bytes)",
       "midSunday virtual address space (bytes)",
       "midSunday process disk read (bytes/s)",
@@ -1250,6 +1259,8 @@ export default function App() {
       }).flat(),
       point.battery,
       point.batteryState,
+      point.networkInterfaceCount,
+      point.networkState,
       point.processResidentBytes,
       point.processVirtualBytes,
       point.processRead,
@@ -1433,6 +1444,15 @@ export default function App() {
     .map((state) => state.replace("_", " ") + ": " + batteryStateCounts[state])
     .join(" · ");
 
+  const networkStateCounts = monitorHistory.reduce<Record<string, number>>((counts, point) => {
+    counts[point.networkState] = (counts[point.networkState] ?? 0) + 1;
+    return counts;
+  }, {});
+  const networkStateSummary = ["detected", "warming_up", "unavailable"]
+    .filter((state) => (networkStateCounts[state] ?? 0) > 0)
+    .map((state) => state.replace("_", " ") + ": " + networkStateCounts[state])
+    .join(" · ");
+
   const monitorHistorySummaryRows = [
     buildMonitorHistorySummary("CPU utilisation", monitorHistory.map((point) => point.cpu), (value) => value.toFixed(1) + "%"),
     ...Array.from({ length: monitorHistory[monitorHistory.length - 1]?.coreCount ?? 0 }, (_, index) => {
@@ -1458,6 +1478,7 @@ export default function App() {
       ];
     }).flat(),
     buildMonitorHistorySummary("Battery charge", monitorHistory.map((point) => point.battery), (value) => value.toFixed(1) + "%"),
+    buildMonitorHistorySummary("Network interface count", monitorHistory.map((point) => point.networkInterfaceCount), (value) => String(Math.round(value))),
     buildMonitorHistorySummary("midSunday resident memory", monitorHistory.map((point) => point.processResidentBytes), (value) => formatModelSize(value)),
     buildMonitorHistorySummary("midSunday virtual address space", monitorHistory.map((point) => point.processVirtualBytes), (value) => formatModelSize(value)),
     buildMonitorHistorySummary("midSunday process disk read", monitorHistory.map((point) => point.processRead), (value) => formatTransferRate(value)),
@@ -1796,6 +1817,8 @@ export default function App() {
                         <div role="img" aria-label={"midSunday " + metric.unit + " history, oldest to newest; missing readings are gaps"}>{values.map((value, index) => value === null ? <i key={metric.key + "-" + index} className="system-monitor-history-gap" title={monitorHistorySampleTitle(index, "No " + metric.unit + " reading")} style={{ marginLeft: monitorHistoryGapBefore(index) }} /> : <i key={metric.key + "-" + index} title={monitorHistorySampleTitle(index, metric.format(value))} style={{ height: Math.max(2, value / peak * 100) + "%", marginLeft: monitorHistoryGapBefore(index) }} />)}</div>
                       </div>;
                     })}
+                    <div className="system-monitor-history-row"><small>NET IF</small><div role="img" aria-label="Operating-system-reported network interface count history, oldest to newest; count is aggregate and interface names are not collected">{monitorHistory.map((point, index) => point.networkInterfaceCount === null ? <i key={"network-count-" + index} className="system-monitor-history-gap" title={monitorHistorySampleTitle(index, "No network interface count")} style={{ marginLeft: monitorHistoryGapBefore(index) }} /> : <i key={"network-count-" + index} title={monitorHistorySampleTitle(index, point.networkInterfaceCount + " interfaces")} style={{ height: point.networkInterfaceCount === 0 ? "0%" : Math.max(2, point.networkInterfaceCount / Math.max(1, ...monitorHistory.map((sample) => sample.networkInterfaceCount ?? 0)) * 100) + "%", marginLeft: monitorHistoryGapBefore(index) }} />)}</div></div>
+                    <div className="system-monitor-history-row system-monitor-battery-state-row"><small>NET ST</small><div role="img" aria-label="Aggregate network telemetry status history, oldest to newest">{monitorHistory.map((point, index) => <i key={"network-state-" + index} className={"system-monitor-battery-state system-monitor-network-state-" + point.networkState} title={monitorHistorySampleTitle(index, point.networkState.replace("_", " "))} />)}</div></div>
                     <div className="system-monitor-history-row"><small>↓ NET</small><div role="img" aria-label="Aggregate network download rate history, oldest to newest; bar height is relative to this row’s recent peak and missing samples are gaps">{monitorHistory.map((point, index) => point.download === null ? <i key={"down-" + index} className="system-monitor-history-gap" title={monitorHistorySampleTitle(index, "No download reading")} style={{ marginLeft: monitorHistoryGapBefore(index) }} /> : <i key={"down-" + index} title={monitorHistorySampleTitle(index, formatTransferRate(point.download))} style={{ height: Math.max(2, point.download / Math.max(1, ...monitorHistory.map((sample) => sample.download ?? 0)) * 100) + "%", marginLeft: monitorHistoryGapBefore(index) }} />)}</div></div>
                     <div className="system-monitor-history-row"><small>↑ NET</small><div role="img" aria-label="Aggregate network upload rate history, oldest to newest; bar height is relative to this row’s recent peak and missing samples are gaps">{monitorHistory.map((point, index) => point.upload === null ? <i key={"up-" + index} className="system-monitor-history-gap" title={monitorHistorySampleTitle(index, "No upload reading")} style={{ marginLeft: monitorHistoryGapBefore(index) }} /> : <i key={"up-" + index} title={monitorHistorySampleTitle(index, formatTransferRate(point.upload))} style={{ height: Math.max(2, point.upload / Math.max(1, ...monitorHistory.map((sample) => sample.upload ?? 0)) * 100) + "%", marginLeft: monitorHistoryGapBefore(index) }} />)}</div></div>
                     <div className="system-monitor-history-row"><small>↓ DISK</small><div role="img" aria-label="System-wide disk read rate history, oldest to newest; bar height is relative to this row’s recent peak and missing samples are gaps">{monitorHistory.map((point, index) => point.diskRead === null ? <i key={"disk-read-" + index} className="system-monitor-history-gap" title={monitorHistorySampleTitle(index, "No disk-read reading")} style={{ marginLeft: monitorHistoryGapBefore(index) }} /> : <i key={"disk-read-" + index} title={monitorHistorySampleTitle(index, "Read " + formatTransferRate(point.diskRead))} style={{ height: Math.max(2, point.diskRead / Math.max(1, ...monitorHistory.map((sample) => sample.diskRead ?? 0)) * 100) + "%", marginLeft: monitorHistoryGapBefore(index) }} />)}</div></div>
@@ -1834,6 +1857,7 @@ export default function App() {
                         <p className="system-monitor-capture-note">Timing uses positive differences between existing sample timestamps. Median is the middle interval (or midpoint of the two middle intervals). Median deviation is the median absolute distance from that median and describes typical timing variation; intervals over 2.25 seconds count as delayed. These values describe capture timing, not missing metric readings.</p>
                         {monitorHistory.some((point) => point.coreCount !== (monitorHistory[monitorHistory.length - 1]?.coreCount ?? 0)) && <p className="system-monitor-topology-note" role="status">The number of logical processors changed during this history. Per-processor statistics include only samples matching the newest processor count; older-topology samples are excluded, not treated as zero.</p>}
                         {batteryStateSummary && <p className="system-monitor-battery-state-summary">Battery state samples: {batteryStateSummary}</p>}
+                        {networkStateSummary && <p className="system-monitor-battery-state-summary">Network telemetry samples: {networkStateSummary}</p>}
                         {monitorHistory.length > 0 && Array.from({ length: Math.min(16, monitorHistory[monitorHistory.length - 1]?.storageVolumeCount ?? 0) }, (_, rank) => {
                           const count = monitorHistory[monitorHistory.length - 1]?.storageVolumeCount ?? 0;
                           const counts = monitorHistory.reduce<Record<string, number>>((result, point) => {

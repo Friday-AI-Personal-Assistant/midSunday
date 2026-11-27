@@ -2274,3 +2274,16 @@ See docs/HARDWARE-INTELLIGENCE.md section 101.
 - [ ] Validate Windows, Linux, and macOS physical storage configurations, removable/network volumes, and narrow-window layout.
 
 See docs/HARDWARE-INTELLIGENCE.md section 102.
+
+
+### 2026-11-27 — Network interface and telemetry-state history (Batch #224)
+
+- [x] Retain the aggregate OS-reported network-interface count from the existing live System Monitor snapshot.
+- [x] Add a NET IF history row with timestamped counts and explicit gaps for invalid readings.
+- [x] Retain and display the existing network telemetry state (detected, warming up, unavailable) as a discrete NET ST timeline.
+- [x] Add interface-count latest/average/peak/sample-count statistics and retained-sample counts by network telemetry state.
+- [x] Include Network interface count and Network telemetry state in explicit local CSV exports.
+- [x] Preserve privacy: collect no interface names, addresses, MAC addresses, traffic destinations, or network identifiers; add no network probes or polling.
+- [ ] Validate interface hotplug, disconnected systems, sleep/resume, CSV output, and narrow-window layout on physical Windows, Linux, and macOS devices.
+
+See docs/HARDWARE-INTELLIGENCE.md section 103.

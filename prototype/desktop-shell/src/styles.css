@@ -613,3 +613,9 @@ h1 { margin: 0; color: #eef5ef; font-size: clamp(25px, 3vw, 34px); font-weight: 
 .system-monitor-history-row i.system-monitor-storage-state-critical { background: #c86d6d; }
 .system-monitor-history-row i.system-monitor-storage-state-unknown { background: #68766d; }
 .system-monitor-storage-state-row { margin-top: -5px; }
+
+
+/* Network history uses aggregate interface counts and source-reported telemetry state only. */
+.system-monitor-history-row i.system-monitor-network-state-detected { background: #49a879; }
+.system-monitor-history-row i.system-monitor-network-state-warming_up { background: #d49a55; }
+.system-monitor-history-row i.system-monitor-network-state-unavailable { background: #68766d; }
