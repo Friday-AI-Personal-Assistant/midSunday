@@ -953,7 +953,7 @@ mod tests {
     #[test]
     fn gpu_live_percent_parser_rejects_out_of_range_and_malformed_values() {
         assert_eq!(super::parse_gpu_percent_text("0"), Some(0.0));
-        assert_eq!(super::parse_gpu_percent_text("100\\n"), Some(100.0));
+        assert_eq!(super::parse_gpu_percent_text("100\n"), Some(100.0));
         assert_eq!(super::parse_gpu_percent_text("101"), None);
         assert_eq!(super::parse_gpu_percent_text("not-a-number"), None);
     }
