@@ -547,6 +547,9 @@ Use semantic tokens (for example, primary, primary-strong, accent, surface, elev
 
 ---
 
+- [x] Add a read-only encrypted-backup restore impact preview: authenticate and verify the archive, compare aggregate backup inventory with the current database, and clearly warn that a future restore would replace current content. The preview never exposes personal record contents or changes either database.
+- [ ] Design and implement restore only after live-connection coordination, safety-copy retention, crash recovery, schema migration policy, and rollback behaviour are proven by tests.
+
 ## 5. Hardware profile policy
 
 These are planning profiles, not final minimum specifications. The exact model, context size, voice engines, and supported features must be chosen from benchmarks.

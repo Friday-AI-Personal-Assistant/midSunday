@@ -1382,6 +1382,39 @@ export default function App() {
     }
   }
 
+  async function previewEncryptedDatabaseRestore() {
+    if (encryptedVerifyBusy) return;
+    if (encryptedVerifyPassword.length < 12) {
+      setEncryptedVerifyError("Enter the password used when this encrypted backup was created.");
+      return;
+    }
+    setEncryptedVerifyBusy(true);
+    setEncryptedVerifyStatus("");
+    setEncryptedVerifyError("");
+    try {
+      const selected = await open({
+        title: "Preview encrypted backup restore impact",
+        multiple: false,
+        directory: false,
+        filters: [{ name: "Encrypted midSunday backup", extensions: ["msbackup"] }],
+      });
+      if (!selected || Array.isArray(selected)) return;
+      const result = await invoke<{ backup: { schemaVersion: number; conversationCount: number; messageCount: number; savedMemoryCount: number; awarenessItemCount: number; awarenessActivityCount: number; awarenessHistoryCount: number; awarenessSuppressionCount: number; awarenessSuggestionCount: number; appPreferenceCount: number; createdAt: number | null; appVersion: string | null }; current: { conversationCount: number; messageCount: number; savedMemoryCount: number; awarenessItemCount: number; awarenessActivityCount: number; awarenessHistoryCount: number; awarenessSuppressionCount: number; awarenessSuggestionCount: number; appPreferenceCount: number } }>("preview_encrypted_database_restore", {
+        filePath: selected,
+        password: encryptedVerifyPassword,
+      });
+      const b = result.backup;
+      const c = result.current;
+      const created = b.createdAt ? " Backup created " + new Date(b.createdAt * 1000).toLocaleString() + (b.appVersion ? " by app version " + b.appVersion : "") + "." : "";
+      setEncryptedVerifyStatus("Read-only restore impact preview passed. Backup (schema v" + b.schemaVersion + "): " + b.conversationCount + " conversations, " + b.messageCount + " messages, " + b.savedMemoryCount + " saved memories, " + b.awarenessItemCount + " Awareness items, " + b.awarenessActivityCount + " activity records, " + b.awarenessHistoryCount + " history records, " + b.awarenessSuppressionCount + " exclusions, " + b.awarenessSuggestionCount + " suggestions, and " + b.appPreferenceCount + " preferences. Current device: " + c.conversationCount + " conversations, " + c.messageCount + " messages, " + c.savedMemoryCount + " saved memories, " + c.awarenessItemCount + " Awareness items, " + c.awarenessActivityCount + " activity records, " + c.awarenessHistoryCount + " history records, " + c.awarenessSuppressionCount + " exclusions, " + c.awarenessSuggestionCount + " suggestions, and " + c.appPreferenceCount + " preferences." + created + " A real restore would replace this current database content; no data was changed. Restore is not enabled yet.");
+    } catch (error) {
+      setEncryptedVerifyError(typeof error === "string" ? error : "The restore impact preview could not be completed. No data was changed.");
+    } finally {
+      setEncryptedVerifyPassword("");
+      setEncryptedVerifyBusy(false);
+    }
+  }
+
   async function exportDiagnosticsReport() {
     if (!diagnosticsSnapshot || !diagnosticsExportReviewed || diagnosticsExportBusy) return;
     setDiagnosticsExportBusy(true);
@@ -2427,9 +2460,10 @@ export default function App() {
                   <button className="primary-action" type="button" onClick={() => void createEncryptedLocalDatabaseBackup()} disabled={encryptedBackupBusy}>{encryptedBackupBusy ? "Encrypting and verifying…" : "Create encrypted backup"}</button>
                   <label>Backup password for verification<input type="password" autoComplete="off" value={encryptedVerifyPassword} onChange={(event) => setEncryptedVerifyPassword(event.target.value)} maxLength={1024} placeholder="Enter backup password" /></label>
                   <button className="secondary-action" type="button" onClick={() => void verifyEncryptedLocalDatabaseBackup()} disabled={encryptedVerifyBusy}>{encryptedVerifyBusy ? "Decrypting and checking…" : "Verify encrypted backup"}</button>
+                  <button className="secondary-action" type="button" onClick={() => void previewEncryptedDatabaseRestore()} disabled={encryptedVerifyBusy}>{encryptedVerifyBusy ? "Preparing preview…" : "Preview restore impact"}</button>
                 </div>
               </div>
-              <p className="settings-footnote">The standard .sqlite3 backup is unencrypted. The separate .msbackup option uses password-derived authenticated encryption and is verified before saving. Use a unique password of at least 12 characters; midSunday never stores it, and it cannot be recovered if lost. Existing files are never overwritten. Backups stay local; cloud transfer and restore are not implemented.</p>
+              <p className="settings-footnote">The standard .sqlite3 backup is unencrypted. The separate .msbackup option uses password-derived authenticated encryption and is verified before saving. Use a unique password of at least 12 characters; midSunday never stores it, and it cannot be recovered if lost. Existing files are never overwritten. Backups stay local; cloud transfer and actual restore are not implemented. The read-only restore impact preview compares aggregate record counts without changing either database.</p>
               {encryptedBackupStatus && <p className="database-backup-status" role="status" aria-live="polite">{encryptedBackupStatus}</p>}
               {encryptedBackupError && <p className="hardware-error" role="alert">{encryptedBackupError}</p>}
               {encryptedVerifyStatus && <p className="database-backup-status" role="status" aria-live="polite">{encryptedVerifyStatus}</p>}

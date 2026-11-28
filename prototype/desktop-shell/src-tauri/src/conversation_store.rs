@@ -223,6 +223,27 @@ pub struct DatabaseBackupVerification {
     pub detail: String,
 }
 
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct DatabaseContentInventory {
+    pub conversation_count: u64,
+    pub message_count: u64,
+    pub saved_memory_count: u64,
+    pub awareness_item_count: u64,
+    pub awareness_activity_count: u64,
+    pub awareness_history_count: u64,
+    pub awareness_suppression_count: u64,
+    pub awareness_suggestion_count: u64,
+    pub app_preference_count: u64,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct DatabaseRestorePreview {
+    pub backup: DatabaseBackupVerification,
+    pub current: DatabaseContentInventory,
+}
+
 #[derive(Clone)]
 pub struct ConversationStore {
     connection: Arc<Mutex<Connection>>,
@@ -722,6 +743,27 @@ impl ConversationStore {
 
     fn lock(&self) -> Result<std::sync::MutexGuard<'_, Connection>, String> {
         self.connection.lock().map_err(|_| "Local conversation database is unavailable.".to_owned())
+    }
+
+    /// Reads aggregate counts only; no personal content or identifiers are returned.
+    pub fn content_inventory(&self) -> Result<DatabaseContentInventory, String> {
+        let connection = self.lock()?;
+        let count = |sql: &str| -> Result<u64, String> {
+            connection.query_row(sql, [], |row| row.get::<_, i64>(0))
+                .map(|value| value.max(0) as u64)
+                .map_err(|_| "The current database inventory could not be read safely.".to_owned())
+        };
+        Ok(DatabaseContentInventory {
+            conversation_count: count("SELECT COUNT(*) FROM conversations")?,
+            message_count: count("SELECT COUNT(*) FROM conversation_messages")?,
+            saved_memory_count: count("SELECT COUNT(*) FROM saved_memories")?,
+            awareness_item_count: count("SELECT COUNT(*) FROM awareness_items")?,
+            awareness_activity_count: count("SELECT COUNT(*) FROM awareness_activity")?,
+            awareness_history_count: count("SELECT COUNT(*) FROM awareness_history")?,
+            awareness_suppression_count: count("SELECT COUNT(*) FROM awareness_suppressions")?,
+            awareness_suggestion_count: count("SELECT COUNT(*) FROM awareness_suggestions")?,
+            app_preference_count: count("SELECT COUNT(*) FROM app_preferences")?,
+        })
     }
 
     pub fn get_awareness_settings(&self) -> Result<AwarenessSettings, String> {
