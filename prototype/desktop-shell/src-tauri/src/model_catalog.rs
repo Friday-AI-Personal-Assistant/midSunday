@@ -141,7 +141,9 @@ fn verify_record(model: &LocalModel) -> ModelVerification {
 
 fn clean_label(value: &str, label: &str, max: usize) -> Result<String, String> {
     let value = value.trim();
-    if value.len() > max || value.contains('\0') { return Err(format!("{label} is too long or contains invalid characters.")); }
+    if value.len() > max || value.chars().any(char::is_control) {
+        return Err(format!("{label} is too long or contains invalid characters."));
+    }
     Ok(value.to_owned())
 }
 fn hash_file(path: &Path) -> Result<String, String> {
@@ -240,6 +242,21 @@ mod tests {
         assert_eq!(reopened.list().unwrap(),expected);
         let _=fs::remove_dir_all(d);
     }
+    #[test]
+    fn registration_rejects_control_characters_in_user_supplied_labels() {
+        let d = dir();
+        let model_path = d.join("control.gguf");
+        fs::write(&model_path, b"GGUF-control test model").unwrap();
+        let catalogue = ModelCatalog::open(&d.join("models.json")).unwrap();
+
+        assert!(catalogue.register(model_path.to_str().unwrap(), "Bad\\nName", "", "").is_err());
+        assert!(catalogue.register(model_path.to_str().unwrap(), "Good name", "Bad\\tSource", "").is_err());
+        assert!(catalogue.register(model_path.to_str().unwrap(), "Good name", "", "Bad\\rLicense").is_err());
+        assert!(catalogue.list().unwrap().is_empty());
+
+        let _ = fs::remove_dir_all(d);
+    }
+
     #[test] fn malformed_catalogue_is_not_silently_overwritten() {
         let d=dir(); let p=d.join("models.json"); fs::write(&p,"{broken").unwrap(); assert!(ModelCatalog::open(&p).is_err()); let _=fs::remove_dir_all(d);
     }
