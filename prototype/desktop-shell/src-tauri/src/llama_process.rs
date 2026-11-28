@@ -36,9 +36,14 @@ impl LlamaServerProcess {
             .validate()
             .map_err(ProcessStartError::InvalidConfiguration)?;
 
-        let executable = canonical_file(executable)
-            .ok_or(ProcessStartError::ExecutableNotFound)?;
-        let model = canonical_file(model).ok_or(ProcessStartError::ModelNotFound)?;
+        let executable = canonical_file(executable).map_err(|error| match error {
+            CanonicalFileError::NotFound => ProcessStartError::ExecutableNotFound,
+            CanonicalFileError::NotFile => ProcessStartError::ExecutableNotFile,
+        })?;
+        let model = canonical_file(model).map_err(|error| match error {
+            CanonicalFileError::NotFound => ProcessStartError::ModelNotFound,
+            CanonicalFileError::NotFile => ProcessStartError::ModelNotFile,
+        })?;
 
         let args = build_server_arguments(config, &model);
         let child = Command::new(executable)
@@ -104,9 +109,18 @@ impl Drop for LlamaServerProcess {
     }
 }
 
-fn canonical_file(path: &Path) -> Option<PathBuf> {
-    let canonical = path.canonicalize().ok()?;
-    canonical.is_file().then_some(canonical)
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum CanonicalFileError {
+    NotFound,
+    NotFile,
+}
+
+fn canonical_file(path: &Path) -> Result<PathBuf, CanonicalFileError> {
+    let canonical = path.canonicalize().map_err(|_| CanonicalFileError::NotFound)?;
+    if !canonical.is_file() {
+        return Err(CanonicalFileError::NotFile);
+    }
+    Ok(canonical)
 }
 
 /// Build a fixed argument list; user/model text is never interpreted by a shell.
@@ -184,6 +198,28 @@ mod tests {
     }
 
     #[test]
+    fn start_reports_directories_as_not_files_without_spawning() {
+        let directory = tempfile::tempdir().unwrap();
+        let executable_directory = directory.path().join("server-directory");
+        let model_directory = directory.path().join("model-directory");
+        std::fs::create_dir(&executable_directory).unwrap();
+        std::fs::create_dir(&model_directory).unwrap();
+
+        let config = RuntimeConfig::default();
+        assert!(matches!(
+            LlamaServerProcess::start(&config, &executable_directory, &model_directory),
+            Err(ProcessStartError::ExecutableNotFile)
+        ));
+
+        let executable_file = directory.path().join("llama-server");
+        std::fs::write(&executable_file, b"not launched by this test").unwrap();
+        assert!(matches!(
+            LlamaServerProcess::start(&config, &executable_file, &model_directory),
+            Err(ProcessStartError::ModelNotFile)
+        ));
+    }
+
+    #[test]
     fn arguments_bind_only_to_loopback_and_use_explicit_model_path() {
         let config = RuntimeConfig::default();
         let model = Path::new("/models/test model.gguf");
@@ -225,6 +261,9 @@ mod tests {
 
     #[test]
     fn executable_and_model_paths_must_be_regular_files() {
-        assert!(canonical_file(Path::new("/definitely/not/a/real/model.gguf")).is_none());
+        assert_eq!(
+            canonical_file(Path::new("/definitely/not/a/real/model.gguf")),
+            Err(CanonicalFileError::NotFound)
+        );
     }
 }
