@@ -1,4 +1,7 @@
 ## 2026-11-28
+- Added an active local runtime session summary with model file size, configured context length, CPU-thread setting, and monotonic uptime. Session details are cleared after a successful stop or failed startup, and the status response deliberately omits local file paths and process IDs. Model file size is explicitly described as storage size rather than a memory-fit estimate.
+
+## 2026-11-28
 - Fixed a JSX closing-brace error in the Local AI settings results panel. Also ensure an invalidated in-flight setup check cannot leave the busy state stuck, and clear old results when selecting a model from the library.
 
 ## 2026-11-28

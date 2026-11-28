@@ -29,7 +29,8 @@ const APPEARANCE_THEMES: { id: ThemeId; name: string; description: string; swatc
 type Section = "chat" | "characters" | "settings";
 type Message = { id: number; role: "user" | "assistant" | "system"; text: string };
 type RuntimeStartupMemoryReport = { status: string; startupDurationMs: number; initialResidentBytes: number | null; initialVirtualBytes: number | null; peakResidentBytes: number | null; peakVirtualBytes: number | null; peakResidentGrowthBytes: number | null; peakVirtualGrowthBytes: number | null; sampleCount: number; samplingIntervalMs: number; capturedAtUnixSeconds: number };
-type RuntimeStatusSnapshot = { status: string; detail: string | null; startupMemory: RuntimeStartupMemoryReport | null };
+type RuntimeSessionSnapshot = { modelFileSizeBytes: number | null; contextTokens: number; cpuThreads: number | null; uptimeSeconds: number };
+type RuntimeStatusSnapshot = { status: string; detail: string | null; startupMemory: RuntimeStartupMemoryReport | null; session: RuntimeSessionSnapshot | null };
 type RuntimeProcessMemorySnapshot = { status: string; residentBytes: number | null; virtualBytes: number | null };
 type RuntimeGenerationMemoryReport = {
   status: string;
@@ -251,7 +252,7 @@ export default function App() {
   const [launchAtLogin, setLaunchAtLogin] = useState(false);
   const [launchAtLoginBusy, setLaunchAtLoginBusy] = useState(false);
   const [launchAtLoginError, setLaunchAtLoginError] = useState("");
-  const [runtimeStatus, setRuntimeStatus] = useState<RuntimeStatusSnapshot>({ status: "notInstalled", detail: null, startupMemory: null });
+  const [runtimeStatus, setRuntimeStatus] = useState<RuntimeStatusSnapshot>({ status: "notInstalled", detail: null, startupMemory: null, session: null });
   const [runtimeBusy, setRuntimeBusy] = useState(false);
   const [runtimeError, setRuntimeError] = useState("");
   const [localSetupReadiness, setLocalSetupReadiness] = useState<LocalSetupReadiness | null>(null);
@@ -1283,6 +1284,16 @@ export default function App() {
     return `${bytes.toLocaleString()} bytes`;
   }
 
+  function formatDuration(totalSeconds: number) {
+    const seconds = Math.max(0, Math.floor(totalSeconds));
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const remainder = seconds % 60;
+    if (hours > 0) return `${hours}h ${minutes}m ${remainder}s`;
+    if (minutes > 0) return `${minutes}m ${remainder}s`;
+    return `${remainder}s`;
+  }
+
   function formatTransferRate(bytesPerSecond: number | null) {
     if (bytesPerSecond === null) return "Warming up…";
     if (bytesPerSecond >= 1024 ** 2) return `${(bytesPerSecond / 1024 ** 2).toFixed(2)} MB/s`;
@@ -1817,7 +1828,18 @@ export default function App() {
               <p className="settings-footnote">A nickname is fine; you do not need to provide your legal name. You can leave this blank or turn name use off at any time.</p>
             </section>
             <section className="settings-section runtime-settings"><div className="settings-section-title"><div><h2>Local AI engine</h2><p>Connect an existing llama.cpp server executable and a GGUF model stored on this device.</p></div><span className="settings-symbol">◈</span></div>
-              <div className="runtime-status-line"><span className={runtimeStatus.status === "ready" ? "core-dot good" : runtimeStatus.status === "failed" ? "core-dot bad" : "core-dot"} />Engine status: <strong>{runtimeStatus.status}</strong></div>
+              <div className="runtime-status-line"><span className={runtimeStatus.status === "ready" || runtimeStatus.status === "generating" ? "core-dot good" : runtimeStatus.status === "failed" ? "core-dot bad" : "core-dot"} />Engine status: <strong>{runtimeStatus.status}</strong></div>
+              {runtimeStatus.session && <div className="model-kv-estimate">
+                <strong>Active local session</strong>
+                <p className="settings-footnote">Details describe the model session currently managed by midSunday. The local executable path, model path, and process ID are not exposed here.</p>
+                <div className="model-kv-grid">
+                  <span>Model file size<strong>{runtimeStatus.session.modelFileSizeBytes === null ? "Unavailable" : formatModelSize(runtimeStatus.session.modelFileSizeBytes)}</strong></span>
+                  <span>Context length<strong>{runtimeStatus.session.contextTokens.toLocaleString()} tokens</strong></span>
+                  <span>CPU threads<strong>{runtimeStatus.session.cpuThreads === null ? "Automatic" : runtimeStatus.session.cpuThreads.toLocaleString()}</strong></span>
+                  <span>Session uptime<strong>{formatDuration(runtimeStatus.session.uptimeSeconds)}</strong></span>
+                </div>
+                <p className="settings-footnote">Uptime starts when the local server first reports ready. File size is storage size, not a prediction of RAM or VRAM use.</p>
+              </div>}
               {runtimeStatus.startupMemory && <div className="model-kv-estimate">
                 <strong>Model startup · time and memory</strong>
                 <p className="settings-footnote">Elapsed time from launching the managed llama-server process until its local server became ready.</p>

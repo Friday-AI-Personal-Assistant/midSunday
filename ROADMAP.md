@@ -5,7 +5,7 @@
 > **Roadmap version:** 0.1  
 > **Status:** Foundation / planning  
 > **Repository:** `Friday-AI-Personal-Assistant/midSunday`  
-> **Last updated:** 2026-11-27  
+> **Last updated:** 2026-11-28  
 > **Decision rule:** User-confirmed requirements are binding. Technical choices in this roadmap are proposals until validated and approved.
 
 This document is the long-term project map and recovery reference for midSunday. It is deliberately comprehensive so development can continue even if a ChatGPT conversation is lost, corrupted, or moved. Update this file whenever scope, decisions, priorities, or completion status change.
@@ -255,7 +255,7 @@ Use semantic tokens (for example, primary, primary-strong, accent, surface, elev
 - [x] Make conversation export a consistent SQLite read snapshot and add import/export round-trip plus malformed-title/timestamp regression tests.
 - [x] Add explicit local engine start/stop lifecycle and status reporting through the runtime manager; the UI can start, stop, cancel, and inspect the active state. (Runtime memory/CPU telemetry remains future work.)
 - [x] Persist the selected llama-server path, GGUF model path, context length, and optional CPU-thread setting in a separate local settings file; validate values and reload them on app startup.
-- [ ] Add model load/unload lifecycle and explicit resource status.
+- [x] Add model load/unload lifecycle and explicit resource status through managed start/stop controls, live lifecycle states, startup/process memory observations, and the active-session summary. Physical device validation remains pending.
 - [ ] Add low-memory safeguards and graceful fallback; configurable context/thread controls are now available but are not a substitute for measured hardware-aware limits.
 - [ ] Ensure no internet connection is required after model assets are available.
 - [ ] Verify that no prompt or conversation is sent externally by default.
@@ -666,7 +666,7 @@ This repository is the durable source of truth. ChatGPT conversations are workin
 
 ## 11. Current status and immediate next actions
 
-**Current stage:** Phase 4 — Offline local chat engine integration. Runs #40–#42 passed Windows, Linux, and macOS. The app now has a frontend IPC path for local runtime setup, streaming, cancellation, multi-turn context, native model-file selection, bounded prompt/history validation, and a local SQLite conversation store with create/list/open/rename/delete/message-history commands. Actual model inference and persistence across real desktop restarts still require manual device testing.
+**Current stage:** Phase 4 — Offline local chat engine integration. The repository now includes a managed llama.cpp server lifecycle, loopback-only streaming generation and cancellation, local SQLite conversations, model registration and integrity checks, GGUF metadata/tensor/KV-cache inspection, hardware-memory evidence, and a first-run local setup guide with user-triggered file checks. Batches #233–#236 extend onboarding, setup verification, and active-session visibility. Cross-platform CI validates compilation and tests; actual inference quality, offline behaviour, process recovery, and persistence still require physical-device testing.
 
 **Completed:**
 - [x] Product name selected: midSunday.
@@ -679,12 +679,11 @@ This repository is the durable source of truth. ChatGPT conversations are workin
 - [x] Initial complete roadmap drafted.
 
 **Next actions:**
-1. Verify native local-file selection and multi-turn chat context on Windows, Linux, and macOS CI.
-2. Fix platform-specific TypeScript, Rust, Tauri, plugin-permission, or packaging issues exposed by CI.
-3. Generate and commit a reviewed npm lockfile, then use it for reproducible dependency installation.
-4. Test the app on real Windows, Linux, and macOS devices when available; CI compilation is not a substitute for runtime testing.
+1. Validate local server startup, active-session status, generation, cancellation, and clean shutdown on physical Windows, Linux, and macOS devices.
+2. Test model compatibility, memory pressure, long sessions, sleep/resume, and unexpected server termination; CI cannot replace hardware testing.
+3. Continue Phase 1 benchmarks for compact models, Pakistani Urdu/Roman Urdu speech, and realistic low-memory hardware profiles.
+4. Complete the approved UX flows for model import/download only after source, licence, integrity, storage, and user-consent requirements are designed.
 5. Continue the read-only FRIDAY review and record reusable patterns without modifying FRIDAY.
-6. Continue local-model, Pakistani Urdu/Roman Urdu speech, hardware-intelligence, and licensing research; no model or speech engine is selected until evidence supports it.
 
 **Not yet done:** No AI runtime, model, persistent chat/memory storage, voice engine, hardware detector, or verified Windows installer is implemented. The current chat is a local-session UI demonstration and does not generate AI replies.
 
@@ -2414,3 +2413,15 @@ The readiness check confirms only file presence/type/permissions and the GGUF he
 - [x] Clear the in-progress indicator when a file-path edit invalidates an older asynchronous setup check.
 - [x] Invalidate setup results when choosing a different model from the local model library.
 - [ ] Confirm the correction with all three cross-platform CI jobs.
+
+
+### 2026-11-28 — Active local runtime session visibility (Batch #236)
+
+- [x] Extend the runtime status snapshot with active-session resource details: model file size, configured context length, CPU-thread setting, and monotonic session uptime.
+- [x] Show the active-session summary in Local AI settings and distinguish ready/generating states visually.
+- [x] Keep the local executable path, model path, process ID, and unrelated process information out of the status response.
+- [x] Clear active-session details after a successful stop, before a new start attempt, and when startup fails; preserve details when a stop operation itself fails so the user can still inspect the managed session.
+- [x] Add Rust regression tests for active-session reporting and cleared-session behaviour.
+- [ ] Validate session status updates, unexpected process exit, and stop/restart behaviour on physical Windows, Linux, and macOS devices.
+
+Model file size is a storage measurement, not a RAM/VRAM estimate. Session uptime begins when the managed local server reports ready. CI success does not establish physical-device inference compatibility.

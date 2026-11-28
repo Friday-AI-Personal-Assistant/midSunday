@@ -5,7 +5,7 @@
 //! signalling cancellation. This module never downloads assets or uses a
 //! network endpoint other than the validated loopback runtime.
 
-use std::{path::Path, sync::{atomic::{AtomicBool, Ordering}, Arc, Mutex}, thread::{self, JoinHandle}, time::{Duration, SystemTime, UNIX_EPOCH}};
+use std::{path::Path, sync::{atomic::{AtomicBool, Ordering}, Arc, Mutex}, thread::{self, JoinHandle}, time::{Duration, Instant, SystemTime, UNIX_EPOCH}};
 
 use serde::Serialize;
 
@@ -20,6 +20,23 @@ pub struct RuntimeStatusSnapshot {
     pub status: String,
     pub detail: Option<String>,
     pub startup_memory: Option<RuntimeStartupMemoryReport>,
+    pub session: Option<RuntimeSessionSnapshot>,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct RuntimeSessionSnapshot {
+    pub model_file_size_bytes: Option<u64>,
+    pub context_tokens: u32,
+    pub cpu_threads: Option<u16>,
+    pub uptime_seconds: u64,
+}
+
+struct RuntimeSessionDetails {
+    model_file_size_bytes: Option<u64>,
+    context_tokens: u32,
+    cpu_threads: Option<u16>,
+    started_at: Instant,
 }
 
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
@@ -82,6 +99,7 @@ struct RuntimeManagerInner {
     operation: Mutex<()>,
     session: Mutex<Option<LlamaRuntimeSession>>,
     status: Mutex<RuntimeStatusSnapshot>,
+    session_details: Mutex<Option<RuntimeSessionDetails>>,
     active_cancellation: Mutex<Option<GenerationCancellation>>,
 }
 
@@ -100,7 +118,9 @@ impl Default for RuntimeManager {
                     status: "notInstalled".to_owned(),
                     detail: None,
                     startup_memory: None,
+                    session: None,
                 }),
+                session_details: Mutex::new(None),
                 active_cancellation: Mutex::new(None),
             }),
         }
@@ -109,9 +129,18 @@ impl Default for RuntimeManager {
 
 impl RuntimeManager {
     pub fn snapshot(&self) -> Result<RuntimeStatusSnapshot, String> {
-        self.inner.status.lock()
+        let mut snapshot = self.inner.status.lock()
             .map(|status| status.clone())
-            .map_err(|_| "Runtime status is unavailable.".to_owned())
+            .map_err(|_| "Runtime status is unavailable.".to_owned())?;
+        let details = self.inner.session_details.lock()
+            .map_err(|_| "Runtime session details are unavailable.".to_owned())?;
+        snapshot.session = details.as_ref().map(|details| RuntimeSessionSnapshot {
+            model_file_size_bytes: details.model_file_size_bytes,
+            context_tokens: details.context_tokens,
+            cpu_threads: details.cpu_threads,
+            uptime_seconds: u64::try_from(details.started_at.elapsed().as_secs()).unwrap_or(u64::MAX),
+        });
+        Ok(snapshot)
     }
 
     /// Samples only the managed llama-server process.
@@ -153,6 +182,8 @@ impl RuntimeManager {
         drop(slot);
 
         self.set_status(RuntimeStatus::Starting, None)?;
+        if let Ok(mut details) = self.inner.session_details.lock() { *details = None; }
+        let model_file_size_bytes = std::fs::metadata(model).ok().map(|metadata| metadata.len());
         match LlamaRuntimeSession::start(
             &config, Path::new(executable), Path::new(model),
             startup_timeout, poll_interval, request_timeout,
@@ -161,6 +192,13 @@ impl RuntimeManager {
                 let startup_memory = session.startup_memory_report().clone();
                 *self.inner.session.lock()
                     .map_err(|_| "Runtime session is unavailable.".to_owned())? = Some(session);
+                *self.inner.session_details.lock()
+                    .map_err(|_| "Runtime session details are unavailable.".to_owned())? = Some(RuntimeSessionDetails {
+                        model_file_size_bytes,
+                        context_tokens: config.context_tokens,
+                        cpu_threads: config.cpu_threads,
+                        started_at: Instant::now(),
+                    });
                 {
                     let mut snapshot = self.inner.status.lock()
                         .map_err(|_| "Runtime status is unavailable.".to_owned())?;
@@ -169,6 +207,7 @@ impl RuntimeManager {
                 self.set_status(RuntimeStatus::Ready, None)
             }
             Err(error) => {
+                if let Ok(mut details) = self.inner.session_details.lock() { *details = None; }
                 let detail = format!("{error:?}");
                 self.set_status(RuntimeStatus::Failed, Some(detail.clone()))?;
                 Err(detail)
@@ -289,7 +328,11 @@ impl RuntimeManager {
             }
             Err(error) => {
                 let detail = format!("{error:?}");
-                self.set_status(session.status(), Some(detail.clone()))?;
+                let status = session.status();
+                if status == RuntimeStatus::Failed {
+                    if let Ok(mut details) = self.inner.session_details.lock() { *details = None; }
+                }
+                self.set_status(status, Some(detail.clone()))?;
                 Err(detail)
             }
         }
@@ -321,12 +364,16 @@ impl RuntimeManager {
             if current.status != "notInstalled" {
                 self.set_status(RuntimeStatus::Stopped, None)?;
             }
+            *self.inner.session_details.lock()
+                .map_err(|_| "Runtime session details are unavailable.".to_owned())? = None;
             return Ok(());
         };
 
         match session.stop() {
             Ok(()) => {
                 *slot = None;
+                *self.inner.session_details.lock()
+                    .map_err(|_| "Runtime session details are unavailable.".to_owned())? = None;
                 self.set_status(RuntimeStatus::Stopped, None)
             }
             Err(error) => {
@@ -433,6 +480,37 @@ mod tests {
         let snapshot = RuntimeManager::default().snapshot().unwrap();
         assert_eq!(snapshot.status, "notInstalled");
         assert_eq!(snapshot.detail, None);
+    }
+
+    #[test]
+    fn snapshot_reports_only_non_sensitive_active_session_resource_details() {
+        let manager = RuntimeManager::default();
+        *manager.inner.session_details.lock().unwrap() = Some(RuntimeSessionDetails {
+            model_file_size_bytes: Some(4 * 1024 * 1024 * 1024),
+            context_tokens: 4096,
+            cpu_threads: Some(6),
+            started_at: Instant::now() - Duration::from_secs(12),
+        });
+        let snapshot = manager.snapshot().unwrap();
+        let session = snapshot.session.unwrap();
+        assert_eq!(session.model_file_size_bytes, Some(4 * 1024 * 1024 * 1024));
+        assert_eq!(session.context_tokens, 4096);
+        assert_eq!(session.cpu_threads, Some(6));
+        assert!(session.uptime_seconds >= 12);
+        // The snapshot intentionally contains no local path or process identifier.
+    }
+
+    #[test]
+    fn snapshot_hides_session_details_after_the_session_is_cleared() {
+        let manager = RuntimeManager::default();
+        *manager.inner.session_details.lock().unwrap() = Some(RuntimeSessionDetails {
+            model_file_size_bytes: None,
+            context_tokens: 2048,
+            cpu_threads: None,
+            started_at: Instant::now(),
+        });
+        *manager.inner.session_details.lock().unwrap() = None;
+        assert!(manager.snapshot().unwrap().session.is_none());
     }
 
     #[test]
