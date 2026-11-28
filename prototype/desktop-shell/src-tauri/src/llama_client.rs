@@ -115,7 +115,6 @@ impl LlamaHttpClient {
         // Preserve incomplete UTF-8 sequences between socket reads. This matters
         // for Urdu and other multibyte scripts when a character crosses a chunk boundary.
         let mut pending = Vec::<u8>::new();
-        let mut received_done_marker = false;
 
         loop {
             if cancellation.is_cancelled() {
@@ -141,10 +140,7 @@ impl LlamaHttpClient {
                 }
 
                 match parse_stream_line(&line)? {
-                    StreamLine::Done => {
-                        received_done_marker = true;
-                        return Ok(());
-                    },
+                    StreamLine::Done => return Ok(()),
                     StreamLine::Delta(content) => on_delta(&content),
                     StreamLine::Ignored => {}
                 }
@@ -157,10 +153,7 @@ impl LlamaHttpClient {
 
         if !pending.is_empty() {
             match parse_stream_line(&pending)? {
-                StreamLine::Done => {
-                    received_done_marker = true;
-                    return Ok(());
-                },
+                StreamLine::Done => return Ok(()),
                 StreamLine::Delta(content) => on_delta(&content),
                 StreamLine::Ignored => {}
             }
@@ -168,8 +161,6 @@ impl LlamaHttpClient {
 
         if cancellation.is_cancelled() {
             Err(LlamaClientError::Cancelled)
-        } else if received_done_marker {
-            Ok(())
         } else {
             // A clean TCP EOF is not proof that the model completed its reply:
             // a dropped server or interrupted response must not look successful.
@@ -413,7 +404,7 @@ mod tests {
 
     #[test]
     fn streaming_rejects_clean_eof_without_server_done_marker() {
-        let body = "data: {\\"choices\\":[{\\"delta\\":{\\"content\\":\\"partial reply\\"}}]}\\n\\n";
+        let body = "data: {\"choices\":[{\"delta\":{\"content\":\"partial reply\"}}]}\n\n";
         let (port, server) = mock_server(vec![(200, body)]);
         let client = LlamaHttpClient::new(&config(port), Duration::from_secs(2)).unwrap();
         let request = GenerationRequest {
