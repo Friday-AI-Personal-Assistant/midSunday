@@ -249,9 +249,9 @@ mod tests {
         fs::write(&model_path, b"GGUF-control test model").unwrap();
         let catalogue = ModelCatalog::open(&d.join("models.json")).unwrap();
 
-        assert!(catalogue.register(model_path.to_str().unwrap(), "Bad\\nName", "", "").is_err());
-        assert!(catalogue.register(model_path.to_str().unwrap(), "Good name", "Bad\\tSource", "").is_err());
-        assert!(catalogue.register(model_path.to_str().unwrap(), "Good name", "", "Bad\\rLicense").is_err());
+        assert!(catalogue.register(model_path.to_str().unwrap(), "Bad\nName", "", "").is_err());
+        assert!(catalogue.register(model_path.to_str().unwrap(), "Good name", "Bad\tSource", "").is_err());
+        assert!(catalogue.register(model_path.to_str().unwrap(), "Good name", "", "Bad\rLicense").is_err());
         assert!(catalogue.list().unwrap().is_empty());
 
         let _ = fs::remove_dir_all(d);
