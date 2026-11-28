@@ -2580,3 +2580,12 @@ The boundary protects React rendering and lifecycle work only. It does not catch
 - [ ] Validate local time display, retry/failure states, and exported report compatibility on physical Windows, Linux, and macOS devices.
 
 The check timestamp records when the snapshot was assembled; the report timestamp records when the JSON file was saved. Both are local system-clock values, not a trusted audit clock.
+
+
+### 2026-11-28 — Diagnostic export privacy regression coverage (Batch #253)
+
+- [x] Assert the exported report has an explicit top-level field allowlist and a stable snapshot field allowlist.
+- [x] Verify configured server/model paths are not echoed in readiness details or storage-volume diagnostics.
+- [x] Serialize a representative diagnostic snapshot and assert a private path marker and private conversation/memory categories are absent.
+- [x] Keep diagnostics collection read-only and avoid adding path, hardware, account, or content identifiers to the report.
+- [ ] Validate report contents and path privacy on physical Windows, Linux, and macOS devices.

@@ -913,8 +913,43 @@ mod diagnostics_export_tests {
         assert!(value.get("generatedAtUnixSeconds").is_some());
         assert!(value.get("conversations").is_none());
         assert!(value.get("memories").is_none());
+        let report_keys: Vec<&str> = value.as_object().unwrap().keys().map(String::as_str).collect();
+        assert_eq!(report_keys, vec!["formatVersion", "generatedAtUnixSeconds", "snapshot"]);
+        let snapshot_keys: Vec<&str> = value["snapshot"].as_object().unwrap().keys().map(String::as_str).collect();
+        assert_eq!(snapshot_keys, vec![
+            "appDataVolume", "appVersion", "architecture", "checkedAtUnixSeconds",
+            "database", "modelCount", "modelFile", "modelVolume", "operatingSystem",
+            "runtimeStatus", "serverExecutable",
+        ]);
         let _ = fs::remove_dir_all(directory);
     }
+
+    #[test]
+    fn diagnostic_file_check_messages_never_echo_configured_paths() {
+        let directory = temp_dir();
+        let private_path = directory.join("midsunday-private-path-marker").join("missing-model.gguf");
+        let private_path_text = private_path.to_string_lossy().to_string();
+        let readiness = setup_readiness::check_local_setup(&private_path_text, &private_path_text);
+        let disks = sysinfo::Disks::new_with_refreshed_list();
+        let app_volume = collect_diagnostics_disk_space(Some(&directory), &disks);
+        let model_volume = collect_diagnostics_disk_space(Some(&private_path), &disks);
+        let mut snapshot = sample_snapshot();
+        snapshot.server_executable = readiness.executable;
+        snapshot.model_file = ModelVerification {
+            valid: false,
+            status: readiness.model.status,
+            detail: readiness.model.detail,
+        };
+        snapshot.app_data_volume = app_volume;
+        snapshot.model_volume = model_volume;
+        let serialized = serde_json::to_string(&snapshot).unwrap();
+        assert!(!serialized.contains("midsunday-private-path-marker"));
+        assert!(!serialized.contains(&private_path_text));
+        assert!(!serialized.contains("conversations"));
+        assert!(!serialized.contains("memories"));
+        let _ = fs::remove_dir_all(directory);
+    }
+
     #[test]
     fn refuses_non_json_diagnostic_export_paths() {
         let directory = temp_dir();

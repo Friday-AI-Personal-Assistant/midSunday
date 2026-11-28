@@ -305,3 +305,9 @@ All notable project changes are recorded here. The project is in foundation/prot
 - Added a collection timestamp to diagnostic snapshots and a versioned JSON export schema (`formatVersion: 1`). The Settings view and reviewed preview distinguish the health-check time from the later report-save time.
 - Starting a new health check now immediately invalidates the prior snapshot, review approval, and export status. A failed retry can no longer leave an older report available as though it reflected the latest check.
 - Added regression coverage for report version and snapshot timestamp fields.
+
+
+## 2026-11-28 — Batch #253
+- Expanded diagnostic-export privacy regression coverage: tests now assert the exact top-level and snapshot JSON field allowlists.
+- Added a regression test using a unique private path marker to ensure server/model readiness details and app-data/model-volume diagnostics do not echo configured paths into serialized diagnostic snapshots.
+- Confirmed private conversation and memory categories remain absent from the report schema.
