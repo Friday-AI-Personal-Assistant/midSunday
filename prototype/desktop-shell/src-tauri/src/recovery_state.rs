@@ -301,4 +301,40 @@ mod tests {
         let error = ensure_database_not_blocked(directory.path()).unwrap_err();
         assert!(error.contains("unsupported or invalid format"));
     }
+
+    // Invoked by the parent test in a fresh test-runner process. Keeping this
+    // probe as a normal test also makes it harmless during the full test suite.
+    #[test]
+    fn recovery_marker_child_process_probe() {
+        let Ok(data_dir) = std::env::var("MIDSUNDAY_RECOVERY_MARKER_CHILD_DATA_DIR") else {
+            return;
+        };
+        let error = ensure_database_not_blocked(Path::new(&data_dir))
+            .expect_err("a persisted recovery marker must block a fresh process");
+        assert!(error.contains("recovery is required"), "unexpected startup guard result: {error}");
+    }
+
+    #[test]
+    fn persisted_marker_blocks_a_fresh_process() {
+        use std::process::Command;
+
+        let directory = tempfile::tempdir().unwrap();
+        RecoveryState::in_data_dir(directory.path()).mark_required().unwrap();
+
+        let output = Command::new(std::env::current_exe().unwrap())
+            .arg("--exact")
+            .arg("recovery_state::tests::recovery_marker_child_process_probe")
+            .arg("--nocapture")
+            .env("MIDSUNDAY_RECOVERY_MARKER_CHILD_DATA_DIR", directory.path())
+            .output()
+            .expect("the recovery-marker child test process should start");
+
+        assert!(
+            output.status.success(),
+            "fresh process did not enforce the persisted recovery block. stdout: {} stderr: {}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr),
+        );
+    }
+
 }

@@ -147,3 +147,8 @@ Application setup checks this marker before opening the SQLite database. A valid
 ## 19. Strict and bounded recovery-marker validation (Batch #308)
 
 Recovery-marker parsing now accepts only a regular file no larger than 256 bytes. The parser caps the actual read as well as checking the reported file size, so a marker that grows between inspection and reading cannot trigger an unbounded allocation. The v1 JSON structure rejects unknown fields rather than silently accepting an unexpected marker shape. Directories and other non-regular marker paths fail closed. Regression tests cover oversized content, unknown fields, and a non-regular path. Normal startup remains blocked for any present invalid marker; this batch adds no marker-clearing mechanism, recovery UI, or restore entry point.
+
+
+## 20. Recovery-marker process-restart verification (Batch #310)
+
+A regression test now writes the persistent recovery marker in the parent test process and launches the current Rust test binary as a separate child process. The child invokes the same startup guard used by application setup and must reject the marked data directory. The probe is inert during normal test-suite execution unless its test-only environment variable is present. This demonstrates persistence across a process restart, but it is not a power-loss durability test, does not simulate interruption inside a restore transaction, and does not prove SQLite journal recovery. Marker clearing, a recovery-only startup interface, and restore remain unavailable.

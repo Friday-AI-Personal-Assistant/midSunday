@@ -2876,3 +2876,13 @@ This is the persistent fail-closed marker foundation only. It is not yet connect
 - [ ] Demonstrate process termination/restart at every restore transaction boundary and complete physical Windows/Linux/macOS validation before enabling restore.
 
 This batch hardens parsing of the persistent startup block only. It does not clear markers, open a blocked database, add a recovery UI, or enable restore.
+
+
+### 2026-11-28 — Recovery marker process-restart verification (Batch #310)
+
+- [x] Launch a fresh Rust test-runner process after writing a recovery marker and prove the independent process still rejects normal startup through the shared recovery guard.
+- [x] Keep the subprocess probe inert during ordinary test-suite execution unless explicitly given its private test-only data-directory variable.
+- [ ] Add a deliberate recovery-only startup path and verified marker clearing; never provide a normal-startup bypass.
+- [ ] Exercise abrupt process termination at each future restore transaction boundary and complete physical Windows/Linux/macOS validation before enabling restore.
+
+This batch verifies that the on-disk recovery block survives a real process boundary and is enforced by a fresh process. It does not simulate power loss, validate SQLite crash recovery, clear markers, add recovery UI, or enable restore.

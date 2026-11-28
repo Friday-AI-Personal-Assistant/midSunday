@@ -490,3 +490,9 @@ All notable project changes are recorded here. The project is in foundation/prot
 - Hardened persistent recovery-marker validation with a strict 256-byte maximum and a bounded read, including protection against a file growing after its initial size check.
 - Required the marker path to be a regular file and rejected unknown JSON fields; malformed, oversized, and non-regular markers continue to fail closed.
 - Added regression tests for oversized marker content, unknown fields, and a directory at the marker path. No marker-clearing command, recovery UI, or restore capability was added.
+
+
+## 2026-11-28 — Batch #310
+- Added a fresh-process regression test that writes a recovery marker, launches a separate test-runner process, and confirms the shared startup guard still blocks the marked data directory.
+- Kept the child-process probe inert during ordinary test execution unless its private test-only environment variable is supplied.
+- This verifies process-boundary persistence only; it does not claim power-loss durability, SQLite crash recovery, recovery UI, marker clearing, or restore availability.
