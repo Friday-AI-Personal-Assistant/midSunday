@@ -68,7 +68,7 @@ type SetupFileCheck = { status: string; detail: string };
 type LocalSetupReadiness = { executable: SetupFileCheck; model: SetupFileCheck };
 type DiskSpaceCheck = { status: string; totalBytes: number | null; availableBytes: number | null; detail: string };
 type DiagnosticsSnapshot = { appVersion: string; operatingSystem: string; architecture: string; checkedAtUnixSeconds: number; database: { status: string; schemaVersion: number; detail: string }; modelCount: number | null; runtimeStatus: string; serverExecutable: SetupFileCheck; modelFile: ModelVerification; appDataVolume: DiskSpaceCheck; modelVolume: DiskSpaceCheck };
-type DiagnosticFinding = { id: string; title: string; level: "attention" | "info"; message: string };
+type DiagnosticFinding = { id: string; title: string; level: "attention" | "info"; message: string; actionLabel?: string; actionTarget?: "local-ai-settings" | "model-library-settings" };
 function getDiagnosticFindings(snapshot: DiagnosticsSnapshot): DiagnosticFinding[] {
   const findings: DiagnosticFinding[] = [];
   if (snapshot.database.status !== "healthy") {
@@ -76,11 +76,11 @@ function getDiagnosticFindings(snapshot: DiagnosticsSnapshot): DiagnosticFinding
   }
   if (snapshot.serverExecutable.status !== "ready") {
     const configured = snapshot.serverExecutable.status !== "not_configured";
-    findings.push({ id: "server", title: "Local server executable", level: configured ? "attention" : "info", message: configured ? snapshot.serverExecutable.detail : "No server executable is configured yet. Choose a compatible llama-server file in Local AI settings when you are ready to set up offline chat." });
+    findings.push({ id: "server", title: "Local server executable", level: configured ? "attention" : "info", message: configured ? snapshot.serverExecutable.detail : "No server executable is configured yet. Choose a compatible llama-server file in Local AI settings when you are ready to set up offline chat.", actionLabel: "Open Local AI settings", actionTarget: "local-ai-settings" });
   }
   if (!snapshot.modelFile.valid) {
     const configured = snapshot.modelFile.status !== "not_configured";
-    findings.push({ id: "model", title: "Configured GGUF model", level: configured ? "attention" : "info", message: configured ? snapshot.modelFile.detail : "No GGUF model is configured yet. Select a model in Local AI settings to enable local inference." });
+    findings.push({ id: "model", title: "Configured GGUF model", level: configured ? "attention" : "info", message: configured ? snapshot.modelFile.detail : "No GGUF model is configured yet. Select a model in Local AI settings to enable local inference.", actionLabel: "Open Local AI settings", actionTarget: "local-ai-settings" });
   }
   for (const [id, title, volume] of [
     ["app-storage", "App-data storage", snapshot.appDataVolume],
@@ -93,7 +93,7 @@ function getDiagnosticFindings(snapshot: DiagnosticsSnapshot): DiagnosticFinding
     }
   }
   if (snapshot.modelCount === null) {
-    findings.push({ id: "catalogue", title: "Local model catalogue", level: "info", message: "The registered model count could not be read during this check." });
+    findings.push({ id: "catalogue", title: "Local model catalogue", level: "info", message: "The registered model count could not be read during this check.", actionLabel: "Open model library", actionTarget: "model-library-settings" });
   }
   return findings;
 }
@@ -1221,6 +1221,13 @@ export default function App() {
     setLocalSetupBusy(false);
   }
 
+  function jumpToDiagnosticSetting(targetId: "local-ai-settings" | "model-library-settings") {
+    const target = document.getElementById(targetId);
+    if (!target) return;
+    target.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "start" });
+    target.focus({ preventScroll: true });
+  }
+
   async function runDiagnostics() {
     setDiagnosticsBusy(true);
     setDiagnosticsError("");
@@ -1904,7 +1911,7 @@ export default function App() {
               {userProfileNotice && <p className="memory-notice" role="status">{userProfileNotice}</p>}
               <p className="settings-footnote">A nickname is fine; you do not need to provide your legal name. You can leave this blank or turn name use off at any time.</p>
             </section>
-            <section className="settings-section runtime-settings"><div className="settings-section-title"><div><h2>Local AI engine</h2><p>Connect an existing llama.cpp server executable and a GGUF model stored on this device.</p></div><span className="settings-symbol">◈</span></div>
+            <section id="local-ai-settings" tabIndex={-1} className="settings-section runtime-settings"><div className="settings-section-title"><div><h2>Local AI engine</h2><p>Connect an existing llama.cpp server executable and a GGUF model stored on this device.</p></div><span className="settings-symbol">◈</span></div>
               <div className="runtime-status-line"><span className={runtimeStatus.status === "ready" || runtimeStatus.status === "generating" ? "core-dot good" : runtimeStatus.status === "failed" ? "core-dot bad" : "core-dot"} />Engine status: <strong>{runtimeStatus.status}</strong></div>
               {runtimeStatus.status === "failed" && runtimeStatus.detail === "The local engine process exited unexpectedly. Check the configured server file and model, then start the engine again." && <p className="memory-notice" role="alert">{runtimeStatus.detail}</p>}
               {runtimeStatus.session && <div className="model-kv-estimate">
@@ -1977,7 +1984,7 @@ export default function App() {
               {runtimeError && <p className="runtime-error" role="alert">{runtimeError}</p>}
               <p className="settings-footnote">Before starting, midSunday checks the GGUF file header. If the file is registered, its saved size and SHA-256 fingerprint are also rechecked. The engine listens only on this device (127.0.0.1).</p>
             </section>
-            <section className="settings-section">
+            <section id="model-library-settings" tabIndex={-1} className="settings-section">
               <div className="settings-section-title"><div><h2>Local model library</h2><p>Register GGUF files already on this device. midSunday records their details and SHA-256 fingerprint without copying or downloading them.</p></div><span className="settings-symbol">▧</span></div>
               <div className="path-field"><label htmlFor="model-display-name">Model name</label><input id="model-display-name" value={modelDisplayName} onChange={(event) => setModelDisplayName(event.target.value)} placeholder="e.g. My local assistant" maxLength={120} /></div>
               <div className="path-field"><label htmlFor="model-source">Source (optional)</label><input id="model-source" value={modelSource} onChange={(event) => setModelSource(event.target.value)} placeholder="Where did you get this model?" maxLength={512} /></div>
@@ -2291,7 +2298,7 @@ export default function App() {
                   </div>
                   {findings.length === 0
                     ? <p>Database integrity, configured local files, and checked storage volumes look healthy. The AI engine may still be stopped; that is normal when you are not using it.</p>
-                    : <ul>{findings.map((finding) => <li key={finding.id} className={"diagnostics-finding diagnostics-finding-" + finding.level}><span>{finding.level === "attention" ? "Review" : "Note"}</span><div><strong>{finding.title}</strong><p>{finding.message}</p></div></li>)}</ul>}
+                    : <ul>{findings.map((finding) => <li key={finding.id} className={"diagnostics-finding diagnostics-finding-" + finding.level}><span>{finding.level === "attention" ? "Review" : "Note"}</span><div><strong>{finding.title}</strong><p>{finding.message}</p>{finding.actionLabel && finding.actionTarget && <button className="diagnostic-finding-action" type="button" onClick={() => jumpToDiagnosticSetting(finding.actionTarget!)}>{finding.actionLabel} <span aria-hidden="true">→</span></button>}</div></li>)}</ul>}
                   <small>This is guidance from a read-only snapshot, not an automatic repair. Unconfigured items are informational; a stopped engine is not treated as a fault.</small>
                 </div>;
               })()}

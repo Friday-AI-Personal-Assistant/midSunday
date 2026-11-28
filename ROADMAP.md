@@ -2601,3 +2601,12 @@ The check timestamp records when the snapshot was assembled; the report timestam
 - [ ] Validate the overview with real healthy, incomplete, low-storage, and database-warning states on physical Windows, Linux, and macOS devices.
 
 The overview is derived entirely from the existing diagnostic snapshot. It does not add data collection or alter the versioned JSON report.
+
+
+### 2026-11-28 — Diagnostics contextual navigation (Batch #255)
+
+- [x] Add direct, keyboard-accessible shortcuts from relevant diagnostic findings to the Local AI engine settings and local model library.
+- [x] Preserve the read-only nature of Diagnostics: shortcuts only navigate and never change paths, start the engine, modify the model catalogue, or attempt repairs.
+- [x] Respect the Reduce motion preference when scrolling to a destination and move keyboard focus to the destination section.
+- [x] Keep navigation targets limited to settings that directly relate to the finding; storage and database warnings remain guidance-only where no safe automatic action exists.
+- [ ] Validate shortcut navigation, focus visibility, and reduced-motion behavior on physical Windows, Linux, and macOS devices.

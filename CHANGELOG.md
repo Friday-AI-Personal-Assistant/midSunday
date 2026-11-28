@@ -317,3 +317,8 @@ All notable project changes are recorded here. The project is in foundation/prot
 - Added a plain-language Diagnostics health overview with an overall state and a short list of findings that need attention or are informational.
 - Unconfigured server/model settings are presented as setup guidance rather than failures, and a stopped local engine is explicitly treated as normal when idle.
 - Kept the overview derived from the existing read-only snapshot; no new collection, automatic repair, telemetry, or network behavior was added.
+
+
+## 2026-11-28 — Batch #255
+- Added contextual navigation shortcuts to Diagnostics findings for the configured local server, GGUF model, and local model catalogue. Users can jump directly to the related settings section without hunting through the Settings page.
+- Navigation respects Reduce motion, scrolls the destination into view, and moves keyboard focus to the destination section. The shortcuts are navigation-only; they do not modify files, start the engine, or perform repairs.

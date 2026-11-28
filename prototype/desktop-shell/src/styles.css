@@ -785,5 +785,9 @@ body { color:var(--text-main); background:var(--app-bg); }
 .diagnostics-finding-attention > span { color: #e6a49a; }
 .diagnostics-finding strong { color: var(--text-strong); font-size: 11px; }
 .diagnostics-finding p { margin: 3px 0 0; color: var(--soft); font-size: 10px; line-height: 1.55; }
+.diagnostic-finding-action { display: inline-flex; align-items: center; gap: 6px; margin-top: 8px; padding: 5px 8px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface-raised); color: var(--accent); font-size: 10px; font-weight: 700; cursor: pointer; }
+.diagnostic-finding-action:hover { border-color: var(--accent); background: var(--surface-hover); }
+.diagnostic-finding-action:focus-visible, #local-ai-settings:focus-visible, #model-library-settings:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+#local-ai-settings, #model-library-settings { scroll-margin-top: 18px; }
 .diagnostics-summary > small { display: block; margin-top: 12px; color: var(--muted); font-size: 9px; line-height: 1.5; }
 @media (max-width: 560px) { .diagnostics-summary { padding: 13px; } .diagnostics-summary-heading { align-items: flex-start; } .diagnostics-finding { grid-template-columns: 44px minmax(0, 1fr); } }
