@@ -430,6 +430,43 @@ impl ConversationStore {
         })
     }
 
+    /// Creates a consistent, verified SQLite snapshot at a user-selected local path.
+    /// The connection mutex prevents concurrent writes; VACUUM INTO includes committed WAL content.
+    pub fn backup_to(&self, backup_path: &Path) -> Result<(), String> {
+        if !backup_path.extension().and_then(|value| value.to_str()).is_some_and(|value| value.eq_ignore_ascii_case("sqlite3")) {
+            return Err("Choose a .sqlite3 file for the local database backup.".to_owned());
+        }
+        if backup_path.exists() {
+            return Err("A file already exists at that location. Choose a new filename; existing files are never overwritten.".to_owned());
+        }
+        let backup_path_text = backup_path.to_str()
+            .ok_or_else(|| "The selected backup location is not supported.".to_owned())?;
+        let connection = self.lock()?;
+        let source_schema: i64 = connection.pragma_query_value(None, "user_version", |row| row.get(0))
+            .map_err(|_| "The local database version could not be checked before backup.".to_owned())?;
+        connection.execute("VACUUM INTO ?1", [backup_path_text])
+            .map_err(|_| "Could not create the local database backup. Check the selected location and available disk space.".to_owned())?;
+        drop(connection);
+
+        let verification = (|| -> Result<(), String> {
+            let backup = Connection::open_with_flags(backup_path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
+                .map_err(|_| "The new backup could not be opened for verification.".to_owned())?;
+            let integrity: String = backup.query_row("PRAGMA quick_check(1)", [], |row| row.get(0))
+                .map_err(|_| "The new backup could not pass its integrity check.".to_owned())?;
+            let backup_schema: i64 = backup.pragma_query_value(None, "user_version", |row| row.get(0))
+                .map_err(|_| "The new backup's schema version could not be verified.".to_owned())?;
+            if integrity != "ok" || backup_schema != source_schema {
+                return Err("The new backup did not pass integrity and schema verification.".to_owned());
+            }
+            Ok(())
+        })();
+        if let Err(error) = verification {
+            let _ = std::fs::remove_file(backup_path);
+            return Err(error);
+        }
+        Ok(())
+    }
+
     fn lock(&self) -> Result<std::sync::MutexGuard<'_, Connection>, String> {
         self.connection.lock().map_err(|_| "Local conversation database is unavailable.".to_owned())
     }
@@ -1701,6 +1738,43 @@ mod tests {
         assert_eq!(store.list_memories().unwrap()[0].content, "Keep this separate");
         assert_eq!(store.list().unwrap()[0].title, "Keep this chat");
         assert_ne!(item.id, 0);
+    }
+
+    #[test]
+    fn local_database_backup_is_consistent_verified_and_never_overwrites() {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static NEXT: AtomicU64 = AtomicU64::new(1);
+        let suffix = format!("{}-{}", std::process::id(), NEXT.fetch_add(1, Ordering::Relaxed));
+        let source_path = std::env::temp_dir().join(format!("midsunday-source-{suffix}.sqlite3"));
+        let backup_path = std::env::temp_dir().join(format!("midsunday-backup-{suffix}.sqlite3"));
+        let store = ConversationStore::open(&source_path).unwrap();
+        let chat = store.create("Backup verification chat").unwrap();
+        store.append(chat.id, "user", "A private conversation entry").unwrap();
+        store.create_memory("A saved memory entry").unwrap();
+        store.create_awareness_item("I enjoy local-first software.", "interests").unwrap();
+        let mut settings = AwarenessSettings::default();
+        settings.enabled = true;
+        settings.use_in_chat = true;
+        store.save_awareness_settings(settings).unwrap();
+
+        store.backup_to(&backup_path).unwrap();
+        let backup = Connection::open_with_flags(&backup_path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY).unwrap();
+        let integrity: String = backup.query_row("PRAGMA quick_check(1)", [], |row| row.get(0)).unwrap();
+        assert_eq!(integrity, "ok");
+        let schema: i64 = backup.pragma_query_value(None, "user_version", |row| row.get(0)).unwrap();
+        assert_eq!(schema, 8);
+        let conversations: i64 = backup.query_row("SELECT COUNT(*) FROM conversations", [], |row| row.get(0)).unwrap();
+        let messages: i64 = backup.query_row("SELECT COUNT(*) FROM conversation_messages", [], |row| row.get(0)).unwrap();
+        let memories: i64 = backup.query_row("SELECT COUNT(*) FROM saved_memories", [], |row| row.get(0)).unwrap();
+        let awareness: i64 = backup.query_row("SELECT COUNT(*) FROM awareness_items", [], |row| row.get(0)).unwrap();
+        assert_eq!((conversations, messages, memories, awareness), (1, 1, 1, 1));
+        assert!(store.backup_to(&backup_path).is_err());
+        assert!(store.backup_to(&backup_path.with_extension("json")).is_err());
+
+        drop(backup);
+        drop(store);
+        let _ = std::fs::remove_file(source_path);
+        let _ = std::fs::remove_file(backup_path);
     }
 
     #[test]

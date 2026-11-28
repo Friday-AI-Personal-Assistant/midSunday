@@ -500,6 +500,11 @@ fn export_diagnostics_report(file_path: String, snapshot: DiagnosticsSnapshot) -
 }
 
 #[tauri::command]
+fn backup_local_database(file_path: String, store: State<'_, ConversationStore>) -> Result<(), String> {
+    store.backup_to(std::path::Path::new(&file_path))
+}
+
+#[tauri::command]
 fn get_app_status() -> &'static str {
     "The midSunday Rust core is running. The desktop shell is connected."
 }
@@ -727,6 +732,7 @@ pub fn run() {
             get_app_status,
             get_diagnostics_snapshot,
             export_diagnostics_report,
+            backup_local_database,
             get_hardware_snapshot,
             get_live_system_metrics,
             list_local_models,

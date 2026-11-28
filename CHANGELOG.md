@@ -327,3 +327,9 @@ All notable project changes are recorded here. The project is in foundation/prot
 ## 2026-11-28 — Batch #256
 - Improved Diagnostics storage clarity by showing available capacity, total capacity, and percentage used for app-data and model volumes, with compact visual usage meters.
 - Unknown or invalid measurements remain explanatory text without a fabricated percentage or meter. The reviewed export preview uses the same safe formatting; collection and report schema are unchanged.
+
+
+## 2026-11-28 — Batch #257
+- Added an explicit local SQLite database backup. SQLite creates a consistent snapshot while database access is serialized, then the app opens the result read-only and verifies integrity plus schema version before reporting success.
+- The backup includes conversations, saved memories, and Awareness data stored in SQLite. It stays on the device, refuses to overwrite an existing file, and uses a dedicated .sqlite3 destination.
+- Clearly disclosed that this initial database-only backup is unencrypted and does not include model files or separate application settings. Restore, encryption, and cloud backup remain future work.

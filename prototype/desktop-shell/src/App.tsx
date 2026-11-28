@@ -304,6 +304,9 @@ export default function App() {
   const [diagnosticsExportBusy, setDiagnosticsExportBusy] = useState(false);
   const [diagnosticsExportReviewed, setDiagnosticsExportReviewed] = useState(false);
   const [diagnosticsExportStatus, setDiagnosticsExportStatus] = useState("");
+  const [databaseBackupBusy, setDatabaseBackupBusy] = useState(false);
+  const [databaseBackupStatus, setDatabaseBackupStatus] = useState("");
+  const [databaseBackupError, setDatabaseBackupError] = useState("");
   const [localSetupReadiness, setLocalSetupReadiness] = useState<LocalSetupReadiness | null>(null);
   const [localSetupBusy, setLocalSetupBusy] = useState(false);
   const localSetupCheckSequence = useRef(0);
@@ -1254,6 +1257,27 @@ export default function App() {
       setDiagnosticsError("The local diagnostic check could not complete. Check that the app is running correctly and try again.");
     } finally {
       setDiagnosticsBusy(false);
+    }
+  }
+
+  async function createLocalDatabaseBackup() {
+    if (databaseBackupBusy) return;
+    setDatabaseBackupBusy(true);
+    setDatabaseBackupStatus("");
+    setDatabaseBackupError("");
+    try {
+      const selected = await save({
+        title: "Create a local midSunday database backup",
+        defaultPath: "midSunday-backup.sqlite3",
+        filters: [{ name: "SQLite database backup", extensions: ["sqlite3"] }],
+      });
+      if (!selected) return;
+      await invoke<void>("backup_local_database", { filePath: selected });
+      setDatabaseBackupStatus("Verified local backup saved. This SQLite file is not encrypted; keep it private and do not upload or share it.");
+    } catch (error) {
+      setDatabaseBackupError(typeof error === "string" ? error : "The local backup could not be created. Check the selected location and available disk space.");
+    } finally {
+      setDatabaseBackupBusy(false);
     }
   }
 
@@ -2289,6 +2313,16 @@ export default function App() {
                 <div className="hardware-note">This assessment does not select a model, change performance settings, download anything, or guarantee compatibility.</div>
               </>}
               <div className="setting-row"><div><strong>Launch at sign-in</strong><p>Start midSunday automatically when you sign in to Windows, Linux, or macOS. This only registers the app with your operating system; it does not start an AI model or connect to the internet.</p></div><button className={launchAtLogin ? "toggle on" : "toggle"} type="button" role="switch" aria-label="Launch midSunday at sign-in" aria-checked={launchAtLogin} aria-busy={launchAtLoginBusy} disabled={launchAtLoginBusy} onClick={() => void toggleLaunchAtLogin()}><i /></button></div>{launchAtLoginError && <p className="hardware-error" role="status">{launchAtLoginError}</p>}
+            </section>
+            <section className="settings-section database-backup-section">
+              <div className="settings-section-title"><div><h2>Local database backup</h2><p>Create a standalone copy of midSunday's local database, including conversations, saved memories, and Awareness data.</p></div><span className="settings-symbol">⇧</span></div>
+              <div className="database-backup-card">
+                <div><strong>Keep a copy of your personal data</strong><p>The backup is created on this device only and verified before the app reports success. It does not include model files or separate application settings, and restore is not available yet.</p></div>
+                <button className="secondary-action" type="button" onClick={() => void createLocalDatabaseBackup()} disabled={databaseBackupBusy}>{databaseBackupBusy ? "Creating and verifying…" : "Create local database backup"}</button>
+              </div>
+              <p className="settings-footnote">Important: this first local backup format is an unencrypted SQLite file. Choose a private location, protect the file yourself, and do not share or upload it. Existing files are never overwritten. No cloud transfer occurs.</p>
+              {databaseBackupStatus && <p className="database-backup-status" role="status" aria-live="polite">{databaseBackupStatus}</p>}
+              {databaseBackupError && <p className="hardware-error" role="alert">{databaseBackupError}</p>}
             </section>
             <section className="settings-section diagnostics-section">
               <div className="settings-section-title"><div><h2>Diagnostics</h2><p>Run a read-only local health check. No conversations, memories, file paths, or private content are collected.</p></div><span className="settings-symbol">⌁</span></div>

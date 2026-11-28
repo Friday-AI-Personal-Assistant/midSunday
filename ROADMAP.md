@@ -2619,3 +2619,17 @@ The overview is derived entirely from the existing diagnostic snapshot. It does 
 - [x] Keep unknown, unavailable, zero-capacity, and malformed measurements as explanatory text without fabricating a percentage or progress bar.
 - [x] Reuse the same validated formatting in the report review preview; no new collection, paths, identifiers, telemetry, or report-schema changes.
 - [ ] Validate meter contrast, narrow layouts, and real storage readings on physical Windows, Linux, and macOS devices.
+
+
+### 2026-11-28 — Verified local database backup (Batch #257)
+
+- [x] Add an explicit user-triggered local SQLite backup using SQLite's consistent VACUUM INTO snapshot operation.
+- [x] Serialize backup creation with normal database access so the backup captures a consistent committed state, including committed WAL data.
+- [x] Verify the created file by opening it read-only, running SQLite quick_check(1), and matching its schema version to the source before reporting success.
+- [x] Refuse to overwrite an existing file and reject destinations that do not use the .sqlite3 extension.
+- [x] Include conversations, saved memories, and Awareness records/settings stored in SQLite; keep the backup local and do not transfer it.
+- [ ] Add a separately designed, explicitly confirmed restore workflow with pre-restore safety backup and rollback testing.
+- [ ] Add password-protected encryption before presenting encrypted-backup support; this first SQLite backup is explicitly unencrypted and must not be silently described as protected.
+- [ ] Validate backup creation, low-space failure, interruption, and data recovery on physical Windows, Linux, and macOS devices.
+
+This first backup covers the SQLite database only. Model files and separate JSON settings are not included, and restore/cloud backup are not implemented by this batch.
