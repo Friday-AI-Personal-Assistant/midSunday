@@ -279,7 +279,10 @@ mod tests {
         file.set_len(MAX_CATALOGUE_BYTES + 1).unwrap();
         drop(file);
 
-        let error = ModelCatalog::open(&path).unwrap_err();
+        let error = match ModelCatalog::open(&path) {
+            Err(error) => error,
+            Ok(_) => panic!("oversized catalogue should be rejected"),
+        };
         assert!(error.contains("exceeds the supported size"));
         let _ = fs::remove_dir_all(d);
     }
@@ -287,7 +290,10 @@ mod tests {
     #[test]
     fn opening_catalogue_rejects_directories_as_catalogue_files() {
         let d = dir();
-        let error = ModelCatalog::open(&d).unwrap_err();
+        let error = match ModelCatalog::open(&d) {
+            Err(error) => error,
+            Ok(_) => panic!("directory path should be rejected as a catalogue file"),
+        };
         assert!(error.contains("not a regular file"));
         let _ = fs::remove_dir_all(d);
     }

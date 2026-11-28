@@ -1,3 +1,7 @@
+## 2026-11-28 — Batch #330
+- Corrected the #327 model-catalogue regression tests to inspect expected errors without requiring the production `ModelCatalog` type to implement `Debug`.
+- This shared compile-time test issue blocked the downstream #328 and #329 commits too; the focused correction preserves the production API and fixes the common blocker for all three batches.
+
 ## 2026-11-28 — Batch #329
 - Bounded local llama.cpp JSON responses before deserialization: health responses are limited to 64 KiB and non-streaming generation responses to 4 MiB.
 - Oversized or malformed response bodies now fail as invalid responses instead of allowing unbounded JSON-body allocation. Added tests for valid and oversized bounded reads.
