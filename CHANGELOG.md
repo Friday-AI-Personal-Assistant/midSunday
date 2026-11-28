@@ -1,3 +1,9 @@
+## 2026-11-28 — Batch #293
+- Added guarded live-connection copy and verification primitives for a previously staged, fully verified restore candidate.
+- The copy uses SQLite's online-backup API against the existing live connection while the exclusive database guard is held; a separate verification snapshot runs the complete SQLite/manifest verifier and compares schema plus all aggregate content counts.
+- Added tests for replacing a test database under the runtime/database gates, matching the candidate inventory, and rejecting a mismatched live inventory without changing it.
+- These are backend primitives only. No restore command or UI is enabled, and the primitives are not yet wrapped in the encrypted safety-archive/rollback/crash-recovery transaction.
+
 ## 2026-11-28 — Batch #292
 - Added an encrypted-backup candidate staging pipeline that decrypts a user-selected `.msbackup` only inside a private temporary workspace, then uses the isolated SQLite online-backup candidate verifier from Batch #291.
 - The decrypted source workspace is explicitly closed before the candidate is returned; cleanup failures are surfaced and the candidate is discarded rather than silently retained.
