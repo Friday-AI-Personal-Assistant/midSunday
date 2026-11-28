@@ -751,6 +751,21 @@ impl ConversationStore {
         Ok(())
     }
 
+    /// Acquires the database connection exclusively for a future restore transaction.
+    ///
+    /// This is deliberately non-blocking. A restore must fail fast if a normal
+    /// database operation is already in progress, and the returned guard must
+    /// remain alive for the entire critical section. Holding this guard prevents
+    /// every normal ConversationStore method from acquiring the connection.
+    pub(crate) fn try_acquire_restore_lock(&self) -> Result<std::sync::MutexGuard<'_, Connection>, String> {
+        self.connection.try_lock().map_err(|error| match error {
+            std::sync::TryLockError::WouldBlock =>
+                "The local database is busy. Wait for the current operation to finish before attempting a restore.".to_owned(),
+            std::sync::TryLockError::Poisoned(_) =>
+                "The local database lock is unavailable. Restart midSunday before attempting a restore.".to_owned(),
+        })
+    }
+
     fn lock(&self) -> Result<std::sync::MutexGuard<'_, Connection>, String> {
         self.connection.lock().map_err(|_| "Local conversation database is unavailable.".to_owned())
     }
@@ -3126,6 +3141,38 @@ mod tests {
         assert!(loaded.learn_conversations);
         assert!(!loaded.use_in_chat);
         assert!(loaded.excluded_categories.is_empty());
+    }
+
+    #[test]
+    fn restore_database_lock_fails_fast_when_database_is_busy() {
+        let store = store();
+        let _normal_operation = store.lock().unwrap();
+        let error = store.try_acquire_restore_lock().unwrap_err();
+        assert!(error.contains("database is busy"));
+    }
+
+    #[test]
+    fn restore_database_lock_excludes_normal_database_operations_until_released() {
+        use std::sync::mpsc;
+        use std::time::Duration;
+
+        let store = store();
+        let restore_guard = store.try_acquire_restore_lock().unwrap();
+        let worker_store = store.clone();
+        let (started_tx, started_rx) = mpsc::channel();
+        let (finished_tx, finished_rx) = mpsc::channel();
+
+        let worker = std::thread::spawn(move || {
+            started_tx.send(()).unwrap();
+            let result = worker_store.content_inventory();
+            finished_tx.send(result.is_ok()).unwrap();
+        });
+
+        started_rx.recv_timeout(Duration::from_secs(2)).unwrap();
+        assert!(finished_rx.try_recv().is_err(), "normal database work must remain blocked by the restore guard");
+        drop(restore_guard);
+        assert!(finished_rx.recv_timeout(Duration::from_secs(2)).unwrap());
+        worker.join().unwrap();
     }
 
     #[test]

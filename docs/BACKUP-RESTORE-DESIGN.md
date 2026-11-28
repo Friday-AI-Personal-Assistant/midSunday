@@ -44,7 +44,7 @@ The encrypted backup password is not stored. Encrypted backups remain local-only
 
 A simple `RuntimeManager::snapshot()` check is not sufficient: another command could start the model between the check and the database replacement. Before implementation, introduce a shared operation gate used by runtime start/recovery/generation and restore. Restore takes exclusive access; normal runtime operations must either wait or return a clear busy result. Stop/status operations must not deadlock behind a long-running restore.
 
-The database mutex remains the final serialization boundary for all `ConversationStore` methods. The two gates have separate responsibilities: the runtime gate prevents new model work from racing the restore, while the database mutex prevents reads/writes from interleaving with the database copy.
+The database mutex remains the final serialization boundary for all `ConversationStore` methods. Batch #285 adds a non-blocking `ConversationStore::try_acquire_restore_lock` that returns an exclusive guard over this same mutex. Restore must hold the guard throughout the critical operation so no application database operation can interleave with the database copy. If another database operation is already active, restore fails fast with a user-safe busy message. The runtime gate prevents new model work from racing the restore; the database mutex prevents reads/writes from interleaving with the database copy. The guard API does not itself copy, validate, or roll back database contents.
 
 ## 5. Required automated tests
 

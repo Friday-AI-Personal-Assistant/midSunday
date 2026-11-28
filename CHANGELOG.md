@@ -1,3 +1,7 @@
+## 2026-11-28 — Batch #285
+- Added a fail-fast exclusive database restore lock using the exact mutex shared by every ConversationStore read and write. A restore can now reserve the live SQLite connection without replacing the file underneath it; normal database operations remain blocked until the guard is released.
+- Added regression tests proving restore refuses a busy database and that holding the restore guard excludes concurrent normal database work. This is a coordination primitive only; no restore operation or UI is enabled.
+
 ## 2026-11-28 — Batch #284
 - Added a non-blocking exclusive runtime-operation gate for future database restores. It rejects starting, ready, and generating states and shares the same mutex as runtime start, generation, stop, and recovery so a new runtime operation cannot race a restore holding the guard.
 - Added regression tests for allowed and rejected runtime states, fail-fast busy behaviour, and exclusive guard lifetime. Restore remains unavailable; no database data is changed.
