@@ -1,7 +1,7 @@
 //! User-managed inventory of existing local GGUF model files.
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::{fmt::Write as _, fs::{self, File}, io::{BufReader, Read}, path::{Path, PathBuf}, sync::{Arc, Mutex}, time::{SystemTime, UNIX_EPOCH}};
+use std::{fmt::Write as _, fs::{self, File}, io::{BufReader, Read, Write}, path::{Path, PathBuf}, sync::{Arc, Mutex}, time::{SystemTime, UNIX_EPOCH}};
 const MAX_LABEL_BYTES: usize = 512;
 const HASH_BUFFER_BYTES: usize = 1024 * 1024;
 
@@ -91,10 +91,14 @@ impl ModelCatalog {
     }
     fn persist(&self, models: &[LocalModel]) -> Result<(), String> {
         let contents = serde_json::to_vec_pretty(models).map_err(|e| format!("Could not encode local model catalogue: {e}"))?;
-        let temporary = self.path.with_extension("json.tmp");
-        fs::write(&temporary, contents).map_err(|e| format!("Could not write local model catalogue: {e}"))?;
-        if self.path.exists() { fs::remove_file(&self.path).map_err(|e| format!("Could not replace local model catalogue: {e}"))?; }
-        fs::rename(&temporary, &self.path).map_err(|e| format!("Could not finish saving local model catalogue: {e}"))?;
+        let parent = self.path.parent().filter(|parent| !parent.as_os_str().is_empty()).unwrap_or_else(|| Path::new("."));
+        let mut temporary = tempfile::NamedTempFile::new_in(parent)
+            .map_err(|e| format!("Could not prepare a temporary model catalogue: {e}"))?;
+        temporary.write_all(&contents)
+            .and_then(|_| temporary.as_file().sync_all())
+            .map_err(|e| format!("Could not write local model catalogue: {e}"))?;
+        temporary.persist(&self.path)
+            .map_err(|e| format!("Could not atomically replace local model catalogue: {}", e.error))?;
         Ok(())
     }
 }
@@ -217,6 +221,23 @@ mod tests {
         let c=ModelCatalog::open(&d.join("models.json")).unwrap();
         let result=c.verify_path(p.to_str().unwrap()).unwrap();
         assert!(result.valid); assert_eq!(result.status,"unregistered");
+        let _=fs::remove_dir_all(d);
+    }
+    #[test] fn successive_catalogue_updates_atomically_replace_and_reload_the_file() {
+        let d=dir();
+        let first_path=d.join("first.gguf");
+        let second_path=d.join("second.gguf");
+        fs::write(&first_path,b"GGUF-first model").unwrap();
+        fs::write(&second_path,b"GGUF-second model").unwrap();
+        let catalogue_path=d.join("models.json");
+        let catalogue=ModelCatalog::open(&catalogue_path).unwrap();
+        catalogue.register(first_path.to_str().unwrap(),"First","","").unwrap();
+        catalogue.register(second_path.to_str().unwrap(),"Second","","").unwrap();
+        let expected=catalogue.list().unwrap();
+        assert_eq!(expected.len(),2);
+        drop(catalogue);
+        let reopened=ModelCatalog::open(&catalogue_path).unwrap();
+        assert_eq!(reopened.list().unwrap(),expected);
         let _=fs::remove_dir_all(d);
     }
     #[test] fn malformed_catalogue_is_not_silently_overwritten() {
