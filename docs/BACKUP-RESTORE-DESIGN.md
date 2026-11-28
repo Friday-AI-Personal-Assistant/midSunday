@@ -88,3 +88,10 @@ The backend now has a private staging primitive that first verifies a v2 SQLite 
 ## 10. Encrypted restore-candidate staging milestone (Batch #292)
 
 A user-selected encrypted `.msbackup` can now be decrypted into a private temporary workspace and passed through the isolated SQLite candidate staging path. The source is fully verified, copied using SQLite's online-backup API, and the candidate is fully re-verified against its source schema, manifest, and aggregate inventory. The decrypted source workspace is explicitly removed before the candidate is returned; cleanup failure aborts staging and discards the candidate. Wrong passwords and invalid encrypted sources fail without modifying the encrypted source or live database. This is preparation only: no live restore, rollback, crash recovery, or UI enablement is included.
+
+
+## 11. Guarded live-connection copy and verification primitives (Batch #293)
+
+The restore guard now exposes two private backend primitives. The first copies a previously staged and verified candidate into the existing live SQLite connection using SQLite's online-backup API while the exclusive database mutex is held. The second snapshots that guarded connection into a private temporary workspace, runs the full backup verifier, and compares schema version and every aggregate inventory count against the candidate. Temporary verification storage is explicitly closed and cleanup failures are surfaced.
+
+Automated tests exercise the copy while holding the runtime gate and database guard, confirm the target database reflects the candidate inventory after the guard is released, and prove that a mismatched live inventory is rejected without mutation. These primitives are not registered as a command and are not connected to UI. They do not yet provide the complete encrypted safety-archive + rollback transaction, crash recovery, or physical-device validation; restore remains unavailable.
