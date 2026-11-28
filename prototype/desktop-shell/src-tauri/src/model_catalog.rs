@@ -19,7 +19,8 @@ pub struct ModelVerification {
     pub status: String,
     pub detail: String,
 }
-#[derive(Clone)]\npub struct ModelCatalog { path: PathBuf, models: Arc<Mutex<Vec<LocalModel>>> }
+#[derive(Clone)]
+pub struct ModelCatalog { path: PathBuf, models: Arc<Mutex<Vec<LocalModel>>> }
 
 impl ModelCatalog {
     pub fn open(path: &Path) -> Result<Self, String> {
@@ -201,6 +202,14 @@ mod tests {
         assert!(matches!(changed.status.as_str(),"sizeMismatch"|"hashMismatch"));
         fs::remove_file(&p).unwrap();
         assert_eq!(c.verify(&model.id).unwrap().status,"missing");
+        let _=fs::remove_dir_all(d);
+    }
+    #[test] fn cloned_catalogue_handles_share_the_same_local_inventory() {
+        let d=dir(); let p=d.join("shared.gguf"); fs::write(&p,b"GGUF-shared model bytes").unwrap();
+        let c=ModelCatalog::open(&d.join("models.json")).unwrap();
+        let worker_handle=c.clone();
+        let model=c.register(p.to_str().unwrap(),"Shared","","").unwrap();
+        assert_eq!(worker_handle.list().unwrap(),vec![model]);
         let _=fs::remove_dir_all(d);
     }
     #[test] fn unregistered_gguf_can_be_preflighted_without_catalogue_hash() {

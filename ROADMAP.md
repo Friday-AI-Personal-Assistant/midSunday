@@ -2463,3 +2463,9 @@ This avoids making the UI's periodic status refresh wait behind an in-flight inf
 
 This is an initial diagnostic slice, not a complete health or repair system. A healthy SQLite check does not guarantee model compatibility or overall application health.
 \n\n### 2026-11-28 — Expanded local setup diagnostics (Batch #240)\n\n- [x] Extend the explicit Diagnostics check to inspect the configured llama.cpp server file without launching it.\n- [x] Report missing files, non-file paths, wrong Windows executable type, and missing Unix execute permission as distinct readiness states.\n- [x] Validate the configured GGUF file header and, when it is registered, verify its saved file size and SHA-256 fingerprint.\n- [x] Run potentially slow model-file checks on a blocking worker so the desktop UI remains responsive.\n- [x] Keep paths private, perform no repair or launch, and preserve read-only local-only behaviour.\n- [ ] Validate large-file check responsiveness, permissions, moved/modified models, and user-facing recovery guidance on physical Windows, Linux, and macOS devices.\n\nAn unregistered GGUF receives only file/header checks because no trusted fingerprint is stored. A successful file check does not prove the server binary or model is compatible with the host.\n
+
+### 2026-11-28 — Diagnostics build correction (Batch #241)
+
+- [x] Corrected a malformed line break in the shared model-catalogue declaration that prevented Rust compilation on all three CI platforms.
+- [x] Added a regression test confirming cloned catalogue handles share the same in-memory inventory, as required by background diagnostics verification.
+- [ ] Re-run the complete Windows, Linux, and macOS workflow before considering expanded diagnostics complete.
