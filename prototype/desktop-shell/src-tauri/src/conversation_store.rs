@@ -364,6 +364,50 @@ impl RestoreDatabaseGuard<'_> {
         Ok(())
     }
 
+    /// Applies a candidate and verifies it. If copying or verification fails, restores
+    /// the verified pre-restore candidate and verifies that rollback before returning.
+    /// The caller must retain the runtime gate and this database guard throughout.
+    pub(crate) fn copy_from_candidate_with_rollback(
+        &mut self,
+        candidate: &VerifiedRestoreCandidate,
+        rollback_candidate: &VerifiedRestoreCandidate,
+    ) -> Result<(), String> {
+        self.copy_from_candidate_with_rollback_and_check(
+            candidate,
+            rollback_candidate,
+            |guard, expected| guard.verify_current_matches(expected),
+        )
+    }
+
+    /// Internal verification seam permits deterministic failure-injection tests.
+    pub(crate) fn copy_from_candidate_with_rollback_and_check<F>(
+        &mut self,
+        candidate: &VerifiedRestoreCandidate,
+        rollback_candidate: &VerifiedRestoreCandidate,
+        mut verify: F,
+    ) -> Result<(), String>
+    where
+        F: FnMut(&Self, &VerifiedRestoreCandidate) -> Result<(), String>,
+    {
+        let restore_result = self.copy_from_candidate(candidate)
+            .and_then(|_| verify(self, candidate));
+        match restore_result {
+            Ok(()) => Ok(()),
+            Err(restore_error) => {
+                let rollback_result = self.copy_from_candidate(rollback_candidate)
+                    .and_then(|_| self.verify_current_matches(rollback_candidate));
+                match rollback_result {
+                    Ok(()) => Err(format!(
+                        "The requested database candidate could not be applied and verified ({restore_error}); the pre-restore database candidate was successfully restored and verified."
+                    )),
+                    Err(rollback_error) => Err(format!(
+                        "CRITICAL: the requested database candidate could not be applied and verified ({restore_error}), and automatic rollback could not be verified ({rollback_error}). Keep the encrypted pre-restore safety archive and do not continue using this database; recovery is required."
+                    )),
+                }
+            }
+        }
+    }
+
     /// Creates a private, verified snapshot of the guarded live connection and
     /// compares its schema, aggregate inventory, and exact application-record fingerprint with the candidate.
     /// The snapshot contains no personal content in its returned result.

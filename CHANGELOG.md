@@ -451,3 +451,9 @@ All notable project changes are recorded here. The project is in foundation/prot
 - Strengthened guarded restore destination verification with an internal SHA-256 fingerprint over all application-owned table rows and typed SQLite values, in addition to schema and aggregate inventory checks.
 - Kept fingerprints private and excluded backup-container metadata and SQLite-managed FTS implementation tables.
 - Replaced the count-only mismatch test with a same-count/different-content regression test. Restore remains unavailable pending rollback, crash recovery, failure injection, and physical-device validation.
+
+
+## 2026-11-28 — Batch #302
+- Added a guarded rollback-aware candidate operation: if applying or verifying a staged restore candidate fails, the verified pre-restore candidate is copied back into the existing live SQLite connection and checked with full destination verification.
+- Added deterministic post-copy verification failure injection proving that rollback restores the original conversation content.
+- Critical rollback-verification failures now produce an explicit recovery error directing the caller to preserve the encrypted safety archive and stop using the database. Restore remains unavailable pending persistent recovery blocking, crash/restart recovery, full transaction-boundary failure injection, and physical-device validation.

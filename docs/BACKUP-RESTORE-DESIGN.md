@@ -109,3 +109,12 @@ The aggregate mismatch test now deliberately uses a target database with two con
 The guarded destination check now compares a SHA-256 fingerprint of every row and typed column value across the application-owned tables, in addition to the full SQLite verifier, schema version, and aggregate inventory. Table and row ordering is stable, values are encoded with explicit SQLite type tags and lengths, and the digest remains internal: no conversation text, memory content, identifiers, or fingerprint is exposed in UI or logs. Backup manifest metadata and SQLite-managed FTS implementation tables are excluded because they are container/derived data rather than source application records.
 
 The regression test now deliberately gives the candidate and live database equal aggregate counts but different conversation content. Verification must reject this same-count mismatch without mutating the target. This strengthens only the private verification primitive; it does not add rollback, crash recovery, a restore command, or UI enablement. Restore remains unavailable.
+
+
+## 14. Guarded rollback primitive and injected verification failure (Batch #302)
+
+The guarded database layer now provides a rollback-aware candidate application primitive. It attempts the requested candidate copy and exact destination verification while the caller retains the runtime-operation gate and database mutex. If copying or verification fails, it copies the separately staged pre-restore candidate back into the existing live connection and verifies that rollback with the full integrity, schema, inventory, and application-record fingerprint checks.
+
+A deterministic regression test injects a post-copy verification failure, confirms that the pre-restore candidate is copied back, and verifies that the original conversation content survives. If rollback itself cannot be verified, the helper returns an explicit critical recovery error and instructs the caller to preserve the encrypted safety archive and stop using the database.
+
+This is still a private transaction building block, not a complete restore workflow. The caller must create and retain the encrypted safety archive and both verified candidates, keep the runtime/database guards for the entire operation, and handle a critical rollback failure with a persistent recovery-blocked state. Crash/restart recovery, transaction-boundary failure injection, and physical-device validation remain outstanding. No restore command or UI is enabled.

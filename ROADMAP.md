@@ -2807,3 +2807,17 @@ This batch adds internal copy/verification building blocks only. No restore comm
 - [ ] Complete physical Windows, Linux, and macOS validation before enabling restore.
 
 This batch strengthens private verification only. No restore command or UI is enabled; restore remains unavailable.
+
+
+### 2026-11-28 — Guarded candidate rollback primitive (Batch #302)
+
+- [x] Add a guarded operation that applies a verified candidate and validates the destination using exact application-record fingerprints.
+- [x] If candidate copy or destination verification fails, copy the separately staged pre-restore candidate back into the existing live SQLite connection.
+- [x] Verify the rollback candidate before reporting that recovery succeeded.
+- [x] Return a critical recovery error when rollback cannot be verified; direct the caller to preserve the encrypted safety archive and stop using the database.
+- [x] Add deterministic failure injection for a post-copy verification failure and prove the original conversation content survives rollback.
+- [ ] Integrate this primitive with encrypted safety-archive creation, user confirmation, and a persistent recovery-blocked state.
+- [ ] Demonstrate crash/restart recovery and failure injection at every transaction boundary.
+- [ ] Complete physical Windows, Linux, and macOS validation before enabling restore.
+
+This batch adds a private rollback building block only. It does not register a restore command, enable UI restore, or claim crash-safe atomicity.

@@ -1259,6 +1259,46 @@ mod restore_safety_archive_tests {
     }
 
     #[test]
+    fn guarded_restore_rolls_back_and_verifies_after_injected_post_copy_failure() {
+        use std::cell::Cell;
+        let directory = temp_dir();
+        let source_store = ConversationStore::open(&directory.join("source-live.sqlite3")).unwrap();
+        let source_conversation = source_store.create("Replacement source").unwrap();
+        source_store.append(source_conversation.id, "user", "Replacement content").unwrap();
+        let source_backup = directory.join("source.sqlite3");
+        source_store.backup_to(&source_backup).unwrap();
+        let source_candidate = ConversationStore::prepare_verified_restore_candidate(&source_backup).unwrap();
+
+        let target_store = ConversationStore::open(&directory.join("target-live.sqlite3")).unwrap();
+        let original_conversation = target_store.create("Original database").unwrap();
+        target_store.append(original_conversation.id, "user", "Original content must survive rollback").unwrap();
+        let rollback_backup = directory.join("rollback.sqlite3");
+        target_store.backup_to(&rollback_backup).unwrap();
+        let rollback_candidate = ConversationStore::prepare_verified_restore_candidate(&rollback_backup).unwrap();
+
+        let mut guard = target_store.try_acquire_restore_lock().unwrap();
+        let fail_once = Cell::new(true);
+        let error = guard.copy_from_candidate_with_rollback_and_check(
+            &source_candidate,
+            &rollback_candidate,
+            |current, expected| {
+                if fail_once.replace(false) {
+                    Err("injected post-copy verification failure".to_owned())
+                } else {
+                    current.verify_current_matches(expected)
+                }
+            },
+        ).unwrap_err();
+
+        assert!(error.contains("pre-restore database candidate was successfully restored and verified"));
+        guard.verify_current_matches(&rollback_candidate).unwrap();
+        drop(guard);
+        let messages = target_store.list_messages(original_conversation.id).unwrap();
+        assert_eq!(messages.len(), 1);
+        assert_eq!(messages[0].content, "Original content must survive rollback");
+    }
+
+    #[test]
     fn guarded_live_verification_rejects_a_different_inventory() {
         let directory = temp_dir();
         let source_store = ConversationStore::open(&directory.join("source-live.sqlite3")).unwrap();
