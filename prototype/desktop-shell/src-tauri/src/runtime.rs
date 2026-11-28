@@ -51,7 +51,9 @@ pub enum RuntimeConfigError {
     InvalidAddress,
     NonLoopbackAddress,
     ZeroContextLength,
+    ContextTooLarge,
     ZeroCpuThreads,
+    CpuThreadsTooLarge,
 }
 
 impl RuntimeConfig {
@@ -68,8 +70,14 @@ impl RuntimeConfig {
         if self.context_tokens == 0 {
             return Err(RuntimeConfigError::ZeroContextLength);
         }
+        if self.context_tokens > 32_768 {
+            return Err(RuntimeConfigError::ContextTooLarge);
+        }
         if self.cpu_threads == Some(0) {
             return Err(RuntimeConfigError::ZeroCpuThreads);
+        }
+        if self.cpu_threads.is_some_and(|threads| threads > 256) {
+            return Err(RuntimeConfigError::CpuThreadsTooLarge);
         }
         Ok(())
     }
@@ -237,6 +245,36 @@ mod tests {
             ..RuntimeConfig::default()
         };
         assert_eq!(config.validate(), Ok(()));
+    }
+
+    #[test]
+    fn context_length_is_bounded_at_the_runtime_boundary() {
+        let too_large = RuntimeConfig {
+            context_tokens: 32_769,
+            ..RuntimeConfig::default()
+        };
+        assert_eq!(too_large.validate(), Err(RuntimeConfigError::ContextTooLarge));
+
+        let maximum = RuntimeConfig {
+            context_tokens: 32_768,
+            ..RuntimeConfig::default()
+        };
+        assert_eq!(maximum.validate(), Ok(()));
+    }
+
+    #[test]
+    fn cpu_thread_count_is_bounded_at_the_runtime_boundary() {
+        let too_many = RuntimeConfig {
+            cpu_threads: Some(257),
+            ..RuntimeConfig::default()
+        };
+        assert_eq!(too_many.validate(), Err(RuntimeConfigError::CpuThreadsTooLarge));
+
+        let maximum = RuntimeConfig {
+            cpu_threads: Some(256),
+            ..RuntimeConfig::default()
+        };
+        assert_eq!(maximum.validate(), Ok(()));
     }
 
     #[test]

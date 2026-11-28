@@ -1,3 +1,7 @@
+## 2026-11-28 — Batch #328
+- Enforced the existing application resource ceilings at the `RuntimeConfig` boundary as well, so direct backend callers cannot request more than 32,768 context tokens or 256 CPU threads.
+- Added exact-boundary and over-limit tests for both settings; loopback validation and existing defaults are unchanged.
+
 ## 2026-11-28 — Batch #327
 - Bounded local model catalogue loading to 64 MiB, checking that the catalogue is a regular file and enforcing the limit again while reading to protect against file growth after the metadata check.
 - Prevented writing a catalogue larger than the same limit and added regression coverage for oversized catalogue files and directory paths.
