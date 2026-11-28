@@ -102,3 +102,10 @@ Automated tests exercise the copy while holding the runtime gate and database gu
 The v2 `midsunday_backup_manifest` is backup-container metadata and must not remain in the live application database after a candidate is copied into the existing connection. The guarded copy now explicitly closes the SQLite online-backup handle and removes that backup-only table before any destination verification snapshot is generated. This keeps the live schema clean and allows the normal backup writer to create a fresh manifest in the verification snapshot.
 
 The aggregate mismatch test now deliberately uses a target database with two conversations against a one-conversation candidate. The earlier version used different text but identical aggregate counts, which could not be expected to fail an inventory-only comparison. Restore remains disabled pending the complete safety archive, rollback, and crash-recovery transaction.
+
+
+## 13. Exact application-record destination verification (Batch #300)
+
+The guarded destination check now compares a SHA-256 fingerprint of every row and typed column value across the application-owned tables, in addition to the full SQLite verifier, schema version, and aggregate inventory. Table and row ordering is stable, values are encoded with explicit SQLite type tags and lengths, and the digest remains internal: no conversation text, memory content, identifiers, or fingerprint is exposed in UI or logs. Backup manifest metadata and SQLite-managed FTS implementation tables are excluded because they are container/derived data rather than source application records.
+
+The regression test now deliberately gives the candidate and live database equal aggregate counts but different conversation content. Verification must reject this same-count mismatch without mutating the target. This strengthens only the private verification primitive; it does not add rollback, crash recovery, a restore command, or UI enablement. Restore remains unavailable.

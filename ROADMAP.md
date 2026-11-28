@@ -2794,3 +2794,16 @@ This batch adds internal copy/verification building blocks only. No restore comm
 - [x] Remove the backup-only v2 manifest from the live application connection after guarded candidate copy, so future snapshots can create their own fresh manifest.
 - [x] Ensure the destination-mismatch test uses genuinely different aggregate inventory counts.
 - [ ] Continue with the encrypted safety archive, rollback, crash-recovery and failure-injection requirements before enabling restore.
+
+
+### 2026-11-28 — Exact restore destination content verification (Batch #300)
+
+- [x] Compare stable SHA-256 fingerprints across all application-owned records and typed SQLite values, not just aggregate row counts.
+- [x] Keep fingerprints internal; do not expose personal content, identifiers, or digests in UI or logs.
+- [x] Exclude backup-container metadata and SQLite-managed FTS implementation tables from application-record comparison.
+- [x] Add a regression test proving different conversation content with identical aggregate counts is rejected without changing the live database.
+- [ ] Integrate destination verification with encrypted safety-archive rollback and persistent recovery-blocked handling.
+- [ ] Demonstrate crash/restart recovery and failure injection at every transaction boundary.
+- [ ] Complete physical Windows, Linux, and macOS validation before enabling restore.
+
+This batch strengthens private verification only. No restore command or UI is enabled; restore remains unavailable.

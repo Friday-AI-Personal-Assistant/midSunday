@@ -257,6 +257,70 @@ impl VerifiedRestoreCandidate {
     pub(crate) fn path(&self) -> &Path { &self.path }
 }
 
+/// Hashes every application-owned record in a stable table/row order. Backup-container
+/// metadata and SQLite's internal/FTS implementation tables are intentionally excluded:
+/// they are regenerated or maintained by SQLite, not user application records.
+fn database_content_fingerprint(connection: &Connection) -> Result<String, String> {
+    const TABLES: &[&str] = &[
+        "conversations",
+        "conversation_messages",
+        "saved_memories",
+        "awareness_items",
+        "awareness_activity",
+        "awareness_history",
+        "awareness_suppressions",
+        "awareness_suggestions",
+        "app_preferences",
+    ];
+    let mut digest = Sha256::new();
+    for table in TABLES {
+        digest.update((table.len() as u64).to_le_bytes());
+        digest.update(table.as_bytes());
+        let sql = format!("SELECT * FROM \"{table}\" ORDER BY rowid");
+        let mut statement = connection.prepare(&sql)
+            .map_err(|_| "An application database table could not be read for exact restore verification.".to_owned())?;
+        let column_count = statement.column_count();
+        digest.update((column_count as u64).to_le_bytes());
+        let mut rows = statement.query([])
+            .map_err(|_| "Application database records could not be read for exact restore verification.".to_owned())?;
+        let mut row_count = 0u64;
+        while let Some(row) = rows.next()
+            .map_err(|_| "Application database records could not be read for exact restore verification.".to_owned())?
+        {
+            row_count += 1;
+            digest.update([0xA5]);
+            for index in 0..column_count {
+                let value = row.get_ref(index)
+                    .map_err(|_| "An application database value could not be read for exact restore verification.".to_owned())?;
+                match value {
+                    rusqlite::types::ValueRef::Null => digest.update([0]),
+                    rusqlite::types::ValueRef::Integer(value) => {
+                        digest.update([1]);
+                        digest.update(value.to_le_bytes());
+                    }
+                    rusqlite::types::ValueRef::Real(value) => {
+                        digest.update([2]);
+                        digest.update(value.to_bits().to_le_bytes());
+                    }
+                    rusqlite::types::ValueRef::Text(value) => {
+                        digest.update([3]);
+                        digest.update((value.len() as u64).to_le_bytes());
+                        digest.update(value);
+                    }
+                    rusqlite::types::ValueRef::Blob(value) => {
+                        digest.update([4]);
+                        digest.update((value.len() as u64).to_le_bytes());
+                        digest.update(value);
+                    }
+                }
+            }
+        }
+        digest.update([0x5A]);
+        digest.update(row_count.to_le_bytes());
+    }
+    Ok(format!("{:x}", digest.finalize()))
+}
+
 /// An exclusive reservation of the live database connection for a restore transaction.
 pub(crate) struct RestoreDatabaseGuard<'a> {
     connection: std::sync::MutexGuard<'a, Connection>,
@@ -301,11 +365,11 @@ impl RestoreDatabaseGuard<'_> {
     }
 
     /// Creates a private, verified snapshot of the guarded live connection and
-    /// compares its schema and complete aggregate inventory with the candidate.
+    /// compares its schema, aggregate inventory, and exact application-record fingerprint with the candidate.
     /// The snapshot contains no personal content in its returned result.
     pub(crate) fn verify_current_matches(
         &self,
-        expected: &DatabaseBackupVerification,
+        candidate: &VerifiedRestoreCandidate,
     ) -> Result<(), String> {
         let workspace = tempfile::Builder::new()
             .prefix("midsunday-live-restore-check-")
@@ -315,19 +379,30 @@ impl RestoreDatabaseGuard<'_> {
         let result = (|| -> Result<(), String> {
             ConversationStore::backup_connection_to(&self.connection, &snapshot)?;
             let actual = ConversationStore::verify_backup_file(&snapshot)?;
+            let candidate_connection = Connection::open_with_flags(
+                candidate.path(),
+                rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+            ).map_err(|_| "The verified restore candidate could not be reopened for content comparison.".to_owned())?;
+            let snapshot_connection = Connection::open_with_flags(
+                &snapshot,
+                rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+            ).map_err(|_| "The private live-database snapshot could not be reopened for content comparison.".to_owned())?;
+            let candidate_fingerprint = database_content_fingerprint(&candidate_connection)?;
+            let live_fingerprint = database_content_fingerprint(&snapshot_connection)?;
             let matches = actual.valid
-                && actual.schema_version == expected.schema_version
-                && actual.conversation_count == expected.conversation_count
-                && actual.message_count == expected.message_count
-                && actual.saved_memory_count == expected.saved_memory_count
-                && actual.awareness_item_count == expected.awareness_item_count
-                && actual.awareness_activity_count == expected.awareness_activity_count
-                && actual.awareness_history_count == expected.awareness_history_count
-                && actual.awareness_suppression_count == expected.awareness_suppression_count
-                && actual.awareness_suggestion_count == expected.awareness_suggestion_count
-                && actual.app_preference_count == expected.app_preference_count;
+                && actual.schema_version == candidate.verification.schema_version
+                && actual.conversation_count == candidate.verification.conversation_count
+                && actual.message_count == candidate.verification.message_count
+                && actual.saved_memory_count == candidate.verification.saved_memory_count
+                && actual.awareness_item_count == candidate.verification.awareness_item_count
+                && actual.awareness_activity_count == candidate.verification.awareness_activity_count
+                && actual.awareness_history_count == candidate.verification.awareness_history_count
+                && actual.awareness_suppression_count == candidate.verification.awareness_suppression_count
+                && actual.awareness_suggestion_count == candidate.verification.awareness_suggestion_count
+                && actual.app_preference_count == candidate.verification.app_preference_count
+                && live_fingerprint == candidate_fingerprint;
             if !matches {
-                return Err("The live database did not match the verified restore candidate's schema and aggregate inventory.".to_owned());
+                return Err("The live database did not exactly match the verified restore candidate's application records.".to_owned());
             }
             Ok(())
         })();

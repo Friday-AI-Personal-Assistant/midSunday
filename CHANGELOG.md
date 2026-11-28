@@ -445,3 +445,9 @@ All notable project changes are recorded here. The project is in foundation/prot
 - Upgraded newly created local SQLite backup manifests to format v2, adding privacy-safe aggregate counts for Awareness activity/history, relearning exclusions, pending Learning Review suggestions, and app-preference records.
 - Extended read-only verification to compare all five additional counts with the database. Existing v1 manifests and pre-manifest legacy backups remain supported.
 - Expanded the verification summary with counts only; preference values and all personal content remain hidden. The backup is still unencrypted and restore remains unavailable.
+
+
+## 2026-11-28 — Batch #300
+- Strengthened guarded restore destination verification with an internal SHA-256 fingerprint over all application-owned table rows and typed SQLite values, in addition to schema and aggregate inventory checks.
+- Kept fingerprints private and excluded backup-container metadata and SQLite-managed FTS implementation tables.
+- Replaced the count-only mismatch test with a same-count/different-content regression test. Restore remains unavailable pending rollback, crash recovery, failure injection, and physical-device validation.

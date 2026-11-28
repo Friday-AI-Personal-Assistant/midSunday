@@ -1247,7 +1247,7 @@ mod restore_safety_archive_tests {
         let runtime_guard = manager.try_acquire_restore_gate().unwrap();
         let mut database_guard = target_store.try_acquire_restore_lock().unwrap();
         database_guard.copy_from_candidate(&candidate).unwrap();
-        database_guard.verify_current_matches(&candidate.verification).unwrap();
+        database_guard.verify_current_matches(&candidate).unwrap();
         drop(database_guard);
         drop(runtime_guard);
 
@@ -1269,11 +1269,11 @@ mod restore_safety_archive_tests {
 
         let target_store = ConversationStore::open(&directory.join("target-live.sqlite3")).unwrap();
         target_store.create("Different target record").unwrap();
-        target_store.create("An additional record makes the inventory differ").unwrap();
         let database_guard = target_store.try_acquire_restore_lock().unwrap();
-        assert!(database_guard.verify_current_matches(&candidate.verification).is_err());
+        // Counts are identical; exact record comparison must still reject different content.
+        assert!(database_guard.verify_current_matches(&candidate).is_err());
         drop(database_guard);
-        assert_eq!(target_store.content_inventory().unwrap().conversation_count, 2);
+        assert_eq!(target_store.content_inventory().unwrap().conversation_count, 1);
         let _ = fs::remove_dir_all(directory);
     }
 
