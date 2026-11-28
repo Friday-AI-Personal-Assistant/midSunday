@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{fmt::Write as _, fs::{self, File}, io::{BufReader, Read, Write}, path::{Path, PathBuf}, sync::{Arc, Mutex}, time::{SystemTime, UNIX_EPOCH}};
 const MAX_LABEL_BYTES: usize = 512;
+const MAX_CATALOGUE_BYTES: u64 = 64 * 1024 * 1024;
 const HASH_BUFFER_BYTES: usize = 1024 * 1024;
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -25,8 +26,30 @@ pub struct ModelCatalog { path: PathBuf, models: Arc<Mutex<Vec<LocalModel>>> }
 impl ModelCatalog {
     pub fn open(path: &Path) -> Result<Self, String> {
         if let Some(parent) = path.parent() { fs::create_dir_all(parent).map_err(|e| format!("Could not create model catalogue directory: {e}"))?; }
-        let models = match fs::read_to_string(path) {
-            Ok(contents) => { let parsed: Vec<LocalModel> = serde_json::from_str(&contents).map_err(|e| format!("Local model catalogue could not be read: {e}"))?; validate_catalogue(&parsed)?; parsed }
+        let models = match File::open(path) {
+            Ok(file) => {
+                let metadata = file.metadata()
+                    .map_err(|e| format!("Could not inspect local model catalogue: {e}"))?;
+                if !metadata.is_file() {
+                    return Err("The local model catalogue path is not a regular file.".to_owned());
+                }
+                if metadata.len() > MAX_CATALOGUE_BYTES {
+                    return Err("The local model catalogue exceeds the supported size.".to_owned());
+                }
+                // Limit the actual read as well as checking metadata: the file
+                // could grow between the metadata check and the read.
+                let mut contents = String::new();
+                file.take(MAX_CATALOGUE_BYTES + 1)
+                    .read_to_string(&mut contents)
+                    .map_err(|e| format!("Local model catalogue could not be read: {e}"))?;
+                if contents.len() as u64 > MAX_CATALOGUE_BYTES {
+                    return Err("The local model catalogue exceeds the supported size.".to_owned());
+                }
+                let parsed: Vec<LocalModel> = serde_json::from_str(&contents)
+                    .map_err(|e| format!("Local model catalogue could not be read: {e}"))?;
+                validate_catalogue(&parsed)?;
+                parsed
+            }
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Vec::new(),
             Err(e) => return Err(format!("Could not read local model catalogue: {e}")),
         };
@@ -94,6 +117,9 @@ impl ModelCatalog {
     }
     fn persist(&self, models: &[LocalModel]) -> Result<(), String> {
         let contents = serde_json::to_vec_pretty(models).map_err(|e| format!("Could not encode local model catalogue: {e}"))?;
+        if contents.len() as u64 > MAX_CATALOGUE_BYTES {
+            return Err("The local model catalogue exceeds the supported size.".to_owned());
+        }
         let parent = self.path.parent().filter(|parent| !parent.as_os_str().is_empty()).unwrap_or_else(|| Path::new("."));
         let mut temporary = tempfile::NamedTempFile::new_in(parent)
             .map_err(|e| format!("Could not prepare a temporary model catalogue: {e}"))?;
@@ -245,6 +271,27 @@ mod tests {
         assert_eq!(reopened.list().unwrap(),expected);
         let _=fs::remove_dir_all(d);
     }
+    #[test]
+    fn opening_catalogue_rejects_oversized_files_before_reading_contents() {
+        let d = dir();
+        let path = d.join("oversized.json");
+        let file = File::create(&path).unwrap();
+        file.set_len(MAX_CATALOGUE_BYTES + 1).unwrap();
+        drop(file);
+
+        let error = ModelCatalog::open(&path).unwrap_err();
+        assert!(error.contains("exceeds the supported size"));
+        let _ = fs::remove_dir_all(d);
+    }
+
+    #[test]
+    fn opening_catalogue_rejects_directories_as_catalogue_files() {
+        let d = dir();
+        let error = ModelCatalog::open(&d).unwrap_err();
+        assert!(error.contains("not a regular file"));
+        let _ = fs::remove_dir_all(d);
+    }
+
     #[test]
     fn registration_rejects_control_characters_in_model_paths_before_filesystem_access() {
         let catalogue = ModelCatalog::open(Path::new("unused-model-catalogue.json")).unwrap();

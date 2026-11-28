@@ -1,3 +1,7 @@
+## 2026-11-28 — Batch #327
+- Bounded local model catalogue loading to 64 MiB, checking that the catalogue is a regular file and enforcing the limit again while reading to protect against file growth after the metadata check.
+- Prevented writing a catalogue larger than the same limit and added regression coverage for oversized catalogue files and directory paths.
+
 ## 2026-11-28 — Three-run batch cycle: Runs #312–#314
 
 - **Run #312:** Changed local inference settings persistence to write and sync a temporary file in the destination directory, then atomically replace the saved settings. Added a regression test for replacing and reloading existing settings.
