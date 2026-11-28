@@ -1,6 +1,6 @@
 //! Device-local companion preferences and named character profiles.
 use serde::{Deserialize, Serialize};
-use std::{collections::HashSet, path::{Path, PathBuf}, sync::Mutex};
+use std::{collections::HashSet, io::Write, path::{Path, PathBuf}, sync::Mutex};
 
 const SCHEMA_VERSION: u32 = 1;
 const MAX_PROFILES: usize = 20;
@@ -113,15 +113,15 @@ impl CompanionSettingsStore {
             .map_err(|_| "Companion settings are unavailable.".to_owned())?;
         let contents = serde_json::to_vec_pretty(&settings)
             .map_err(|error| format!("Could not encode companion settings: {error}"))?;
-        let temporary = self.path.with_extension("json.tmp");
-        std::fs::write(&temporary, contents)
+        let parent = self.path.parent().filter(|parent| !parent.as_os_str().is_empty())
+            .unwrap_or_else(|| Path::new("."));
+        let mut temporary = tempfile::NamedTempFile::new_in(parent)
+            .map_err(|error| format!("Could not prepare a temporary companion settings file: {error}"))?;
+        temporary.write_all(&contents)
+            .and_then(|_| temporary.as_file().sync_all())
             .map_err(|error| format!("Could not write companion settings: {error}"))?;
-        if self.path.exists() {
-            std::fs::remove_file(&self.path)
-                .map_err(|error| format!("Could not replace companion settings: {error}"))?;
-        }
-        std::fs::rename(&temporary, &self.path)
-            .map_err(|error| format!("Could not finish saving companion settings: {error}"))?;
+        temporary.persist(&self.path)
+            .map_err(|error| format!("Could not atomically replace companion settings: {}", error.error))?;
         *current = settings.clone();
         Ok(settings)
     }
