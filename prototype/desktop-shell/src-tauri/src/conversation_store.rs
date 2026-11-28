@@ -260,8 +260,6 @@ impl ConversationStore {
             detail: "SQLite integrity and required midSunday database structures passed read-only verification.".to_owned(),
         })
     }
-}
-
 
     pub fn open(path: &Path) -> Result<Self, String> {
         if let Some(parent) = path.parent() {
