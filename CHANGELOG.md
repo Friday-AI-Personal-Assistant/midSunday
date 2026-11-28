@@ -1,4 +1,7 @@
 ## 2026-11-28
+- Fixed Windows diagnostic volume matching so drive roots and nested paths use normalized separators and case-insensitive component boundaries. Also resolve the nearest existing ancestor for nested app-data/model locations that have not been created yet. Added regression tests; no paths or drive identifiers are exposed.
+
+## 2026-11-28
 - Added runtime health detection for unexpected termination of the single managed llama-server child. Existing status refresh now marks a ready/generating session as failed if its child has exited, clears stale active-session details, and presents a plain-language recovery hint. No unrelated processes are enumerated, no process ID is exposed, and no additional polling timer is introduced.
 
 ## 2026-11-28

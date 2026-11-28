@@ -2519,3 +2519,15 @@ Storage values are a point-in-time read-only snapshot. The app does not reserve 
 - [x] Correct the optional-parent canonicalization fallback so its Option and Result types compose correctly.
 - [x] Extend the diagnostics export test fixture with app-data and model volume states added in Batch #244.
 - [x] Keep the fallback read-only and report storage as unavailable when neither the configured path nor its parent can be resolved.
+
+
+### 2026-11-28 — Cross-platform diagnostic volume path resolution (Batch #246)
+
+- [x] Correct Windows mount matching to normalize separators and compare paths case-insensitively using a single path separator at component boundaries.
+- [x] Preserve component-boundary matching so similarly prefixed directories or drive paths cannot be attributed to the wrong volume.
+- [x] Resolve the nearest existing ancestor when the configured app-data/model directory or file does not exist yet, rather than checking only one parent level.
+- [x] Keep path values internal to the diagnostic calculation; no mount paths or drive identifiers are added to the UI or exported report.
+- [x] Add regression coverage for Windows separator/case handling, path-prefix boundaries, and nested not-yet-created paths.
+- [ ] Validate drive roots, removable/network volumes, symlinks, and newly created app-data/model directories on physical Windows, Linux, and macOS devices.
+
+The nearest existing ancestor is used only to identify the containing volume. Reported free space is a current volume snapshot, not a reservation or guarantee.

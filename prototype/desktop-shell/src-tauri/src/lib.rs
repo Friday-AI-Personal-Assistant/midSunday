@@ -347,10 +347,12 @@ struct DiagnosticsSnapshot {
 fn path_is_within_mount(path: &std::path::Path, mount: &std::path::Path) -> bool {
     #[cfg(windows)]
     {
-        let path = path.to_string_lossy().replace('/', "\\\\").to_lowercase();
-        let mount = mount.to_string_lossy().replace('/', "\\\\").to_lowercase();
-        let mount = mount.trim_end_matches('\\');
-        path == mount || path.starts_with(&format!("{mount}\\\\"))
+        let normalize = |value: &std::path::Path| {
+            value.to_string_lossy().replace('/', "\\").trim_end_matches('\\').to_lowercase()
+        };
+        let path = normalize(path);
+        let mount = normalize(mount);
+        path == mount || path.starts_with(&format!("{mount}\\"))
     }
     #[cfg(not(windows))]
     {
@@ -358,17 +360,15 @@ fn path_is_within_mount(path: &std::path::Path, mount: &std::path::Path) -> bool
     }
 }
 
+fn resolve_existing_path_or_ancestor(path: &std::path::Path) -> Option<std::path::PathBuf> {
+    path.ancestors().find_map(|candidate| std::fs::canonicalize(candidate).ok())
+}
+
 fn collect_diagnostics_disk_space(path: Option<&std::path::Path>, disks: &sysinfo::Disks) -> DiskSpaceCheck {
     let Some(path) = path else {
         return DiskSpaceCheck { status: "not_configured".to_owned(), total_bytes: None, available_bytes: None, detail: "No model location is configured.".to_owned() };
     };
-    let resolved = std::fs::canonicalize(path)
-        .or_else(|_| {
-            path.parent()
-                .and_then(|parent| std::fs::canonicalize(parent).ok())
-                .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, "path unavailable"))
-        });
-    let Ok(resolved) = resolved else {
+    let Some(resolved) = resolve_existing_path_or_ancestor(path) else {
         return DiskSpaceCheck { status: "unavailable".to_owned(), total_bytes: None, available_bytes: None, detail: "The storage volume could not be identified.".to_owned() };
     };
     let Some(disk) = disks.list().iter()
@@ -801,10 +801,37 @@ mod awareness_analysis_tests {
 #[cfg(test)]
 mod diagnostics_disk_space_tests {
     use super::*;
+    use std::{fs, sync::atomic::{AtomicUsize, Ordering}};
+    static NEXT: AtomicUsize = AtomicUsize::new(0);
+
     #[test]
     fn mount_matching_uses_path_components_not_prefixes() {
         assert!(path_is_within_mount(std::path::Path::new("/home/user/models/model.gguf"), std::path::Path::new("/home")));
         assert!(!path_is_within_mount(std::path::Path::new("/home2/models/model.gguf"), std::path::Path::new("/home")));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_mount_matching_normalizes_separators_and_case() {
+        assert!(path_is_within_mount(std::path::Path::new(r"c:/Users/Test/AppData"), std::path::Path::new(r"C:\\")));
+        assert!(path_is_within_mount(std::path::Path::new(r"C:\\Users\\Test"), std::path::Path::new(r"c:/")));
+        assert!(!path_is_within_mount(std::path::Path::new(r"C:\\Users2\\Test"), std::path::Path::new(r"C:\\Users")));
+    }
+
+    #[test]
+    fn resolves_the_nearest_existing_ancestor_for_nested_uncreated_paths() {
+        let root = std::env::temp_dir().join(format!("midsunday-diagnostics-path-{}-{}", std::process::id(), NEXT.fetch_add(1, Ordering::Relaxed)));
+        let existing = root.join("existing");
+        fs::create_dir_all(&existing).unwrap();
+        let requested = existing.join("not-created").join("deeper").join("model.gguf");
+        assert_eq!(resolve_existing_path_or_ancestor(&requested), fs::canonicalize(&existing).ok());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn unresolved_path_has_no_existing_ancestor() {
+        let path = std::path::Path::new("/").join(format!("midsunday-missing-root-{}", std::process::id())).join("nested");
+        assert_eq!(resolve_existing_path_or_ancestor(&path), fs::canonicalize("/").ok());
     }
 }
 
