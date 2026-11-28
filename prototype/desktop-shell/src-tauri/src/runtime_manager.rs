@@ -128,6 +128,31 @@ impl Default for RuntimeManager {
 }
 
 impl RuntimeManager {
+    /// Acquires the runtime's exclusive operation gate for a database restore.
+    ///
+    /// This is deliberately non-blocking: restore must be refused rather than
+    /// queued behind an active start, recovery, or generation operation. The
+    /// returned guard must be held until the restore has fully completed or
+    /// rolled back. A ready runtime is also rejected; the user must stop the
+    /// local engine before a restore can begin. Runtime operations use this
+    /// same mutex, so a new operation cannot start while the guard is held.
+    pub fn try_acquire_restore_gate(&self) -> Result<std::sync::MutexGuard<'_, ()>, String> {
+        let guard = self.inner.operation.try_lock().map_err(|error| match error {
+            std::sync::TryLockError::WouldBlock =>
+                "The local AI runtime is busy starting, generating, stopping, or recovering. Wait for it to finish and try again.".to_owned(),
+            std::sync::TryLockError::Poisoned(_) =>
+                "The local AI runtime operation lock is unavailable. Restart midSunday before attempting a restore.".to_owned(),
+        })?;
+
+        let status = self.inner.status.lock()
+            .map_err(|_| "The local AI runtime status is unavailable. Restart midSunday before attempting a restore.".to_owned())?;
+        if matches!(status.status.as_str(), "starting" | "ready" | "generating") {
+            return Err("Stop the local AI engine before restoring a database backup. No database data was changed.".to_owned());
+        }
+
+        Ok(guard)
+    }
+
     pub fn snapshot(&self) -> Result<RuntimeStatusSnapshot, String> {
         let mut snapshot = self.inner.status.lock()
             .map(|status| status.clone())
@@ -460,6 +485,50 @@ mod tests {
     use super::*;
     use std::sync::mpsc;
     use std::thread;
+
+    #[test]
+    fn restore_gate_allows_only_inactive_runtime_states() {
+        for status in ["notInstalled", "stopped", "failed"] {
+            let manager = RuntimeManager::default();
+            {
+                let mut snapshot = manager.inner.status.lock().unwrap();
+                snapshot.status = status.to_owned();
+            }
+            let guard = manager.try_acquire_restore_gate()
+                .unwrap_or_else(|error| panic!("restore gate should allow {status}: {error}"));
+            drop(guard);
+        }
+    }
+
+    #[test]
+    fn restore_gate_rejects_starting_ready_and_generating_runtime_states() {
+        for status in ["starting", "ready", "generating"] {
+            let manager = RuntimeManager::default();
+            {
+                let mut snapshot = manager.inner.status.lock().unwrap();
+                snapshot.status = status.to_owned();
+            }
+            let error = manager.try_acquire_restore_gate().unwrap_err();
+            assert!(error.contains("Stop the local AI engine"), "unexpected error for {status}: {error}");
+        }
+    }
+
+    #[test]
+    fn restore_gate_fails_fast_when_another_runtime_operation_is_active() {
+        let manager = RuntimeManager::default();
+        let _operation = manager.inner.operation.lock().unwrap();
+        let error = manager.try_acquire_restore_gate().unwrap_err();
+        assert!(error.contains("runtime is busy"));
+    }
+
+    #[test]
+    fn restore_gate_prevents_new_runtime_operations_until_released() {
+        let manager = RuntimeManager::default();
+        let guard = manager.try_acquire_restore_gate().unwrap();
+        assert!(manager.inner.operation.try_lock().is_err());
+        drop(guard);
+        assert!(manager.inner.operation.try_lock().is_ok());
+    }
 
     #[test]
     fn peak_accumulator_tracks_maximum_memory_and_interval_samples() {

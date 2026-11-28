@@ -1,3 +1,7 @@
+## 2026-11-28 — Batch #284
+- Added a non-blocking exclusive runtime-operation gate for future database restores. It rejects starting, ready, and generating states and shares the same mutex as runtime start, generation, stop, and recovery so a new runtime operation cannot race a restore holding the guard.
+- Added regression tests for allowed and rejected runtime states, fail-fast busy behaviour, and exclusive guard lifetime. Restore remains unavailable; no database data is changed.
+
 ## 2026-11-28 — Batch #283
 - Added a dedicated encrypted Backup & Restore safety design covering live SQLite connection constraints, explicit confirmation, a user-selected encrypted pre-restore safety archive, runtime coordination, database locking, destination verification, rollback, crash recovery, failure-injection tests, and physical-device validation.
 - Updated the roadmap's current status and immediate next actions to reflect the implemented local runtime and backup work. Actual restore remains unavailable; this batch changes documentation only.

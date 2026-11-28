@@ -2740,3 +2740,14 @@ This batch strengthens the encrypted container's regression coverage. It does no
 - [ ] Implement and validate the restore transaction; restore remains unavailable until every safety gate passes.
 
 This batch is a design/safety gate only. It does not add a restore command, change user data, or enable restore in the UI.
+
+
+### 2026-11-28 — Runtime restore coordination gate (Batch #284)
+
+- [x] Add a non-blocking exclusive runtime-operation gate for future database restore operations.
+- [x] Reject restore-gate acquisition while the runtime is starting, ready, or generating; the engine must be stopped first.
+- [x] Reuse the same operation mutex as runtime start, generation, stop, and recovery so no new runtime operation can begin while a restore holds the guard.
+- [x] Add regression tests for allowed/blocked states, fail-fast busy behaviour, and exclusive guard lifetime.
+- [ ] Wire the gate into the future restore transaction together with the database lock, encrypted pre-restore archive, validation, and rollback. Restore remains unavailable.
+
+This is a coordination primitive only. It does not modify the database or enable restore.
