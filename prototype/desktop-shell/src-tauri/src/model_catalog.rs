@@ -36,6 +36,9 @@ impl ModelCatalog {
         self.models.lock().map(|m| m.clone()).map_err(|_| "Local model catalogue is unavailable.".to_owned())
     }
     pub fn register(&self, file_path: &str, display_name: &str, source: &str, license: &str) -> Result<LocalModel, String> {
+        if file_path.is_empty() || file_path.len() > 4096 || file_path.chars().any(char::is_control) {
+            return Err("The selected model path is invalid or contains control characters.".to_owned());
+        }
         let display_name = clean_label(display_name, "Model name", 120)?;
         let source = clean_label(source, "Source", MAX_LABEL_BYTES)?;
         let license = clean_label(license, "Licence", MAX_LABEL_BYTES)?;
@@ -161,7 +164,7 @@ fn validate_catalogue(models: &[LocalModel]) -> Result<(), String> {
     for model in models {
         if model.id.len() != 64 || model.id != model.sha256 || !model.id.bytes().all(|b| b.is_ascii_hexdigit()) || !ids.insert(model.id.as_str()) { return Err("The local model catalogue contains an invalid or duplicate fingerprint.".to_owned()); }
         clean_label(&model.display_name, "Model name", 120)?; clean_label(&model.source, "Source", MAX_LABEL_BYTES)?; clean_label(&model.license, "Licence", MAX_LABEL_BYTES)?;
-        if model.file_path.is_empty() || model.file_path.len() > 4096 || model.file_path.contains('\0') || model.size_bytes == 0 { return Err("The local model catalogue contains invalid file metadata.".to_owned()); }
+        if model.file_path.is_empty() || model.file_path.len() > 4096 || model.file_path.chars().any(char::is_control) || model.size_bytes == 0 { return Err("The local model catalogue contains invalid file metadata.".to_owned()); }
     }
     Ok(())
 }
@@ -242,6 +245,15 @@ mod tests {
         assert_eq!(reopened.list().unwrap(),expected);
         let _=fs::remove_dir_all(d);
     }
+    #[test]
+    fn registration_rejects_control_characters_in_model_paths_before_filesystem_access() {
+        let catalogue = ModelCatalog::open(Path::new("unused-model-catalogue.json")).unwrap();
+        for path in ["bad\npath.gguf", "bad\tpath.gguf", "bad\rpath.gguf"] {
+            assert!(catalogue.register(path, "Valid name", "", "").is_err());
+        }
+        assert!(catalogue.list().unwrap().is_empty());
+    }
+
     #[test]
     fn registration_rejects_control_characters_in_user_supplied_labels() {
         let d = dir();
