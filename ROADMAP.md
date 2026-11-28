@@ -433,7 +433,8 @@ Use semantic tokens (for example, primary, primary-strong, accent, surface, elev
 - [ ] Run a startup health check for required application files, runtime components, database/schema state, model registration and file integrity, permissions, and available disk space.
 - [x] Monitor the managed local engine process during status refresh and detect an unexpected child-process exit; show a recoverable, actionable status without enumerating unrelated processes.
 - [ ] Monitor other important runtime conditions and detect recoverable failures such as missing/corrupt model files, database failures, microphone/speaker problems, and optional network-feature failures.
-- [ ] Capture application crashes and Rust panics safely, and use frontend error boundaries so one broken screen does not silently break the whole interface.
+- [x] Add a root-level React error boundary so an unexpected render/lifecycle failure shows a recovery screen instead of leaving the desktop window blank.
+- [ ] Capture native application crashes and Rust panics safely; the React boundary does not catch asynchronous event-handler failures, Rust panics, native crashes, or process termination.
 - [ ] Present clear native-style dialogs that explain what happened, its severity, what the user can do next, and whether retry or a safe repair is available.
 - [ ] Distinguish informational messages, warnings, and critical errors; never label a recoverable issue as a fatal app failure.
 - [ ] Add Settings → Diagnostics with health status, recent error details, log location, and guided checks/repair actions.
@@ -2549,3 +2550,14 @@ Storage status remains an advisory point-in-time classification; unavailable cap
 
 ## 2026-11-28 — Batch #249
 - Corrected the remaining storage diagnostics test expectation: 9 bytes of free space is critical under the documented absolute 2 GiB threshold, not low. GiB-scale fixtures continue to cover the low and percentage boundaries.
+
+
+### 2026-11-28 — Root-level interface recovery boundary (Batch #250)
+
+- [x] Wrap the complete React application in a root-level error boundary.
+- [x] Replace an uncaught render/lifecycle failure with a readable, theme-aware recovery screen and an explicit reload action.
+- [x] Keep raw exception messages and stack traces out of the recovery UI; do not persist or export error details.
+- [x] Explain the boundary's scope and direct users to Settings → Diagnostics if the issue repeats.
+- [ ] Validate deliberate render-failure recovery and accessibility on physical Windows, Linux, and macOS devices.
+
+The boundary protects React rendering and lifecycle work only. It does not catch asynchronous event-handler errors, Rust panics, native crashes, or process termination, and it does not claim that reload repairs the underlying cause.

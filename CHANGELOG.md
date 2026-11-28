@@ -289,3 +289,9 @@ All notable project changes are recorded here. The project is in foundation/prot
 
 ## 2026-11-28 — Batch #249
 - Corrected the remaining storage diagnostics test expectation: 9 bytes of free space is critical under the documented absolute 2 GiB threshold, not low. GiB-scale fixtures continue to cover the low and percentage boundaries.
+
+
+## 2026-11-28 — Batch #250
+- Added a root-level React error boundary so render/lifecycle failures display a readable, theme-aware recovery screen instead of blanking the desktop window.
+- Added an explicit reload action and guidance to revisit Settings → Diagnostics if the issue repeats.
+- Kept exception messages and stack traces out of the recovery screen; no error details are persisted or exported. Native crashes, Rust panics, and asynchronous event-handler failures remain separate roadmap work.
