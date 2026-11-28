@@ -138,6 +138,30 @@ mod tests {
         let _ = fs::remove_file(path);
     }
 
+    #[test]
+    fn directories_are_not_accepted_as_executable_or_model_files() {
+        let directory = std::env::temp_dir().join(format!(
+            "midsunday-setup-directory-{}-{}",
+            std::process::id(),
+            NEXT.fetch_add(1, Ordering::Relaxed)
+        ));
+        fs::create_dir_all(&directory).unwrap();
+        let checked = check_local_setup(directory.to_str().unwrap(), directory.to_str().unwrap());
+        assert_eq!(checked.executable.status, "not_a_file");
+        assert_eq!(checked.model.status, "not_a_file");
+        let _ = fs::remove_dir_all(directory);
+    }
+
+    #[test]
+    fn invalid_and_oversized_paths_are_rejected_before_filesystem_access() {
+        let oversized = "x".repeat(4097);
+        for invalid in ["\\0", oversized.as_str()] {
+            let checked = check_local_setup(invalid, invalid);
+            assert_eq!(checked.executable.status, "invalid_path");
+            assert_eq!(checked.model.status, "invalid_path");
+        }
+    }
+
     #[cfg(unix)]
     #[test]
     fn executable_without_execute_permission_is_not_ready() {

@@ -1,3 +1,9 @@
+## 2026-11-28 — Three-run batch cycle: Runs #312–#314
+
+- **Run #312:** Changed local inference settings persistence to write and sync a temporary file in the destination directory, then atomically replace the saved settings. Added a regression test for replacing and reloading existing settings.
+- **Run #313:** Applied the same atomic-replacement guarantee to the local GGUF model catalogue, preventing a failed save from first deleting the previous catalogue. Added a regression test for multiple updates and reload.
+- **Run #314:** Expanded first-launch setup readiness coverage for directory paths and invalid or oversized paths. These checks remain read-only and never launch the selected executable.
+
 ## 2026-11-28 — Restore candidate regression fix
 - Fixed guarded candidate copying so the backup-only v2 manifest is removed from the live application database after SQLite online-backup completes. This prevents subsequent verified snapshots from failing while creating a fresh backup manifest.
 - Corrected the mismatch regression test to use different aggregate inventories rather than different record text with identical counts.
