@@ -339,3 +339,9 @@ All notable project changes are recorded here. The project is in foundation/prot
 - Added a Settings action to verify an existing local SQLite backup. The selected file is opened read-only, checked with SQLite quick_check, checked against the current schema version, and checked for required midSunday database structures.
 - Verification reports only integrity status, schema version, and file size. It does not read out personal content, modify the selected file, or restore data.
 - Added clear rejection for empty, invalid, incomplete, or unsupported-schema files. Successful verification is not a substitute for end-to-end restore testing.
+
+
+## 2026-11-28 — Batch #260
+- Added regression tests for successful read-only verification of a real SQLite backup, including byte-for-byte confirmation that verification does not modify it.
+- Added rejection coverage for empty files, non-SQLite data, unsupported extensions, incomplete midSunday schemas, and unsupported schema versions.
+- Updated the roadmap to mark the implemented backup-verification test coverage complete. Physical-device validation remains pending.

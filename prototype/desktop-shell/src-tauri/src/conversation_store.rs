@@ -1831,6 +1831,77 @@ mod tests {
         let _ = std::fs::remove_file(backup_path);
     }
 
+    fn backup_test_path(label: &str, extension: &str) -> std::path::PathBuf {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static NEXT: AtomicU64 = AtomicU64::new(1);
+        let suffix = format!("{}-{}", std::process::id(), NEXT.fetch_add(1, Ordering::Relaxed));
+        std::env::temp_dir().join(format!("midsunday-{label}-{suffix}.{extension}"))
+    }
+
+    #[test]
+    fn verifies_valid_database_backup_without_modifying_file() {
+        let store = store();
+        let chat = store.create("Verification fixture").unwrap();
+        store.append(chat.id, "user", "Private fixture content").unwrap();
+        store.create_memory("Private memory fixture").unwrap();
+        let backup_path = backup_test_path("verify-valid", "sqlite3");
+
+        store.backup_to(&backup_path).unwrap();
+        let before = std::fs::read(&backup_path).unwrap();
+        let verification = ConversationStore::verify_backup_file(&backup_path).unwrap();
+        let after = std::fs::read(&backup_path).unwrap();
+
+        assert!(verification.valid);
+        assert_eq!(verification.schema_version, 8);
+        assert_eq!(verification.file_size_bytes, before.len() as u64);
+        assert!(verification.detail.contains("read-only"));
+        assert_eq!(before, after, "verification must not modify the backup");
+
+        let _ = std::fs::remove_file(backup_path);
+    }
+
+    #[test]
+    fn rejects_empty_corrupted_and_wrong_extension_backup_files() {
+        let empty_path = backup_test_path("verify-empty", "sqlite3");
+        let corrupted_path = backup_test_path("verify-corrupt", "sqlite3");
+        let wrong_extension_path = backup_test_path("verify-extension", "db");
+        std::fs::write(&empty_path, []).unwrap();
+        std::fs::write(&corrupted_path, b"this is not a SQLite database").unwrap();
+        std::fs::write(&wrong_extension_path, b"not a backup").unwrap();
+
+        assert!(ConversationStore::verify_backup_file(&empty_path).is_err());
+        assert!(ConversationStore::verify_backup_file(&corrupted_path).is_err());
+        let extension_error = ConversationStore::verify_backup_file(&wrong_extension_path).unwrap_err();
+        assert!(extension_error.contains(".sqlite3"));
+
+        let _ = std::fs::remove_file(empty_path);
+        let _ = std::fs::remove_file(corrupted_path);
+        let _ = std::fs::remove_file(wrong_extension_path);
+    }
+
+    #[test]
+    fn rejects_incomplete_and_unsupported_schema_database_backups() {
+        let incomplete_path = backup_test_path("verify-incomplete", "sqlite3");
+        let unsupported_path = backup_test_path("verify-unsupported", "sqlite3");
+
+        let incomplete = Connection::open(&incomplete_path).unwrap();
+        incomplete.pragma_update(None, "user_version", 8).unwrap();
+        incomplete.execute_batch("CREATE TABLE conversations (id INTEGER PRIMARY KEY);").unwrap();
+        drop(incomplete);
+
+        let unsupported = Connection::open(&unsupported_path).unwrap();
+        unsupported.pragma_update(None, "user_version", 99).unwrap();
+        drop(unsupported);
+
+        let incomplete_error = ConversationStore::verify_backup_file(&incomplete_path).unwrap_err();
+        let unsupported_error = ConversationStore::verify_backup_file(&unsupported_path).unwrap_err();
+        assert!(incomplete_error.contains("required midSunday database structures"));
+        assert!(unsupported_error.contains("schema version 99"));
+
+        let _ = std::fs::remove_file(incomplete_path);
+        let _ = std::fs::remove_file(unsupported_path);
+    }
+
     #[test]
     fn database_health_check_reports_integrity_and_schema_without_content() {
         let store = store();

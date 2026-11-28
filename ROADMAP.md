@@ -2641,7 +2641,7 @@ This first backup covers the SQLite database only. Model files and separate JSON
 - [x] Open the selected file in SQLite read-only mode and reject missing, empty, non-database, and unsupported-extension files.
 - [x] Run SQLite quick_check(1), require the current schema version, and check all required midSunday database tables/index structures before declaring the backup valid.
 - [x] Keep file contents, conversations, memories, paths, and identifiers out of verification results; display only integrity outcome, schema version, and file size.
-- [ ] Add regression coverage for valid backups, corrupted or incomplete files, unsupported schema versions, and non-mutating verification (pending; not yet implemented).
+- [x] Add regression coverage for valid backups, corrupted and empty files, wrong extensions, incomplete databases, unsupported schema versions, and byte-for-byte non-mutating verification.
 - [ ] Validate read-only verification and malformed-file handling on physical Windows, Linux, and macOS devices.
 
 Verification does not restore, repair, or modify the selected file. It only checks backups created for the current database schema; it does not establish that the backup can be restored successfully.
