@@ -1989,7 +1989,6 @@ mod tests {
         assert!(store.backup_to(&missing_parent).is_err());
         assert!(!missing_parent.exists());
 
-        drop(backup);
         drop(store);
         let _ = std::fs::remove_file(source_path);
         let _ = std::fs::remove_file(backup_path);
