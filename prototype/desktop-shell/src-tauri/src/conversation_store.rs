@@ -1999,6 +1999,10 @@ impl ConversationStore {
         }
 
         let mut seen_conversation_ids = std::collections::HashSet::new();
+        // Message identifiers are globally unique in a real SQLite database,
+        // not merely unique within each conversation. Validate that invariant
+        // across the complete import before beginning the transaction.
+        let mut seen_message_ids = std::collections::HashSet::new();
         for conversation in &mut parsed.conversations {
             if conversation.id <= 0 || !seen_conversation_ids.insert(conversation.id) {
                 return Err("The backup contains an invalid or repeated conversation identifier.".to_owned());
@@ -2007,7 +2011,6 @@ impl ConversationStore {
             if conversation.created_at < 0 || conversation.updated_at < conversation.created_at {
                 return Err("The backup contains invalid conversation timestamps.".to_owned());
             }
-            let mut seen_message_ids = std::collections::HashSet::new();
             for message in &conversation.messages {
                 if message.id <= 0 || !seen_message_ids.insert(message.id)
                     || message.conversation_id != conversation.id
@@ -2016,7 +2019,7 @@ impl ConversationStore {
                     || message.content.len() > 32_768
                     || message.created_at < 0
                 {
-                    return Err("The backup contains an invalid message. Nothing was imported.".to_owned());
+                    return Err("The backup contains an invalid message or repeated message identifier. Nothing was imported.".to_owned());
                 }
             }
         }
@@ -3226,6 +3229,24 @@ mod tests {
         assert!(store.import_json(&backup).is_err());
         assert_eq!(store.list().unwrap().len(), 1);
         assert_eq!(store.list().unwrap()[0].title, "Already here");
+    }
+
+    #[test]
+    fn rejects_message_identifiers_repeated_across_imported_conversations_without_partial_import() {
+        let store = store();
+        let backup = serde_json::json!({
+            "format": "midSunday-conversation-export", "formatVersion": 1, "exportedAt": 10,
+            "conversations": [
+                {"id": 7, "title": "First", "createdAt": 2, "updatedAt": 3,
+                 "messages": [{"id": 99, "conversationId": 7, "role": "user", "content": "First message", "createdAt": 3}]},
+                {"id": 8, "title": "Second", "createdAt": 2, "updatedAt": 3,
+                 "messages": [{"id": 99, "conversationId": 8, "role": "assistant", "content": "Second message", "createdAt": 3}]}
+            ]
+        }).to_string();
+
+        let error = store.import_json(&backup).unwrap_err();
+        assert!(error.contains("repeated message identifier"));
+        assert!(store.list().unwrap().is_empty());
     }
 
     #[test]

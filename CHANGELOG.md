@@ -531,3 +531,8 @@ All notable project changes are recorded here. The project is in foundation/prot
 - Fixed cross-platform model-catalogue path validation by inspecting filesystem metadata before opening the path, so directories are rejected consistently on Windows, Linux, and macOS.
 - Re-check the opened file handle and retain the existing 64 MiB metadata and bounded-read protections to guard against path replacement and file growth.
 - This addresses the Windows-only directory-test failure from validation run #330 without weakening the catalogue safety checks.
+
+
+## 2026-11-28 — Batch #332
+- Hardened conversation backup import by enforcing globally unique message identifiers across the entire archive, matching the database's identifier invariant rather than checking each conversation separately.
+- Added a regression test with the same message ID in two different conversations and verified the archive is rejected before any conversation is imported.
