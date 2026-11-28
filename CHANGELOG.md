@@ -1,3 +1,8 @@
+## 2026-11-28 — Restore candidate regression fix
+- Fixed guarded candidate copying so the backup-only v2 manifest is removed from the live application database after SQLite online-backup completes. This prevents subsequent verified snapshots from failing while creating a fresh backup manifest.
+- Corrected the mismatch regression test to use different aggregate inventories rather than different record text with identical counts.
+- Kept all restore functionality backend-only; no command or UI is enabled.
+
 ## 2026-11-28 — Batch #293
 - Added guarded live-connection copy and verification primitives for a previously staged, fully verified restore candidate.
 - The copy uses SQLite's online-backup API against the existing live connection while the exclusive database guard is held; a separate verification snapshot runs the complete SQLite/manifest verifier and compares schema plus all aggregate content counts.

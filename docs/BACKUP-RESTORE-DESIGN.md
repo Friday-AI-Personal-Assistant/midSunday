@@ -95,3 +95,10 @@ A user-selected encrypted `.msbackup` can now be decrypted into a private tempor
 The restore guard now exposes two private backend primitives. The first copies a previously staged and verified candidate into the existing live SQLite connection using SQLite's online-backup API while the exclusive database mutex is held. The second snapshots that guarded connection into a private temporary workspace, runs the full backup verifier, and compares schema version and every aggregate inventory count against the candidate. Temporary verification storage is explicitly closed and cleanup failures are surfaced.
 
 Automated tests exercise the copy while holding the runtime gate and database guard, confirm the target database reflects the candidate inventory after the guard is released, and prove that a mismatched live inventory is rejected without mutation. These primitives are not registered as a command and are not connected to UI. They do not yet provide the complete encrypted safety-archive + rollback transaction, crash recovery, or physical-device validation; restore remains unavailable.
+
+
+## 12. Batch #293 regression correction
+
+The v2 `midsunday_backup_manifest` is backup-container metadata and must not remain in the live application database after a candidate is copied into the existing connection. The guarded copy now explicitly closes the SQLite online-backup handle and removes that backup-only table before any destination verification snapshot is generated. This keeps the live schema clean and allows the normal backup writer to create a fresh manifest in the verification snapshot.
+
+The aggregate mismatch test now deliberately uses a target database with two conversations against a one-conversation candidate. The earlier version used different text but identical aggregate counts, which could not be expected to fail an inventory-only comparison. Restore remains disabled pending the complete safety archive, rollback, and crash-recovery transaction.

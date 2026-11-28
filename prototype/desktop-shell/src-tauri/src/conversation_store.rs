@@ -290,6 +290,13 @@ impl RestoreDatabaseGuard<'_> {
             .map_err(|_| "SQLite could not initialise the guarded live-database copy.".to_owned())?;
         backup.run_to_completion(64, Duration::from_millis(20), None)
             .map_err(|_| "SQLite could not complete the guarded live-database copy.".to_owned())?;
+        drop(backup);
+
+        // The v2 manifest belongs to the backup container, not the live app
+        // database. Leaving it in the live connection makes the next VACUUM
+        // snapshot fail when backup_to attempts to write a fresh manifest.
+        self.connection.execute_batch("DROP TABLE IF EXISTS midsunday_backup_manifest;")
+            .map_err(|_| "The backup-only metadata could not be removed from the guarded live database.".to_owned())?;
         Ok(())
     }
 

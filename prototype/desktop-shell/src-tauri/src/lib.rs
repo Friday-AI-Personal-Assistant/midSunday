@@ -1269,6 +1269,7 @@ mod restore_safety_archive_tests {
 
         let target_store = ConversationStore::open(&directory.join("target-live.sqlite3")).unwrap();
         target_store.create("Different target record").unwrap();
+        target_store.create("An additional record makes the inventory differ").unwrap();
         let database_guard = target_store.try_acquire_restore_lock().unwrap();
         assert!(database_guard.verify_current_matches(&candidate.verification).is_err());
         drop(database_guard);

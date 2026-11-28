@@ -2787,3 +2787,10 @@ This milestone still does not modify the live database or enable restore.
 - [ ] Complete physical Windows, Linux, and macOS validation before enabling restore.
 
 This batch adds internal copy/verification building blocks only. No restore command or UI is enabled, and restore remains unavailable.
+
+
+### 2026-11-28 — Restore candidate regression correction
+
+- [x] Remove the backup-only v2 manifest from the live application connection after guarded candidate copy, so future snapshots can create their own fresh manifest.
+- [x] Ensure the destination-mismatch test uses genuinely different aggregate inventory counts.
+- [ ] Continue with the encrypted safety archive, rollback, crash-recovery and failure-injection requirements before enabling restore.
