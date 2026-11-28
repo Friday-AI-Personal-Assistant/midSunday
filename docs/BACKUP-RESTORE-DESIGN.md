@@ -83,3 +83,8 @@ This is a backend preparation primitive only. It is not exposed in the UI, is no
 ## 9. Isolated restore-candidate staging milestone (Batch #291)
 
 The backend now has a private staging primitive that first verifies a v2 SQLite backup, copies it into a separate temporary SQLite database with rusqlite's SQLite online-backup API, and then runs the full backup verifier against the copied candidate. It compares schema version, every aggregate content count, and all available manifest metadata with the original. The candidate owns its temporary workspace and removes it when dropped. The helper does not open or mutate the live ConversationStore connection and is not registered as a restore command. This validates the SQLite copy mechanism in isolation; it does not prove live restore, rollback, or crash recovery.
+
+
+## 10. Encrypted restore-candidate staging milestone (Batch #292)
+
+A user-selected encrypted `.msbackup` can now be decrypted into a private temporary workspace and passed through the isolated SQLite candidate staging path. The source is fully verified, copied using SQLite's online-backup API, and the candidate is fully re-verified against its source schema, manifest, and aggregate inventory. The decrypted source workspace is explicitly removed before the candidate is returned; cleanup failure aborts staging and discards the candidate. Wrong passwords and invalid encrypted sources fail without modifying the encrypted source or live database. This is preparation only: no live restore, rollback, crash recovery, or UI enablement is included.

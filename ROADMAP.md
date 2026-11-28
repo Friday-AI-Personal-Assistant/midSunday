@@ -2763,3 +2763,14 @@ This is a coordination primitive only. It does not modify the database or enable
 - [ ] Integrate the candidate with the guarded live-connection restore transaction, encrypted safety archive, rollback, and crash recovery. Restore remains unavailable.
 
 This milestone validates the SQLite online-copy mechanism in isolation. It does not perform or enable live database restore.
+
+
+### 2026-11-28 — Encrypted restore-candidate staging (Batch #292)
+
+- [x] Decrypt selected `.msbackup` files only inside a private temporary workspace.
+- [x] Stage the decrypted SQLite source using the isolated online-copy and full candidate-verification path from Batch #291.
+- [x] Explicitly close and remove the decrypted source workspace before returning a candidate; cleanup failure aborts staging.
+- [x] Test candidate inventory fidelity, candidate cleanup, live database non-mutation, and wrong-password rejection without source modification.
+- [ ] Integrate staged candidates with guarded live-database replacement, encrypted safety archive, rollback, and crash recovery. Restore remains unavailable.
+
+This milestone still does not modify the live database or enable restore.

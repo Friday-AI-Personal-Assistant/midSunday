@@ -627,6 +627,34 @@ async fn create_encrypted_restore_safety_backup(
     }).await.map_err(|_| "The encrypted restore-safety backup worker could not complete.".to_owned())?
 }
 
+/// Decrypts an encrypted v2 backup into a private workspace, stages it through the
+/// isolated SQLite online-copy verifier, and removes the decrypted source before returning.
+/// This is preparation only: the live ConversationStore is never opened or mutated.
+fn prepare_encrypted_restore_candidate(
+    file_path: &str,
+    password: &str,
+) -> Result<conversation_store::VerifiedRestoreCandidate, String> {
+    use std::path::Path;
+    let source = Path::new(file_path);
+    if !source.extension().and_then(|value| value.to_str()).is_some_and(|value| value.eq_ignore_ascii_case("msbackup")) {
+        return Err("Choose an .msbackup encrypted midSunday backup.".to_owned());
+    }
+    let working_dir = tempfile::Builder::new().prefix("midsunday-encrypted-restore-stage-").tempdir()
+        .map_err(|_| "A private temporary workspace could not be created for restore-candidate staging.".to_owned())?;
+    let plaintext = working_dir.path().join("decrypted-source.sqlite3");
+    let candidate = (|| -> Result<conversation_store::VerifiedRestoreCandidate, String> {
+        backup_encryption::decrypt_file(source, &plaintext, password)?;
+        ConversationStore::prepare_verified_restore_candidate(&plaintext)
+    })();
+    let cleanup = working_dir.close();
+    match (candidate, cleanup) {
+        (Ok(value), Ok(())) => Ok(value),
+        (Err(error), Ok(())) => Err(error),
+        (Ok(_), Err(_)) => Err("The encrypted backup was staged, but its temporary decrypted source could not be removed. Check the temporary folder and keep this device private.".to_owned()),
+        (Err(error), Err(_)) => Err(format!("{error} The temporary decrypted source could not be removed; check the temporary folder and keep this device private.")),
+    }
+}
+
 fn verify_encrypted_database_backup(
     file_path: &str,
     password: &str,
@@ -1170,6 +1198,56 @@ mod restore_safety_archive_tests {
         ));
         fs::create_dir_all(&path).unwrap();
         path
+    }
+
+    #[test]
+    fn encrypted_backup_stages_into_verified_candidate_and_cleans_decrypted_source() {
+        let directory = temp_dir();
+        let store = ConversationStore::open(&directory.join("live.sqlite3")).unwrap();
+        let conversation = store.create("Encrypted candidate test").unwrap();
+        store.append(conversation.id, "user", "Candidate staging must not mutate live records.").unwrap();
+        store.create_memory("A local saved memory").unwrap();
+        let plaintext = directory.join("source.sqlite3");
+        let encrypted = directory.join("source.msbackup");
+        store.backup_to(&plaintext).unwrap();
+        backup_encryption::encrypt_file(&plaintext, &encrypted, "a-long-test-backup-password").unwrap();
+        fs::remove_file(&plaintext).unwrap();
+
+        let candidate = prepare_encrypted_restore_candidate(
+            encrypted.to_str().unwrap(), "a-long-test-backup-password",
+        ).unwrap();
+        assert!(candidate.path().is_file());
+        assert!(candidate.verification.valid);
+        assert_eq!(candidate.verification.backup_format_version, Some(2));
+        assert_eq!(candidate.verification.conversation_count, 1);
+        assert_eq!(candidate.verification.message_count, 1);
+        assert_eq!(candidate.verification.saved_memory_count, 1);
+        assert_eq!(store.content_inventory().unwrap().conversation_count, 1);
+        let candidate_workspace = candidate.path().parent().unwrap().to_path_buf();
+        drop(candidate);
+        assert!(!candidate_workspace.exists());
+        assert!(encrypted.is_file());
+        let _ = fs::remove_dir_all(directory);
+    }
+
+    #[test]
+    fn encrypted_candidate_staging_rejects_wrong_password_without_changing_source() {
+        let directory = temp_dir();
+        let store = ConversationStore::open(&directory.join("live.sqlite3")).unwrap();
+        store.create("Wrong password test").unwrap();
+        let plaintext = directory.join("source.sqlite3");
+        let encrypted = directory.join("source.msbackup");
+        store.backup_to(&plaintext).unwrap();
+        backup_encryption::encrypt_file(&plaintext, &encrypted, "a-long-test-backup-password").unwrap();
+        fs::remove_file(&plaintext).unwrap();
+        let before = fs::read(&encrypted).unwrap();
+
+        assert!(prepare_encrypted_restore_candidate(
+            encrypted.to_str().unwrap(), "a-different-test-password",
+        ).is_err());
+        assert_eq!(fs::read(&encrypted).unwrap(), before);
+        assert_eq!(store.content_inventory().unwrap().conversation_count, 1);
+        let _ = fs::remove_dir_all(directory);
     }
 
     #[test]

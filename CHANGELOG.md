@@ -1,3 +1,9 @@
+## 2026-11-28 — Batch #292
+- Added an encrypted-backup candidate staging pipeline that decrypts a user-selected `.msbackup` only inside a private temporary workspace, then uses the isolated SQLite online-backup candidate verifier from Batch #291.
+- The decrypted source workspace is explicitly closed before the candidate is returned; cleanup failures are surfaced and the candidate is discarded rather than silently retained.
+- Added tests for encrypted candidate fidelity, temporary workspace cleanup, live database non-mutation, and wrong-password rejection without changing the encrypted source.
+- This remains a backend-only preparation primitive. It does not replace the live database, initiate rollback, or enable restore in the UI; crash recovery and physical-device validation remain incomplete.
+
 ## 2026-11-28 — Batch #291
 - Added SQLite's online-backup API as an explicitly enabled rusqlite capability and a private restore-candidate preparation primitive.
 - The primitive first fully verifies a v2 source backup, copies it into an isolated temporary SQLite database, runs the complete integrity/foreign-key/schema/manifest verifier again, and compares every aggregate inventory and manifest field with the source.
