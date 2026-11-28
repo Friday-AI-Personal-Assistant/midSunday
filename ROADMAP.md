@@ -2512,3 +2512,10 @@ An unregistered GGUF receives only file/header checks because no trusted fingerp
 - [ ] Validate volume matching, removable/network volumes, permission failures, and low-space states on physical Windows, Linux, and macOS devices.
 
 Storage values are a point-in-time read-only snapshot. The app does not reserve space, delete files, or guarantee that future model downloads or database writes will fit.
+
+
+### 2026-11-28 — Diagnostic storage headroom compile fix (Batch #245)
+
+- [x] Correct the optional-parent canonicalization fallback so its Option and Result types compose correctly.
+- [x] Extend the diagnostics export test fixture with app-data and model volume states added in Batch #244.
+- [x] Keep the fallback read-only and report storage as unavailable when neither the configured path nor its parent can be resolved.

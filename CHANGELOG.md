@@ -274,3 +274,6 @@ All notable project changes are recorded here. The project is in foundation/prot
 
 
 - Added privacy-preserving Diagnostics checks for free and total space on the app-data and configured model volumes, with conservative healthy/low/critical states and no mount-path or drive-identifier disclosure.
+
+
+- Fixed cross-platform Rust compilation for storage-volume diagnostics and completed the diagnostic export fixture with the new storage fields.

@@ -363,7 +363,11 @@ fn collect_diagnostics_disk_space(path: Option<&std::path::Path>, disks: &sysinf
         return DiskSpaceCheck { status: "not_configured".to_owned(), total_bytes: None, available_bytes: None, detail: "No model location is configured.".to_owned() };
     };
     let resolved = std::fs::canonicalize(path)
-        .or_else(|_| path.parent().and_then(|parent| std::fs::canonicalize(parent)).ok().ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, "path unavailable")));
+        .or_else(|_| {
+            path.parent()
+                .and_then(|parent| std::fs::canonicalize(parent).ok())
+                .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, "path unavailable"))
+        });
     let Ok(resolved) = resolved else {
         return DiskSpaceCheck { status: "unavailable".to_owned(), total_bytes: None, available_bytes: None, detail: "The storage volume could not be identified.".to_owned() };
     };
@@ -824,6 +828,8 @@ mod diagnostics_export_tests {
             runtime_status: "stopped".to_owned(),
             server_executable: setup_readiness::SetupFileCheck { status: "not_configured".to_owned(), detail: "No executable selected.".to_owned() },
             model_file: ModelVerification { valid: false, status: "not_configured".to_owned(), detail: "No model selected.".to_owned() },
+            app_data_volume: DiskSpaceCheck { status: "healthy".to_owned(), total_bytes: Some(100), available_bytes: Some(80), detail: "Test volume.".to_owned() },
+            model_volume: DiskSpaceCheck { status: "not_configured".to_owned(), total_bytes: None, available_bytes: None, detail: "No model location is configured.".to_owned() },
         }
     }
     #[test]
