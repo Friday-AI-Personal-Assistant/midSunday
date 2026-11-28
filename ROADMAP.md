@@ -2391,3 +2391,18 @@ See Settings → Appearance & themes → Accessibility.
 - [ ] Validate first-run, partially configured, ready, keyboard, and narrow-window states on physical Windows, Linux, and macOS devices.
 
 The guide is a lightweight onboarding slice, not a complete first-launch wizard. It performs no network checks and does not infer that a model is compatible merely because a path is configured.
+
+
+### 2026-11-28 — Verified local setup file checks (Batch #234)
+
+- [x] Add a user-triggered, local-only check for the configured llama.cpp server file and selected GGUF model.
+- [x] Check that the server path resolves to a regular file; require an executable permission bit on Unix-like systems and an .exe file on Windows.
+- [x] Check that the model path resolves to a regular .gguf file with a valid GGUF magic header and non-empty payload.
+- [x] Run file checks on a blocking worker so large or slow local files do not freeze the interface.
+- [x] Display separate, plain-language statuses and next-step details in the first-launch guide and Local AI settings.
+- [x] Invalidate previous check results whenever either selected path changes.
+- [x] Keep checks offline and read-only; never launch the selected executable during a readiness check or expose local file paths in the home guide.
+- [x] Preserve the stronger pre-launch registered-model size and SHA-256 fingerprint verification before the engine starts.
+- [ ] Validate actual llama-server binaries, file permissions, valid/invalid GGUF files, and user-facing error states on physical Windows, Linux, and macOS devices.
+
+The readiness check confirms only file presence/type/permissions and the GGUF header. It does not execute the server, test architecture/runtime dependencies, prove model compatibility, or estimate resource fit. A green file check is not a guarantee that the engine will start successfully.

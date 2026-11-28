@@ -63,6 +63,8 @@ type HardwareSnapshot = {
 type EngineSettings = { executablePath: string; modelPath: string; contextTokens: number; cpuThreads: number | null };
 type LocalModel = { id: string; displayName: string; filePath: string; sizeBytes: number; sha256: string; source: string; license: string; addedAt: number };
 type ModelVerification = { valid: boolean; status: string; detail: string };
+type SetupFileCheck = { status: string; detail: string };
+type LocalSetupReadiness = { executable: SetupFileCheck; model: SetupFileCheck };
 type GgufMetadata = { formatVersion:number; fileSizeBytes:number; tensorCount:number; metadataEntryCount:number; architecture:string|null; modelName:string|null; fileTypeCode:number|null; fileTypeDescription:string|null; parameterCount:number|null; contextLength:number|null; blockCount:number|null; embeddingLength:number|null; attentionHeadCount:number|null; attentionKvHeadCount:number|null; attentionKeyLength:number|null; attentionValueLength:number|null; ropeDimensionCount:number|null; expertCount:number|null; expertUsedCount:number|null; quantizationVersion:number|null; alignment:number|null };
 type TensorStorageAnalysis = { status:string; tensorCount:number; analysedTensorCount:number; unknownSizeTensorCount:number; knownPayloadBytes:number; tensorElementCount:number; reportedParameterCount:number|null; parameterCountStatus:string; dataStartOffset:number; alignment:number; types:{ typeCode:number; typeName:string; tensorCount:number; knownPayloadBytes:number; unknownSizeTensorCount:number }[]; note:string };
 type KvCacheEstimate = { status:string; contextTokens:number; bytesPerElement:number; keyCacheBytes:number|null; valueCacheBytes:number|null; totalBytes:number|null; reportedContextLength:number|null; contextLimitStatus:string; contextLimitNote:string; assumptions:string };
@@ -252,6 +254,9 @@ export default function App() {
   const [runtimeStatus, setRuntimeStatus] = useState<RuntimeStatusSnapshot>({ status: "notInstalled", detail: null, startupMemory: null });
   const [runtimeBusy, setRuntimeBusy] = useState(false);
   const [runtimeError, setRuntimeError] = useState("");
+  const [localSetupReadiness, setLocalSetupReadiness] = useState<LocalSetupReadiness | null>(null);
+  const [localSetupBusy, setLocalSetupBusy] = useState(false);
+  const localSetupCheckSequence = useRef(0);
   const [runtimeProcessMemory, setRuntimeProcessMemory] = useState<RuntimeProcessMemorySnapshot | null>(null);
   const [runtimeMemoryBusy, setRuntimeMemoryBusy] = useState(false);
   const [runtimeMemoryCheckedAt, setRuntimeMemoryCheckedAt] = useState<number | null>(null);
@@ -1171,17 +1176,39 @@ export default function App() {
     }
   }
 
+  function invalidateLocalSetupCheck() {
+    localSetupCheckSequence.current += 1;
+    setLocalSetupReadiness(null);
+  }
+
+  async function checkLocalSetup() {
+    const checkSequence = ++localSetupCheckSequence.current;
+    setLocalSetupBusy(true);
+    setRuntimeError("");
+    try {
+      const result = await invoke<LocalSetupReadiness>("check_local_setup", {
+        executablePath: executablePath.trim(),
+        modelPath: modelPath.trim(),
+      });
+      if (checkSequence === localSetupCheckSequence.current) setLocalSetupReadiness(result);
+    } catch (error) {
+      if (checkSequence === localSetupCheckSequence.current) setRuntimeError("Could not check local setup files: " + String(error));
+    } finally {
+      if (checkSequence === localSetupCheckSequence.current) setLocalSetupBusy(false);
+    }
+  }
+
   async function browseForExecutable() {
     try {
       const selected = await open({ multiple: false, directory: false, title: "Select llama-server executable" });
-      if (typeof selected === "string") setExecutablePath(selected);
+      if (typeof selected === "string") { setExecutablePath(selected); invalidateLocalSetupCheck(); }
     } catch (error) { setRuntimeError(`Could not open the file picker: ${String(error)}`); }
   }
 
   async function browseForModel() {
     try {
       const selected = await open({ multiple: false, directory: false, title: "Select GGUF model file", filters: [{ name: "GGUF model", extensions: ["gguf"] }] });
-      if (typeof selected === "string") { setModelPath(selected); const fileName = selected.split(/[\\/]/).pop() ?? "Local model"; setModelDisplayName(fileName.replace(/\.gguf$/i, "")); }
+      if (typeof selected === "string") { setModelPath(selected); invalidateLocalSetupCheck(); const fileName = selected.split(/[\\/]/).pop() ?? "Local model"; setModelDisplayName(fileName.replace(/\.gguf$/i, "")); }
     } catch (error) { setRuntimeError(`Could not open the file picker: ${String(error)}`); }
   }
 
@@ -1192,7 +1219,7 @@ export default function App() {
     setModelCatalogBusy(true); setRuntimeError("");
     try {
       const model = await invoke<LocalModel>("register_local_model", { filePath: modelPath.trim(), displayName: modelDisplayName.trim(), source: modelSource.trim(), license: modelLicense.trim() });
-      setLocalModels(await invoke<LocalModel[]>("list_local_models")); setModelPath(model.filePath);
+      setLocalModels(await invoke<LocalModel[]>("list_local_models")); setModelPath(model.filePath); invalidateLocalSetupCheck();
     } catch (error) { setRuntimeError(String(error)); }
     finally { setModelCatalogBusy(false); }
   }
@@ -1703,11 +1730,11 @@ export default function App() {
                   {runtimeStatus.status !== "ready" && <section className="setup-guide" aria-labelledby="setup-guide-title">
                     <div className="setup-guide-heading"><div><span className="eyebrow">FIRST STEPS</span><h3 id="setup-guide-title">Get your local companion ready</h3><p>midSunday runs models stored on your device. No account, cloud model, or automatic download is required.</p></div><span className="setup-guide-mark" aria-hidden="true">✦</span></div>
                     <div className="setup-guide-steps">
-                      <div className={executablePath.trim() ? "setup-guide-step complete" : "setup-guide-step"}><span className="setup-guide-number">1</span><div><strong>Choose your local AI server</strong><small>{executablePath.trim() ? "A server executable path is configured." : "Select an existing compatible llama.cpp server executable in Settings."}</small></div><span className="setup-guide-state">{executablePath.trim() ? "Ready" : "To do"}</span></div>
-                      <div className={modelPath.trim() ? "setup-guide-step complete" : "setup-guide-step"}><span className="setup-guide-number">2</span><div><strong>Select a GGUF model</strong><small>{modelPath.trim() ? "A model file path is configured." : "Choose a GGUF model already stored on this device."}{localModels.length > 0 ? " " + localModels.length + " model(s) in your catalogue." : ""}</small></div><span className="setup-guide-state">{modelPath.trim() ? "Ready" : "To do"}</span></div>
+                      <div className={localSetupReadiness?.executable.status === "ready" ? "setup-guide-step complete" : "setup-guide-step"}><span className="setup-guide-number">1</span><div><strong>Choose your local AI server</strong><small>{localSetupReadiness?.executable.detail ?? (executablePath.trim() ? "Path entered. Check the file before starting the engine." : "Select an existing llama.cpp server executable in Settings.")}</small></div><span className="setup-guide-state">{localSetupReadiness ? localSetupReadiness.executable.status.replace(/_/g, " ") : "Not checked"}</span></div>
+                      <div className={localSetupReadiness?.model.status === "ready" ? "setup-guide-step complete" : "setup-guide-step"}><span className="setup-guide-number">2</span><div><strong>Select a GGUF model</strong><small>{localSetupReadiness?.model.detail ?? (modelPath.trim() ? "Path entered. Check the GGUF file before starting the engine." : "Choose a GGUF model already stored on this device.")}{localModels.length > 0 ? " " + localModels.length + " model(s) in your catalogue." : ""}</small></div><span className="setup-guide-state">{localSetupReadiness ? localSetupReadiness.model.status.replace(/_/g, " ") : "Not checked"}</span></div>
                       <div className={runtimeStatus.status === "ready" ? "setup-guide-step complete" : "setup-guide-step"}><span className="setup-guide-number">3</span><div><strong>Start your local engine</strong><small>{runtimeStatus.status === "ready" ? "Your local engine is ready for a conversation." : "Start the engine from Local AI engine settings when both paths are configured."}</small></div><span className="setup-guide-state">{runtimeStatus.status === "ready" ? "Ready" : "To do"}</span></div>
                     </div>
-                    <div className="setup-guide-actions"><button type="button" className="primary-action" onClick={() => setSection("settings")}>Open local AI settings</button><button type="button" className="secondary-action" onClick={() => setSection("characters")}>Choose a companion</button></div>
+                    <div className="setup-guide-actions"><button type="button" className="primary-action" onClick={() => setSection("settings")}>Open local AI settings</button><button type="button" className="secondary-action" onClick={() => void checkLocalSetup()} disabled={localSetupBusy}>{localSetupBusy ? "Checking files…" : "Check setup files"}</button><button type="button" className="secondary-action" onClick={() => setSection("characters")}>Choose a companion</button></div>
                     <p className="setup-guide-note">You can explore themes and companions before connecting a model. A compatible server and model are not bundled with this prototype.</p>
                   </section>}
                   <div className="suggestion-grid">
@@ -1840,12 +1867,13 @@ export default function App() {
                 </div>}
                 <p className="settings-footnote">This is process-wide memory, not model-only memory. Virtual memory is not physical RAM use. GPU allocations are outside this snapshot; it does not prove accelerator use.</p>
               </div>
-              <div className="path-field"><label htmlFor="server-path">llama-server executable</label><div className="path-input-row"><input id="server-path" value={executablePath} onChange={(event) => setExecutablePath(event.target.value)} placeholder="Choose the llama-server file…" spellCheck={false} /><button type="button" className="browse-button" onClick={browseForExecutable}>Browse</button></div></div>
-              <div className="path-field"><label htmlFor="model-path">GGUF model file</label><div className="path-input-row"><input id="model-path" value={modelPath} onChange={(event) => setModelPath(event.target.value)} placeholder="Choose a .gguf model…" spellCheck={false} /><button type="button" className="browse-button" onClick={browseForModel}>Browse</button></div></div>
+              <div className="path-field"><label htmlFor="server-path">llama-server executable</label><div className="path-input-row"><input id="server-path" value={executablePath} onChange={(event) => { setExecutablePath(event.target.value); invalidateLocalSetupCheck(); }} placeholder="Choose the llama-server file…" spellCheck={false} /><button type="button" className="browse-button" onClick={browseForExecutable}>Browse</button></div></div>
+              <div className="path-field"><label htmlFor="model-path">GGUF model file</label><div className="path-input-row"><input id="model-path" value={modelPath} onChange={(event) => { setModelPath(event.target.value); invalidateLocalSetupCheck(); }} placeholder="Choose a .gguf model…" spellCheck={false} /><button type="button" className="browse-button" onClick={browseForModel}>Browse</button></div></div>
               <div className="path-field"><label htmlFor="context-tokens">Context length (tokens)</label><input id="context-tokens" type="number" min="512" max="32768" step="256" value={contextTokens} onChange={(event) => setContextTokens(event.target.value)} disabled={runtimeBusy || runtimeStatus.status === "ready"} /></div>
               <div className="path-field"><label htmlFor="cpu-threads">CPU threads (blank = automatic)</label><input id="cpu-threads" type="number" min="1" max="256" step="1" value={cpuThreads} onChange={(event) => setCpuThreads(event.target.value)} placeholder="Automatic" disabled={runtimeBusy || runtimeStatus.status === "ready"} /></div>
-              <div className="runtime-actions"><button className="primary-action" onClick={startLocalRuntime} disabled={runtimeBusy || runtimeStatus.status === "ready"}>{runtimeBusy ? "Please wait…" : "Start local engine"}</button><button className="secondary-action" onClick={stopLocalRuntime} disabled={runtimeBusy || runtimeStatus.status === "notInstalled" || runtimeStatus.status === "stopped"}>Stop engine</button></div>
-              {runtimeError && <p className="runtime-error" role="alert">{runtimeError}</p>}
+              <div className="runtime-actions"><button className="secondary-action" type="button" onClick={() => void checkLocalSetup()} disabled={localSetupBusy}>{localSetupBusy ? "Checking files…" : "Check setup files"}</button><button className="primary-action" onClick={startLocalRuntime} disabled={runtimeBusy || runtimeStatus.status === "ready"}>{runtimeBusy ? "Please wait…" : "Start local engine"}</button><button className="secondary-action" onClick={stopLocalRuntime} disabled={runtimeBusy || runtimeStatus.status === "notInstalled" || runtimeStatus.status === "stopped"}>Stop engine</button></div>
+              {localSetupReadiness && <div className="setup-check-results" role="status"><strong>Local file check</strong><p><span>Server: {localSetupReadiness.executable.status.replace(/_/g, " ")}</span> · {localSetupReadiness.executable.detail}</p><p><span>Model: {localSetupReadiness.model.status.replace(/_/g, " ")}</span> · {localSetupReadiness.model.detail}</p><small>These checks inspect local file metadata and the GGUF header only. They do not launch the server, test model compatibility, or replace the SHA-256 integrity check performed before engine startup.</small></div>}
+              {runtimeError && <p className="runtime-error" role="alert">{runtimeError}</p>
               <p className="settings-footnote">Before starting, midSunday checks the GGUF file header. If the file is registered, its saved size and SHA-256 fingerprint are also rechecked. The engine listens only on this device (127.0.0.1).</p>
             </section>
             <section className="settings-section">

@@ -9,6 +9,7 @@ mod llama_runtime;
 mod runtime;
 mod runtime_manager;
 mod system_info;
+mod setup_readiness;
 
 use tauri::{ipc::Channel, State};
 use system_info::{HardwareSnapshot, LiveSystemMetrics, SystemMonitor};
@@ -21,6 +22,7 @@ use gguf_metadata::{GgufMetadata, KvCacheEstimate};
 use companion_settings::{CompanionSettings, CompanionSettingsStore};
 use model_catalog::{LocalModel, ModelCatalog, ModelVerification};
 use tauri::Manager;
+use setup_readiness::LocalSetupReadiness;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -336,6 +338,13 @@ async fn get_hardware_snapshot(model_path: Option<String>) -> Result<HardwareSna
 }
 
 #[tauri::command]
+async fn check_local_setup(executable_path: String, model_path: String) -> Result<LocalSetupReadiness, String> {
+    tauri::async_runtime::spawn_blocking(move || setup_readiness::check_local_setup(&executable_path, &model_path))
+        .await
+        .map_err(|error| format!("Local setup check worker failed: {error}"))
+}
+
+#[tauri::command]
 fn get_engine_settings(settings: State<'_, EngineSettingsStore>) -> Result<EngineSettings, String> {
     settings.get()
 }
@@ -586,6 +595,7 @@ pub fn run() {
             export_awareness_items,
             get_user_profile,
             save_user_profile,
+            check_local_setup,
             get_engine_settings,
             save_engine_settings,
             get_companion_settings,

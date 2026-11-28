@@ -746,3 +746,12 @@ body { color:var(--text-main); background:var(--app-bg); }
 .setup-guide-actions .primary-action, .setup-guide-actions .secondary-action { min-height:34px; padding:8px 11px; font-size:10px; }
 .setup-guide-note { margin:10px 0 0; color:var(--muted); font-size:9px; line-height:1.5; }
 @media (max-width:560px) { .setup-guide { padding:12px; } .setup-guide-step { grid-template-columns:23px minmax(0,1fr); } .setup-guide-state { grid-column:2; } .setup-guide-actions { flex-direction:column; } .setup-guide-actions button { width:100%; } }
+
+
+/* Local setup file-check results remain readable in every theme and narrow window. */
+.setup-check-results { display:grid; gap:6px; margin-top:12px; padding:10px 12px; border:1px solid var(--line); border-radius:9px; background:var(--surface); }
+.setup-check-results > strong { color:var(--text-strong); font-size:11px; }
+.setup-check-results p { margin:0; color:var(--muted); font-size:9px; line-height:1.5; overflow-wrap:anywhere; }
+.setup-check-results p span { color:var(--text-strong); font-weight:700; text-transform:capitalize; }
+.setup-check-results > small { color:var(--muted); font-size:8px; line-height:1.5; }
+.setup-guide-actions button:disabled { opacity:.55; cursor:wait; }
