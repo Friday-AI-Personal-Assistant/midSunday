@@ -462,3 +462,9 @@ All notable project changes are recorded here. The project is in foundation/prot
 - Expanded the guarded restore operation seams so tests can inject failures in candidate copy, candidate verification, rollback copy, and rollback verification.
 - Added regression tests proving a failed initial copy rolls back successfully, while rollback-copy and rollback-verification failures return the explicit critical recovery error. The rollback-verification test independently confirms the original records were copied back.
 - Restore remains unavailable pending a persistent recovery-blocked state, crash/restart recovery, remaining transaction-boundary tests, and physical-device validation.
+
+## 2026-11-28 — Batch #305
+- Added a versioned persistent recovery marker outside SQLite, containing no personal database content or backup credentials.
+- Marker creation is exclusive and durable; existing markers are preserved, and malformed, partial, unreadable, or unsupported markers fail closed.
+- App startup checks the marker before opening SQLite and blocks normal database startup when recovery is required.
+- Added regression tests for clean startup, persistent blocking, marker preservation, malformed/partial markers, and unsupported versions. The marker is not yet wired into rollback failures and has no clearing/bypass command; restore remains unavailable.

@@ -1,0 +1,131 @@
+use serde::{Deserialize, Serialize};
+use std::{
+    fs::{self, OpenOptions},
+    io::{Read, Write},
+    path::{Path, PathBuf},
+    time::{SystemTime, UNIX_EPOCH},
+};
+
+const MARKER_FILE: &str = "midsunday-database-recovery-required.json";
+const MARKER_VERSION: u32 = 1;
+const RECOVERY_REASON: &str = "restore_rollback_unverified";
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RecoveryMarker {
+    format_version: u32,
+    reason_code: String,
+    created_at: u64,
+}
+
+/// A durable fail-closed marker kept outside SQLite so it remains readable even
+/// when the database itself cannot be trusted.
+pub(crate) struct RecoveryState {
+    marker_path: PathBuf,
+}
+
+impl RecoveryState {
+    pub(crate) fn in_data_dir(data_dir: &Path) -> Self {
+        Self { marker_path: data_dir.join(MARKER_FILE) }
+    }
+
+    /// Persist a minimal marker without storing database content, backup paths,
+    /// passwords, or arbitrary error strings. create_new prevents overwriting
+    /// an earlier recovery record. A partial marker is intentionally fail-closed.
+    pub(crate) fn mark_required(&self) -> Result<(), String> {
+        fs::create_dir_all(self.marker_path.parent().ok_or_else(|| {
+            "The database recovery marker location is invalid.".to_owned()
+        })?).map_err(|_| "The database recovery marker directory could not be prepared.".to_owned())?;
+
+        let created_at = SystemTime::now().duration_since(UNIX_EPOCH)
+            .map_err(|_| "The system clock is invalid; the database recovery marker was not written.".to_owned())?
+            .as_secs();
+        let marker = RecoveryMarker {
+            format_version: MARKER_VERSION,
+            reason_code: RECOVERY_REASON.to_owned(),
+            created_at,
+        };
+        let encoded = serde_json::to_vec(&marker)
+            .map_err(|_| "The database recovery marker could not be encoded.".to_owned())?;
+
+        let mut file = match OpenOptions::new().write(true).create_new(true).open(&self.marker_path) {
+            Ok(file) => file,
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+                return self.ensure_required();
+            }
+            Err(_) => return Err("The database recovery marker could not be created. Preserve the encrypted safety archive and do not continue using this database.".to_owned()),
+        };
+        file.write_all(&encoded)
+            .and_then(|_| file.sync_all())
+            .map_err(|_| "The database recovery marker could not be durably written. Preserve the encrypted safety archive and do not continue using this database.".to_owned())
+    }
+
+    fn ensure_required(&self) -> Result<(), String> {
+        let mut file = OpenOptions::new().read(true).open(&self.marker_path)
+            .map_err(|_| "A database recovery marker exists but could not be read. Preserve the encrypted safety archive and do not continue using this database.".to_owned())?;
+        let mut encoded = Vec::new();
+        file.read_to_end(&mut encoded)
+            .map_err(|_| "A database recovery marker exists but could not be read. Preserve the encrypted safety archive and do not continue using this database.".to_owned())?;
+        let marker: RecoveryMarker = serde_json::from_slice(&encoded)
+            .map_err(|_| "A database recovery marker is damaged or incomplete. Preserve the encrypted safety archive; normal database startup is blocked.".to_owned())?;
+        if marker.format_version != MARKER_VERSION
+            || marker.reason_code != RECOVERY_REASON
+            || marker.created_at == 0
+        {
+            return Err("A database recovery marker has an unsupported or invalid format. Preserve the encrypted safety archive; normal database startup is blocked.".to_owned());
+        }
+        Err("Database recovery is required because a previous restore could not verify rollback. Preserve the encrypted pre-restore safety archive. midSunday has not opened the database; do not delete the recovery marker or continue using this database.".to_owned())
+    }
+}
+
+/// Call before opening the SQLite database. Any present marker, including a
+/// malformed or partially written one, prevents normal database startup.
+pub(crate) fn ensure_database_not_blocked(data_dir: &Path) -> Result<(), String> {
+    let state = RecoveryState::in_data_dir(data_dir);
+    match fs::metadata(&state.marker_path) {
+        Ok(_) => state.ensure_required(),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(_) => Err("The database recovery state could not be inspected. Normal database startup is blocked to protect local data.".to_owned()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn startup_is_allowed_when_no_recovery_marker_exists() {
+        let directory = tempfile::tempdir().unwrap();
+        ensure_database_not_blocked(directory.path()).unwrap();
+    }
+
+    #[test]
+    fn persistent_marker_blocks_startup_and_is_not_overwritten() {
+        let directory = tempfile::tempdir().unwrap();
+        let state = RecoveryState::in_data_dir(directory.path());
+        state.mark_required().unwrap();
+        let path = directory.path().join(MARKER_FILE);
+        let original = fs::read(&path).unwrap();
+        assert!(ensure_database_not_blocked(directory.path()).unwrap_err().contains("recovery is required"));
+        assert!(state.mark_required().is_err());
+        assert_eq!(fs::read(path).unwrap(), original);
+    }
+
+    #[test]
+    fn malformed_or_partial_marker_fails_closed() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join(MARKER_FILE);
+        fs::write(&path, br#"{"formatVersion":1"#).unwrap();
+        let error = ensure_database_not_blocked(directory.path()).unwrap_err();
+        assert!(error.contains("damaged or incomplete"));
+    }
+
+    #[test]
+    fn unsupported_marker_version_fails_closed() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join(MARKER_FILE);
+        fs::write(&path, br#"{"formatVersion":99,"reasonCode":"restore_rollback_unverified","createdAt":1}"#).unwrap();
+        let error = ensure_database_not_blocked(directory.path()).unwrap_err();
+        assert!(error.contains("unsupported or invalid format"));
+    }
+}

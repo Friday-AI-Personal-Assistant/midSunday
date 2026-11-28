@@ -2832,3 +2832,15 @@ This batch adds a private rollback building block only. It does not register a r
 - [ ] Complete physical Windows, Linux, and macOS validation before enabling restore.
 
 This batch expands in-process failure-injection coverage only. It does not enable a restore command or UI and does not claim crash-safe recovery.
+
+### 2026-11-28 — Persistent recovery marker foundation (Batch #305)
+
+- [x] Add a versioned recovery marker outside SQLite containing only a fixed reason code and timestamp.
+- [x] Create markers exclusively, preserve existing markers, and fail closed for malformed, partial, unreadable, or unsupported marker files.
+- [x] Check recovery state before opening the SQLite database so a blocked database is never opened during normal startup.
+- [x] Add tests for clean startup, persistent blocking, marker preservation, partial marker failure, and unsupported marker versions.
+- [ ] Wire rollback-verification failure to persist the marker before returning a critical recovery error.
+- [ ] Add a deliberate recovery-only startup path and verified marker clearing; do not provide a normal-startup bypass.
+- [ ] Demonstrate process termination/restart at every restore transaction boundary and complete physical Windows/Linux/macOS validation before enabling restore.
+
+This is the persistent fail-closed marker foundation only. It is not yet connected to rollback failures, cannot be cleared by the app, and does not enable restore.

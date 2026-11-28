@@ -11,6 +11,7 @@ mod runtime;
 mod runtime_manager;
 mod system_info;
 mod setup_readiness;
+mod recovery_state;
 
 use tauri::{ipc::Channel, State};
 use system_info::{HardwareSnapshot, LiveSystemMetrics, SystemMonitor};
@@ -922,6 +923,8 @@ pub fn run() {
     tauri::Builder::default()
         .setup(|app| {
             let data_dir = app.path().app_data_dir()?;
+            recovery_state::ensure_database_not_blocked(&data_dir)
+                .map_err(|error| std::io::Error::new(std::io::ErrorKind::Other, error))?;
             let database_path = data_dir.join("midsunday.sqlite3");
             let store = ConversationStore::open(&database_path)
                 .map_err(|error| std::io::Error::new(std::io::ErrorKind::Other, error))?;
