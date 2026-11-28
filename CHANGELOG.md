@@ -1,3 +1,7 @@
+## 2026-11-28 — Batch #278
+- Fixed a command-registration regression from Batch #277: restored the existing encrypted-backup verification Tauri command while retaining the new read-only restore preview command.
+- No backup format, restore behaviour, or personal data handling was changed by this repair.
+
 ## 2026-11-28 — Batch #277
 - Added a read-only encrypted-backup restore impact preview. It authenticates and verifies the selected archive, then compares aggregate record counts with the current local database.
 - The preview exposes no personal record contents or identifiers and does not modify the backup or live database. It explicitly explains that a future restore would replace current database content; actual restore remains disabled pending a proven live-connection, safety-copy, rollback, and crash-recovery design.

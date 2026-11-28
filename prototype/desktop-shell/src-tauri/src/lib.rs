@@ -600,6 +600,13 @@ async fn create_encrypted_local_database_backup(
 }
 
 #[tauri::command]
+async fn verify_encrypted_local_database_backup(file_path: String, password: String) -> Result<conversation_store::DatabaseBackupVerification, String> {
+    tauri::async_runtime::spawn_blocking(move || verify_encrypted_database_backup(&file_path, &password))
+        .await
+        .map_err(|_| "The encrypted backup verification worker could not complete.".to_owned())?
+}
+
+#[tauri::command]
 async fn preview_encrypted_database_restore(
     file_path: String,
     password: String,
