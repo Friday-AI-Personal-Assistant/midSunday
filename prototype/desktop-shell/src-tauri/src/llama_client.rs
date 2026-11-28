@@ -115,6 +115,7 @@ impl LlamaHttpClient {
         // Preserve incomplete UTF-8 sequences between socket reads. This matters
         // for Urdu and other multibyte scripts when a character crosses a chunk boundary.
         let mut pending = Vec::<u8>::new();
+        let mut received_done_marker = false;
 
         loop {
             if cancellation.is_cancelled() {
@@ -140,7 +141,10 @@ impl LlamaHttpClient {
                 }
 
                 match parse_stream_line(&line)? {
-                    StreamLine::Done => return Ok(()),
+                    StreamLine::Done => {
+                        received_done_marker = true;
+                        return Ok(());
+                    },
                     StreamLine::Delta(content) => on_delta(&content),
                     StreamLine::Ignored => {}
                 }
@@ -153,7 +157,10 @@ impl LlamaHttpClient {
 
         if !pending.is_empty() {
             match parse_stream_line(&pending)? {
-                StreamLine::Done => return Ok(()),
+                StreamLine::Done => {
+                    received_done_marker = true;
+                    return Ok(());
+                },
                 StreamLine::Delta(content) => on_delta(&content),
                 StreamLine::Ignored => {}
             }
@@ -161,8 +168,12 @@ impl LlamaHttpClient {
 
         if cancellation.is_cancelled() {
             Err(LlamaClientError::Cancelled)
-        } else {
+        } else if received_done_marker {
             Ok(())
+        } else {
+            // A clean TCP EOF is not proof that the model completed its reply:
+            // a dropped server or interrupted response must not look successful.
+            Err(LlamaClientError::InvalidResponse)
         }
     }
 }
@@ -397,6 +408,29 @@ mod tests {
         let mut output = String::new();
         client.generate_streaming(&request, &cancellation, |delta| output.push_str(delta)).unwrap();
         assert_eq!(output, "Hello world");
+        server.join().unwrap();
+    }
+
+    #[test]
+    fn streaming_rejects_clean_eof_without_server_done_marker() {
+        let body = "data: {\\"choices\\":[{\\"delta\\":{\\"content\\":\\"partial reply\\"}}]}\\n\\n";
+        let (port, server) = mock_server(vec![(200, body)]);
+        let client = LlamaHttpClient::new(&config(port), Duration::from_secs(2)).unwrap();
+        let request = GenerationRequest {
+            system_prompt: String::new(),
+            history: Vec::new(),
+            prompt: "Test incomplete stream.".to_owned(),
+            max_tokens: 64,
+            temperature: 0.7,
+            top_p: 0.9,
+        };
+        let cancellation = GenerationCancellation::default();
+        let mut output = String::new();
+
+        let result = client.generate_streaming(&request, &cancellation, |delta| output.push_str(delta));
+
+        assert_eq!(output, "partial reply");
+        assert_eq!(result, Err(LlamaClientError::InvalidResponse));
         server.join().unwrap();
     }
 
