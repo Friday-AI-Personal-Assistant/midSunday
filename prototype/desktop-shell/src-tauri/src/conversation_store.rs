@@ -2085,7 +2085,7 @@ mod tests {
         assert_eq!(verification.saved_memory_count, 1);
         assert_eq!(verification.awareness_item_count, 1);
         assert_eq!(verification.awareness_activity_count, 0);
-        assert_eq!(verification.awareness_history_count, 0);
+        assert_eq!(verification.awareness_history_count, 1);
         assert_eq!(verification.awareness_suppression_count, 0);
         assert_eq!(verification.awareness_suggestion_count, 0);
         assert_eq!(verification.app_preference_count, 1);
