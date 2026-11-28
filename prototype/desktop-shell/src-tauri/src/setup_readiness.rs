@@ -2,7 +2,7 @@
 use serde::Serialize;
 use std::{fs, fs::File, io::Read, path::Path};
 
-#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Serialize, serde::Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct SetupFileCheck {
     pub status: String,

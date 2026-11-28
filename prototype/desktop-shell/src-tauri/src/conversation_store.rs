@@ -194,7 +194,7 @@ pub struct ImportResult {
     pub skipped_duplicates: usize,
 }
 
-#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Serialize, serde::Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct DatabaseHealth {
     pub status: String,

@@ -438,7 +438,7 @@ Use semantic tokens (for example, primary, primary-strong, accent, surface, elev
 - [ ] Distinguish informational messages, warnings, and critical errors; never label a recoverable issue as a fatal app failure.
 - [ ] Add Settings → Diagnostics with health status, recent error details, log location, and guided checks/repair actions.
 - [ ] Keep diagnostic logs on the device by default; exclude conversation content, memories, passwords, API keys, and private files.
-- [ ] Allow users to review and explicitly export diagnostic reports; never upload logs or enable telemetry automatically.
+- [x] Allow users to review and explicitly export the current sanitized health-check report to a user-selected JSON file; never upload reports or enable telemetry automatically.
 - [ ] Provide a limited pre-launch/installer prerequisite check for failures that prevent the main application from starting at all.
 - [ ] Test missing DLL/runtime, damaged app files, database migration failures, low disk space/RAM, model corruption, permission denial, device loss, and unexpected shutdown scenarios.
 - [ ] Remove or qualify claims that are not supported by testing.
@@ -667,7 +667,7 @@ This repository is the durable source of truth. ChatGPT conversations are workin
 
 ## 11. Current status and immediate next actions
 
-**Current stage:** Phase 4 — Offline local chat engine integration. The repository now includes a managed llama.cpp server lifecycle, loopback-only streaming generation and cancellation, local SQLite conversations, model registration and integrity checks, GGUF metadata/tensor/KV-cache inspection, hardware-memory evidence, a first-run setup guide, active-session visibility, and unexpected engine-exit detection. Batches #233–#237 extend onboarding, setup verification, session visibility, and runtime health reporting. Cross-platform CI validates compilation and tests; actual inference quality, offline behaviour, process recovery, and persistence still require physical-device testing.
+**Current stage:** Phase 4 — Offline local chat engine integration. The repository now includes a managed llama.cpp server lifecycle, loopback-only streaming generation and cancellation, local SQLite conversations, model registration and integrity checks, GGUF metadata/tensor/KV-cache inspection, hardware-memory evidence, a first-run setup guide, active-session visibility, and unexpected engine-exit detection. Batches #233–#242 extend onboarding, setup verification, session visibility, runtime health reporting, and explicit local diagnostic export. Cross-platform CI validates compilation and tests; actual inference quality, offline behaviour, process recovery, and persistence still require physical-device testing.
 
 **Completed:**
 - [x] Product name selected: midSunday.
@@ -2469,3 +2469,12 @@ This is an initial diagnostic slice, not a complete health or repair system. A h
 - [x] Corrected a malformed line break in the shared model-catalogue declaration that prevented Rust compilation on all three CI platforms.
 - [x] Added a regression test confirming cloned catalogue handles share the same in-memory inventory, as required by background diagnostics verification.
 - [ ] Re-run the complete Windows, Linux, and macOS workflow before considering expanded diagnostics complete.
+
+
+### 2026-11-28 — Sanitized diagnostic report export (Batch #242)
+
+- Added an explicit Export diagnostic report action after a successful local health check.
+- Uses the native save dialog and writes a JSON report only after the user chooses a destination.
+- Includes only the already displayed app/platform, database health, model count, configured file-check outcomes, and managed engine status, plus the report timestamp.
+- Does not include conversations, memories, local file paths, model contents, credentials, or hardware identifiers; no report is uploaded or shared automatically.
+- Added regression tests for the exported report shape and rejection of non-JSON destinations.

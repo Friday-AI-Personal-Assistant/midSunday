@@ -320,12 +320,12 @@ fn verify_local_model(catalog: State<'_, ModelCatalog>, id: String) -> Result<Mo
     catalog.verify(&id)
 }
 
-#[derive(Clone, Debug, serde::Serialize)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct DiagnosticsSnapshot {
-    app_version: &'static str,
-    operating_system: &'static str,
-    architecture: &'static str,
+    app_version: String,
+    operating_system: String,
+    architecture: String,
     database: DatabaseHealth,
     model_count: Option<usize>,
     runtime_status: String,
@@ -371,15 +371,43 @@ async fn get_diagnostics_snapshot(
         (readiness.executable, model_file)
     }).await.map_err(|_| "The local file-diagnostics worker could not complete.".to_owned())?;
     Ok(DiagnosticsSnapshot {
-        app_version: env!("CARGO_PKG_VERSION"),
-        operating_system: std::env::consts::OS,
-        architecture: std::env::consts::ARCH,
+        app_version: env!("CARGO_PKG_VERSION").to_owned(),
+        operating_system: std::env::consts::OS.to_owned(),
+        architecture: std::env::consts::ARCH.to_owned(),
         database,
         model_count,
         runtime_status,
         server_executable,
         model_file,
     })
+}
+
+#[derive(Clone, Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DiagnosticsExport {
+    generated_at_unix_seconds: u64,
+    snapshot: DiagnosticsSnapshot,
+}
+
+fn write_diagnostics_report(file_path: &str, snapshot: DiagnosticsSnapshot) -> Result<(), String> {
+    let path = std::path::Path::new(file_path);
+    if !path.extension().and_then(|value| value.to_str()).is_some_and(|value| value.eq_ignore_ascii_case("json")) {
+        return Err("Choose a .json file for the diagnostic report.".to_owned());
+    }
+    let generated_at_unix_seconds = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|_| "The system clock is earlier than the Unix epoch.".to_owned())?
+        .as_secs();
+    let report = DiagnosticsExport { generated_at_unix_seconds, snapshot };
+    let contents = serde_json::to_vec_pretty(&report)
+        .map_err(|_| "The diagnostic report could not be encoded.".to_owned())?;
+    std::fs::write(path, contents)
+        .map_err(|_| "The diagnostic report could not be written to the selected location.".to_owned())
+}
+
+#[tauri::command]
+fn export_diagnostics_report(file_path: String, snapshot: DiagnosticsSnapshot) -> Result<(), String> {
+    write_diagnostics_report(&file_path, snapshot)
 }
 
 #[tauri::command]
@@ -609,6 +637,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_app_status,
             get_diagnostics_snapshot,
+            export_diagnostics_report,
             get_hardware_snapshot,
             get_live_system_metrics,
             list_local_models,
@@ -692,5 +721,51 @@ mod awareness_analysis_tests {
         assert!(parse_awareness_analysis_response("not json").is_err());
         let too_many = serde_json::json!({"suggestions": (0..21).map(|_| serde_json::json!({"content":"A fact","category":"other","knowledgeType":"observed","confidence":0.5,"sourceMessageId":1})).collect::<Vec<_>>() }).to_string();
         assert!(parse_awareness_analysis_response(&too_many).is_err());
+    }
+}
+
+
+#[cfg(test)]
+mod diagnostics_export_tests {
+    use super::*;
+    use std::{fs, path::PathBuf, sync::atomic::{AtomicUsize, Ordering}};
+    static NEXT: AtomicUsize = AtomicUsize::new(0);
+    fn temp_dir() -> PathBuf {
+        let path = std::env::temp_dir().join(format!("midsunday-diagnostics-export-{}-{}", std::process::id(), NEXT.fetch_add(1, Ordering::Relaxed)));
+        fs::create_dir_all(&path).unwrap();
+        path
+    }
+    fn sample_snapshot() -> DiagnosticsSnapshot {
+        DiagnosticsSnapshot {
+            app_version: "0.1.0".to_owned(),
+            operating_system: "test-os".to_owned(),
+            architecture: "test-arch".to_owned(),
+            database: DatabaseHealth { status: "ok".to_owned(), schema_version: 1, detail: "Integrity check passed.".to_owned() },
+            model_count: Some(2),
+            runtime_status: "stopped".to_owned(),
+            server_executable: setup_readiness::SetupFileCheck { status: "not_configured".to_owned(), detail: "No executable selected.".to_owned() },
+            model_file: ModelVerification { valid: false, status: "not_configured".to_owned(), detail: "No model selected.".to_owned() },
+        }
+    }
+    #[test]
+    fn exports_only_the_supplied_sanitized_diagnostics_snapshot() {
+        let directory = temp_dir();
+        let path = directory.join("report.json");
+        write_diagnostics_report(path.to_str().unwrap(), sample_snapshot()).unwrap();
+        let value: serde_json::Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+        assert_eq!(value["snapshot"]["operatingSystem"], "test-os");
+        assert_eq!(value["snapshot"]["modelCount"], 2);
+        assert!(value.get("generatedAtUnixSeconds").is_some());
+        assert!(value.get("conversations").is_none());
+        assert!(value.get("memories").is_none());
+        let _ = fs::remove_dir_all(directory);
+    }
+    #[test]
+    fn refuses_non_json_diagnostic_export_paths() {
+        let directory = temp_dir();
+        let path = directory.join("report.txt");
+        assert!(write_diagnostics_report(path.to_str().unwrap(), sample_snapshot()).is_err());
+        assert!(!path.exists());
+        let _ = fs::remove_dir_all(directory);
     }
 }

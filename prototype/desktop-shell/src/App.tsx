@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { Channel, invoke } from "@tauri-apps/api/core";
-import { open } from "@tauri-apps/plugin-dialog";
+import { open, save } from "@tauri-apps/plugin-dialog";
 import { disable as disableAutostart, enable as enableAutostart, isEnabled as isAutostartEnabled } from "@tauri-apps/plugin-autostart";
 
 type BackendState = "checking" | "connected" | "error";
@@ -259,6 +259,8 @@ export default function App() {
   const [diagnosticsSnapshot, setDiagnosticsSnapshot] = useState<DiagnosticsSnapshot | null>(null);
   const [diagnosticsBusy, setDiagnosticsBusy] = useState(false);
   const [diagnosticsError, setDiagnosticsError] = useState("");
+  const [diagnosticsExportBusy, setDiagnosticsExportBusy] = useState(false);
+  const [diagnosticsExportStatus, setDiagnosticsExportStatus] = useState("");
   const [localSetupReadiness, setLocalSetupReadiness] = useState<LocalSetupReadiness | null>(null);
   const [localSetupBusy, setLocalSetupBusy] = useState(false);
   const localSetupCheckSequence = useRef(0);
@@ -1197,6 +1199,27 @@ export default function App() {
       setDiagnosticsError("The local diagnostic check could not complete. Check that the app is running correctly and try again.");
     } finally {
       setDiagnosticsBusy(false);
+    }
+  }
+
+  async function exportDiagnosticsReport() {
+    if (!diagnosticsSnapshot || diagnosticsExportBusy) return;
+    setDiagnosticsExportBusy(true);
+    setDiagnosticsExportStatus("");
+    setDiagnosticsError("");
+    try {
+      const selected = await save({
+        title: "Save midSunday diagnostic report",
+        defaultPath: "midSunday-diagnostics.json",
+        filters: [{ name: "JSON diagnostic report", extensions: ["json"] }],
+      });
+      if (!selected) return;
+      await invoke<void>("export_diagnostics_report", { filePath: selected, snapshot: diagnosticsSnapshot });
+      setDiagnosticsExportStatus("Diagnostic report saved locally. Review it before sharing; it contains system and health-check details.");
+    } catch {
+      setDiagnosticsError("The diagnostic report could not be saved. Check the selected location and available disk space.");
+    } finally {
+      setDiagnosticsExportBusy(false);
     }
   }
 
@@ -2215,6 +2238,8 @@ export default function App() {
             <section className="settings-section diagnostics-section">
               <div className="settings-section-title"><div><h2>Diagnostics</h2><p>Run a read-only local health check. No conversations, memories, file paths, or private content are collected.</p></div><span className="settings-symbol">⌁</span></div>
               <div className="diagnostics-actions"><button className="secondary-action" type="button" onClick={() => void runDiagnostics()} disabled={diagnosticsBusy}>{diagnosticsBusy ? "Checking local files…" : "Run local health check"}</button><span className="settings-footnote">Checks app build information, SQLite integrity, model catalogue, configured server/model files, and local engine state.</span></div>
+              {diagnosticsSnapshot && <div className="diagnostics-actions"><button className="secondary-action" type="button" onClick={() => void exportDiagnosticsReport()} disabled={diagnosticsExportBusy}>{diagnosticsExportBusy ? "Saving report…" : "Export diagnostic report"}</button><span className="settings-footnote">Creates a JSON file only after you choose a save location. It includes the displayed health-check summary, not conversations, memories, file paths, or model contents.</span></div>}
+              {diagnosticsExportStatus && <p className="settings-footnote" role="status" aria-live="polite">{diagnosticsExportStatus}</p>}
               {diagnosticsError && <p className="hardware-error" role="alert">{diagnosticsError}</p>}
               {diagnosticsSnapshot && <div className="diagnostics-grid" aria-live="polite">
                 <div className="diagnostic-item"><span>Application</span><strong>midSunday {diagnosticsSnapshot.appVersion}</strong><small>{diagnosticsSnapshot.operatingSystem} · {diagnosticsSnapshot.architecture}</small></div>
@@ -2224,7 +2249,7 @@ export default function App() {
                 <div className="diagnostic-item"><span>Configured GGUF model</span><strong className={"diagnostic-status diagnostic-" + diagnosticsSnapshot.modelFile.status}>{diagnosticsSnapshot.modelFile.status.replace(/_/g, " ")}</strong><small>{diagnosticsSnapshot.modelFile.detail}</small></div>
                 <div className="diagnostic-item"><span>Local AI engine</span><strong>{diagnosticsSnapshot.runtimeStatus.replace(/([A-Z])/g, " $1").replace(/_/g, " ")}</strong><small>Reports the current managed runtime state only.</small></div>
               </div>}
-              <p className="settings-footnote">The server check verifies file type and platform execute permission without launching it. A configured registered model is checked against its saved size and SHA-256 fingerprint; an unregistered model receives only a GGUF header check. Large model fingerprint checks may take time. No model is launched, repaired, or changed. Nothing is uploaded or exported.</p>
+              <p className="settings-footnote">The server check verifies file type and platform execute permission without launching it. A configured registered model is checked against its saved size and SHA-256 fingerprint; an unregistered model receives only a GGUF header check. Large model fingerprint checks may take time. No model is launched, repaired, or changed. Reports are never uploaded automatically.</p>
             </section>
             <div className="settings-footnote">Local memory is stored separately from conversation history. Clearing chats does not delete memories; use the memory controls above to manage them.</div>
           </div>

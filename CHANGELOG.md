@@ -262,3 +262,8 @@ All notable project changes are recorded here. The project is in foundation/prot
 
 ## 2026-11-28 — Batch #241
 - Fixed the escaped-newline syntax error in the ModelCatalog declaration that caused #240 to fail on Windows, Linux, and macOS. Added a shared-clone regression test for the background model-verification handle.
+
+
+## 2026-11-28 — Batch #242
+- Added an explicit, user-initiated JSON export for the current sanitized Diagnostics health-check snapshot using the native save dialog. The report contains only displayed health-check fields and a timestamp; it excludes conversations, memories, local paths, model contents, and credentials. No automatic upload or sharing.
+- Added Rust regression tests for report contents and file-extension validation.
