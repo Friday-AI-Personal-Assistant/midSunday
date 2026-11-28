@@ -8,10 +8,11 @@ use std::{
 
 const MARKER_FILE: &str = "midsunday-database-recovery-required.json";
 const MARKER_VERSION: u32 = 1;
+const MAX_MARKER_BYTES: u64 = 256;
 const RECOVERY_REASON: &str = "restore_rollback_unverified";
 
 #[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct RecoveryMarker {
     format_version: u32,
     reason_code: String,
@@ -63,13 +64,26 @@ impl RecoveryState {
     }
 
     fn validate_existing_marker(&self) -> Result<(), String> {
-        let mut file = OpenOptions::new().read(true).open(&self.marker_path)
+        let metadata = fs::symlink_metadata(&self.marker_path)
+            .map_err(|_| "A database recovery marker exists but could not be inspected. Preserve the encrypted safety archive and do not continue using this database.".to_owned())?;
+        if !metadata.file_type().is_file() {
+            return Err("The database recovery marker is not a regular file. Preserve the encrypted safety archive; normal database startup is blocked.".to_owned());
+        }
+        if metadata.len() > MAX_MARKER_BYTES {
+            return Err("The database recovery marker exceeds the supported size. Preserve the encrypted safety archive; normal database startup is blocked.".to_owned());
+        }
+
+        let file = OpenOptions::new().read(true).open(&self.marker_path)
             .map_err(|_| "A database recovery marker exists but could not be read. Preserve the encrypted safety archive and do not continue using this database.".to_owned())?;
         let mut encoded = Vec::new();
-        file.read_to_end(&mut encoded)
+        file.take(MAX_MARKER_BYTES + 1).read_to_end(&mut encoded)
             .map_err(|_| "A database recovery marker exists but could not be read. Preserve the encrypted safety archive and do not continue using this database.".to_owned())?;
+        if encoded.len() as u64 > MAX_MARKER_BYTES {
+            return Err("The database recovery marker exceeds the supported size. Preserve the encrypted safety archive; normal database startup is blocked.".to_owned());
+        }
+
         let marker: RecoveryMarker = serde_json::from_slice(&encoded)
-            .map_err(|_| "A database recovery marker is damaged or incomplete. Preserve the encrypted safety archive; normal database startup is blocked.".to_owned())?;
+            .map_err(|_| "A database recovery marker is damaged, incomplete, or contains unsupported fields. Preserve the encrypted safety archive; normal database startup is blocked.".to_owned())?;
         if marker.format_version != MARKER_VERSION
             || marker.reason_code != RECOVERY_REASON
             || marker.created_at == 0
@@ -89,7 +103,7 @@ impl RecoveryState {
 /// malformed or partially written one, prevents normal database startup.
 pub(crate) fn ensure_database_not_blocked(data_dir: &Path) -> Result<(), String> {
     let state = RecoveryState::in_data_dir(data_dir);
-    match fs::metadata(&state.marker_path) {
+    match fs::symlink_metadata(&state.marker_path) {
         Ok(_) => state.ensure_required(),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
         Err(_) => Err("The database recovery state could not be inspected. Normal database startup is blocked to protect local data.".to_owned()),
@@ -251,6 +265,32 @@ mod tests {
         assert!(error.contains("injected marker persistence failure"));
         assert!(!app_data_dir.join(MARKER_FILE).exists());
         drop(guard);
+    }
+
+    #[test]
+    fn oversized_marker_fails_closed_before_unbounded_read() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join(MARKER_FILE);
+        fs::write(&path, vec![b'x'; MAX_MARKER_BYTES as usize + 1]).unwrap();
+        let error = ensure_database_not_blocked(directory.path()).unwrap_err();
+        assert!(error.contains("exceeds the supported size"));
+    }
+
+    #[test]
+    fn marker_with_unknown_fields_fails_closed() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join(MARKER_FILE);
+        fs::write(&path, br#"{"formatVersion":1,"reasonCode":"restore_rollback_unverified","createdAt":1,"unexpected":"value"}"#).unwrap();
+        let error = ensure_database_not_blocked(directory.path()).unwrap_err();
+        assert!(error.contains("unsupported fields"));
+    }
+
+    #[test]
+    fn non_regular_marker_path_fails_closed() {
+        let directory = tempfile::tempdir().unwrap();
+        fs::create_dir(directory.path().join(MARKER_FILE)).unwrap();
+        let error = ensure_database_not_blocked(directory.path()).unwrap_err();
+        assert!(error.contains("not a regular file"));
     }
 
     #[test]

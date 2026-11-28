@@ -2864,3 +2864,15 @@ This batch connects the recovery marker to the rollback failure branch and prove
 - [ ] Demonstrate process termination/restart at every restore transaction boundary and complete physical Windows/Linux/macOS validation before enabling restore.
 
 This is the persistent fail-closed marker foundation only. It is not yet connected to rollback failures, cannot be cleared by the app, and does not enable restore.
+
+
+### 2026-11-28 — Strict, bounded recovery-marker validation (Batch #308)
+
+- [x] Bound recovery-marker input to 256 bytes and reject oversized files before parsing; the read itself is also capped to remain safe if the file grows after metadata inspection.
+- [x] Require a regular marker file and fail closed for directories and other non-regular paths.
+- [x] Reject unknown JSON fields so future or tampered marker shapes cannot be silently interpreted as the supported v1 format.
+- [x] Add regression tests for oversized markers, unknown fields, and non-regular marker paths.
+- [ ] Add a deliberate recovery-only startup path and verified marker clearing; do not provide a normal-startup bypass.
+- [ ] Demonstrate process termination/restart at every restore transaction boundary and complete physical Windows/Linux/macOS validation before enabling restore.
+
+This batch hardens parsing of the persistent startup block only. It does not clear markers, open a blocked database, add a recovery UI, or enable restore.
