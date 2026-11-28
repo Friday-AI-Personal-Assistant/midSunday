@@ -302,39 +302,73 @@ mod tests {
         assert!(error.contains("unsupported or invalid format"));
     }
 
-    // Invoked by the parent test in a fresh test-runner process. Keeping this
-    // probe as a normal test also makes it harmless during the full test suite.
+    // Invoked by parent tests in a fresh test-runner process. Keeping this
+    // probe inert during the ordinary suite makes it safe to discover normally.
     #[test]
     fn recovery_marker_child_process_probe() {
-        let Ok(data_dir) = std::env::var("MIDSUNDAY_RECOVERY_MARKER_CHILD_DATA_DIR") else {
+        let (Ok(data_dir), Ok(expected)) = (
+            std::env::var("MIDSUNDAY_RECOVERY_MARKER_CHILD_DATA_DIR"),
+            std::env::var("MIDSUNDAY_RECOVERY_MARKER_CHILD_EXPECTED"),
+        ) else {
             return;
         };
-        let error = ensure_database_not_blocked(Path::new(&data_dir))
-            .expect_err("a persisted recovery marker must block a fresh process");
-        assert!(error.contains("recovery is required"), "unexpected startup guard result: {error}");
+        let result = ensure_database_not_blocked(Path::new(&data_dir));
+        if expected == "allow" {
+            assert!(result.is_ok(), "clean data directory was unexpectedly blocked: {result:?}");
+        } else {
+            let error = result.expect_err("a marked data directory must be blocked in a fresh process");
+            assert!(error.contains(&expected), "unexpected startup guard result: {error}");
+        }
     }
 
-    #[test]
-    fn persisted_marker_blocks_a_fresh_process() {
+    fn assert_fresh_process_result(data_dir: &Path, expected: &str) {
         use std::process::Command;
-
-        let directory = tempfile::tempdir().unwrap();
-        RecoveryState::in_data_dir(directory.path()).mark_required().unwrap();
 
         let output = Command::new(std::env::current_exe().unwrap())
             .arg("--exact")
             .arg("recovery_state::tests::recovery_marker_child_process_probe")
             .arg("--nocapture")
-            .env("MIDSUNDAY_RECOVERY_MARKER_CHILD_DATA_DIR", directory.path())
+            .env("MIDSUNDAY_RECOVERY_MARKER_CHILD_DATA_DIR", data_dir)
+            .env("MIDSUNDAY_RECOVERY_MARKER_CHILD_EXPECTED", expected)
             .output()
             .expect("the recovery-marker child test process should start");
 
         assert!(
             output.status.success(),
-            "fresh process did not enforce the persisted recovery block. stdout: {} stderr: {}",
+            "fresh process returned an unexpected recovery result. stdout: {} stderr: {}",
             String::from_utf8_lossy(&output.stdout),
             String::from_utf8_lossy(&output.stderr),
         );
+    }
+
+    #[test]
+    fn clean_data_directory_allows_a_fresh_process() {
+        let directory = tempfile::tempdir().unwrap();
+        assert_fresh_process_result(directory.path(), "allow");
+    }
+
+    #[test]
+    fn persisted_marker_blocks_a_fresh_process() {
+        let directory = tempfile::tempdir().unwrap();
+        RecoveryState::in_data_dir(directory.path()).mark_required().unwrap();
+        assert_fresh_process_result(directory.path(), "recovery is required");
+    }
+
+    #[test]
+    fn malformed_marker_blocks_a_fresh_process() {
+        let directory = tempfile::tempdir().unwrap();
+        fs::write(directory.path().join(MARKER_FILE), br#"{"formatVersion":1"#).unwrap();
+        assert_fresh_process_result(directory.path(), "damaged, incomplete, or contains unsupported fields");
+    }
+
+    #[test]
+    fn unsupported_marker_blocks_a_fresh_process() {
+        let directory = tempfile::tempdir().unwrap();
+        fs::write(
+            directory.path().join(MARKER_FILE),
+            br#"{"formatVersion":99,"reasonCode":"restore_rollback_unverified","createdAt":1}"#,
+        ).unwrap();
+        assert_fresh_process_result(directory.path(), "unsupported or invalid format");
     }
 
 }

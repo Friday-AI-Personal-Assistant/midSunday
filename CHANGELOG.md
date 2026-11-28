@@ -496,3 +496,10 @@ All notable project changes are recorded here. The project is in foundation/prot
 - Added a fresh-process regression test that writes a recovery marker, launches a separate test-runner process, and confirms the shared startup guard still blocks the marked data directory.
 - Kept the child-process probe inert during ordinary test execution unless its private test-only environment variable is supplied.
 - This verifies process-boundary persistence only; it does not claim power-loss durability, SQLite crash recovery, recovery UI, marker clearing, or restore availability.
+
+
+## 2026-11-28 — Batch #311
+- Expanded the fresh-process recovery guard test harness to check both clean startup and fail-closed outcomes.
+- Added subprocess regression cases proving valid, malformed/partial, and unsupported-version markers block normal startup in an independent process.
+- Kept the child probe inert during ordinary test execution unless its private test-only environment variables are supplied.
+- No recovery UI, marker-clearing operation, or restore capability was added.

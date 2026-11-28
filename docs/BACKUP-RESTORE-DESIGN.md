@@ -152,3 +152,10 @@ Recovery-marker parsing now accepts only a regular file no larger than 256 bytes
 ## 20. Recovery-marker process-restart verification (Batch #310)
 
 A regression test now writes the persistent recovery marker in the parent test process and launches the current Rust test binary as a separate child process. The child invokes the same startup guard used by application setup and must reject the marked data directory. The probe is inert during normal test-suite execution unless its test-only environment variable is present. This demonstrates persistence across a process restart, but it is not a power-loss durability test, does not simulate interruption inside a restore transaction, and does not prove SQLite journal recovery. Marker clearing, a recovery-only startup interface, and restore remain unavailable.
+
+
+## 20. Fresh-process recovery guard matrix (Batch #311)
+
+The child-process regression probe now accepts an explicit test-only expected outcome. The suite verifies that a clean application-data directory remains eligible for normal startup in a fresh process, while valid, malformed/partial, and unsupported-version recovery markers all fail closed in an independent process. The probe remains inert during ordinary test execution unless both private test-only environment variables are present.
+
+This is process-boundary validation of startup-marker interpretation only. It does not simulate power loss, validate SQLite journal recovery, clear a marker, expose a recovery UI, or enable restore. Those remain separate safety gates.

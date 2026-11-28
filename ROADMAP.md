@@ -2886,3 +2886,14 @@ This batch hardens parsing of the persistent startup block only. It does not cle
 - [ ] Exercise abrupt process termination at each future restore transaction boundary and complete physical Windows/Linux/macOS validation before enabling restore.
 
 This batch verifies that the on-disk recovery block survives a real process boundary and is enforced by a fresh process. It does not simulate power loss, validate SQLite crash recovery, clear markers, add recovery UI, or enable restore.
+
+
+### 2026-11-28 — Fresh-process recovery guard matrix (Batch #311)
+
+- [x] Generalise the isolated child-process probe so it can assert both permitted clean startup and expected fail-closed outcomes without affecting ordinary test discovery.
+- [x] Verify a clean data directory remains eligible for normal startup in a fresh process.
+- [x] Verify valid, malformed/partial, and unsupported-version recovery markers all block a fresh process.
+- [ ] Add a deliberate recovery-only startup path and verified marker clearing; never provide a normal-startup bypass.
+- [ ] Exercise abrupt process termination at each future restore transaction boundary and complete physical Windows/Linux/macOS validation before enabling restore.
+
+This batch expands process-boundary regression coverage. It does not clear markers, open a blocked database, simulate power loss, add recovery UI, or enable restore.
