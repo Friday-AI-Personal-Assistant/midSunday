@@ -558,6 +558,75 @@ fn create_encrypted_database_backup(
     }
 }
 
+fn create_encrypted_restore_safety_archive(
+    manager: &RuntimeManager,
+    store: &ConversationStore,
+    file_path: &str,
+    password: &str,
+) -> Result<(), String> {
+    use std::path::Path;
+    let destination = Path::new(file_path);
+    if !destination.extension().and_then(|value| value.to_str()).is_some_and(|value| value.eq_ignore_ascii_case("msbackup")) {
+        return Err("Choose a .msbackup file for the encrypted pre-restore safety archive.".to_owned());
+    }
+    let parent = destination.parent().filter(|path| !path.as_os_str().is_empty()).unwrap_or_else(|| Path::new("."));
+    let plaintext_dir = tempfile::Builder::new().prefix("midsunday-restore-safety-").tempdir()
+        .map_err(|_| "A private temporary workspace could not be created for the safety archive.".to_owned())?;
+    let output_dir = tempfile::Builder::new().prefix(".midsunday-restore-safety-output-").tempdir_in(parent)
+        .map_err(|_| "A temporary safety-archive workspace could not be created in the selected folder.".to_owned())?;
+    let plaintext = plaintext_dir.path().join("safety.sqlite3");
+    let encrypted = output_dir.path().join("safety.msbackup");
+    let verification_copy = plaintext_dir.path().join("verified.sqlite3");
+
+    let result = (|| -> Result<(), String> {
+        // Acquire in the documented order: runtime gate first, then the shared
+        // database mutex. Both remain held until the encrypted archive is verified
+        // and atomically published, so it represents one stable pre-restore state.
+        let _runtime_guard = manager.try_acquire_restore_gate()?;
+        let database_guard = store.try_acquire_restore_lock()?;
+        database_guard.backup_to(&plaintext)?;
+        backup_encryption::encrypt_file(&plaintext, &encrypted, password)?;
+        backup_encryption::decrypt_file(&encrypted, &verification_copy, password)?;
+        let verification = ConversationStore::verify_backup_file(&verification_copy)?;
+        if !verification.valid || verification.backup_format_version != Some(2) {
+            return Err("The encrypted safety archive did not pass full database and manifest verification.".to_owned());
+        }
+        std::fs::hard_link(&encrypted, destination).map_err(|error| {
+            if error.kind() == std::io::ErrorKind::AlreadyExists {
+                "A file already exists at that location. Choose a new filename; existing files are never overwritten.".to_owned()
+            } else {
+                "The verified encrypted safety archive could not be safely published. Check folder permissions and try again.".to_owned()
+            }
+        })?;
+        drop(database_guard);
+        Ok(())
+    })();
+
+    let output_cleanup = output_dir.close();
+    let plaintext_cleanup = plaintext_dir.close();
+    let cleanup_failed = output_cleanup.is_err() || plaintext_cleanup.is_err();
+    match (result, cleanup_failed) {
+        (Ok(()), false) => Ok(()),
+        (Err(error), false) => Err(error),
+        (Ok(()), true) => Err("The encrypted safety archive was saved and verified, but a temporary plaintext or working file could not be removed. Check the temporary folders and keep this device private.".to_owned()),
+        (Err(error), true) => Err(format!("{error} A temporary plaintext or working file could not be removed; check the temporary folders and keep this device private.")),
+    }
+}
+
+#[tauri::command]
+async fn create_encrypted_restore_safety_backup(
+    file_path: String,
+    password: String,
+    store: State<'_, ConversationStore>,
+    manager: State<'_, RuntimeManager>,
+) -> Result<(), String> {
+    let store = store.inner().clone();
+    let manager = manager.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        create_encrypted_restore_safety_archive(&manager, &store, &file_path, &password)
+    }).await.map_err(|_| "The encrypted restore-safety backup worker could not complete.".to_owned())?
+}
+
 fn verify_encrypted_database_backup(
     file_path: &str,
     password: &str,
@@ -853,6 +922,7 @@ pub fn run() {
             create_encrypted_local_database_backup,
             verify_encrypted_local_database_backup,
             preview_encrypted_database_restore,
+            create_encrypted_restore_safety_backup,
             get_hardware_snapshot,
             get_live_system_metrics,
             list_local_models,
@@ -1082,6 +1152,95 @@ mod diagnostics_export_tests {
         let path = directory.join("report.txt");
         assert!(write_diagnostics_report(path.to_str().unwrap(), sample_snapshot()).is_err());
         assert!(!path.exists());
+        let _ = fs::remove_dir_all(directory);
+    }
+}
+
+#[cfg(test)]
+mod restore_safety_archive_tests {
+    use super::*;
+    use std::{fs, path::PathBuf, sync::atomic::{AtomicUsize, Ordering}};
+    static NEXT: AtomicUsize = AtomicUsize::new(0);
+
+    fn temp_dir() -> PathBuf {
+        let path = std::env::temp_dir().join(format!(
+            "midsunday-restore-safety-test-{}-{}",
+            std::process::id(),
+            NEXT.fetch_add(1, Ordering::Relaxed)
+        ));
+        fs::create_dir_all(&path).unwrap();
+        path
+    }
+
+    #[test]
+    fn creates_a_verified_encrypted_safety_archive_while_holding_restore_gates() {
+        let directory = temp_dir();
+        let store = ConversationStore::open(&directory.join("live.sqlite3")).unwrap();
+        store.create("Safety archive test conversation").unwrap();
+        let manager = RuntimeManager::default();
+        let destination = directory.join("pre-restore.msbackup");
+
+        create_encrypted_restore_safety_archive(
+            &manager, &store, destination.to_str().unwrap(), "a-long-test-backup-password",
+        ).unwrap();
+
+        let verification = verify_encrypted_database_backup(
+            destination.to_str().unwrap(), "a-long-test-backup-password",
+        ).unwrap();
+        assert!(verification.valid);
+        assert_eq!(verification.backup_format_version, Some(2));
+        assert_eq!(verification.conversation_count, 1);
+        assert_eq!(store.content_inventory().unwrap().conversation_count, 1);
+        let _ = fs::remove_dir_all(directory);
+    }
+
+    #[test]
+    fn safety_archive_refuses_existing_destination_without_overwriting_it() {
+        let directory = temp_dir();
+        let store = ConversationStore::open(&directory.join("live.sqlite3")).unwrap();
+        let manager = RuntimeManager::default();
+        let destination = directory.join("existing.msbackup");
+        fs::write(&destination, b"preserve existing file").unwrap();
+
+        let error = create_encrypted_restore_safety_archive(
+            &manager, &store, destination.to_str().unwrap(), "a-long-test-backup-password",
+        ).unwrap_err();
+        assert!(error.contains("never overwritten"));
+        assert_eq!(fs::read(&destination).unwrap(), b"preserve existing file");
+        let _ = fs::remove_dir_all(directory);
+    }
+
+    #[test]
+    fn safety_archive_fails_fast_when_the_database_is_busy() {
+        let directory = temp_dir();
+        let store = ConversationStore::open(&directory.join("live.sqlite3")).unwrap();
+        let manager = RuntimeManager::default();
+        let destination = directory.join("busy.msbackup");
+        let database_guard = store.try_acquire_restore_lock().unwrap();
+
+        let error = create_encrypted_restore_safety_archive(
+            &manager, &store, destination.to_str().unwrap(), "a-long-test-backup-password",
+        ).unwrap_err();
+        assert!(error.contains("database is busy"));
+        assert!(!destination.exists());
+        drop(database_guard);
+        let _ = fs::remove_dir_all(directory);
+    }
+
+    #[test]
+    fn safety_archive_fails_fast_when_the_runtime_gate_is_busy() {
+        let directory = temp_dir();
+        let store = ConversationStore::open(&directory.join("live.sqlite3")).unwrap();
+        let manager = RuntimeManager::default();
+        let destination = directory.join("runtime-busy.msbackup");
+        let runtime_guard = manager.try_acquire_restore_gate().unwrap();
+
+        let error = create_encrypted_restore_safety_archive(
+            &manager, &store, destination.to_str().unwrap(), "a-long-test-backup-password",
+        ).unwrap_err();
+        assert!(error.contains("runtime is busy"));
+        assert!(!destination.exists());
+        drop(runtime_guard);
         let _ = fs::remove_dir_all(directory);
     }
 }

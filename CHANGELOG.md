@@ -1,3 +1,9 @@
+## 2026-11-28 — Batch #290
+- Added a separately callable encrypted pre-restore safety-archive operation. It acquires the runtime operation gate first and then the exact live SQLite connection lock used by normal database operations.
+- While both gates are held, it snapshots the current database through the restore guard, encrypts the snapshot with the existing Argon2id/XChaCha20-Poly1305 format, decrypts it into a private verification workspace, and checks SQLite integrity, foreign keys, schema, and the v2 manifest before publishing.
+- Publishes with an atomic no-overwrite hard link and reports temporary plaintext cleanup failures. Added tests for successful verification, destination preservation, and fail-fast runtime/database contention.
+- The operation is registered as a backend command but is not exposed in the UI or invoked by the restore preview. Actual restore, rollback, and crash recovery remain unavailable.
+
 ## 2026-11-28 — Batch #289
 - Fixed the cross-platform desktop packaging failure caused by npm resolving @tauri-apps/api 2.13.0 alongside the Rust Tauri crate 2.12.x.
 - Pinned the JavaScript Tauri API to 2.12.0 so its minor release line matches the Rust-side Tauri dependency. This prevents npm's broad ^2.0.0 range from silently advancing the API to an incompatible minor release during CI installs.

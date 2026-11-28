@@ -72,3 +72,9 @@ Until these tests pass, the UI must continue to label restore as unavailable. A 
 ## 7. Explicit exclusions
 
 This milestone does not restore model files, separate JSON settings, application binaries, or in-memory System Monitor history. It does not upload backups to Google Drive or any other cloud service. Cloud backup remains a separate future feature requiring least-privilege provider permissions and explicit consent.
+
+## 8. Encrypted safety-archive preparation milestone (Batch #290)
+
+The backend now has a separately callable operation that prepares the user-selected encrypted pre-restore safety archive without performing a restore. It acquires the shared runtime operation gate first, then the same database mutex used by all ConversationStore operations. While both guards are held, it creates the guarded SQLite snapshot, encrypts it using the existing authenticated .msbackup format, decrypts it into a private verification workspace, and requires full SQLite integrity, foreign-key, schema, and v2 manifest verification before publishing with an atomic no-overwrite hard link. Temporary plaintext cleanup failures are surfaced. Regression tests cover successful verification, existing-destination preservation, and fail-fast database/runtime contention.
+
+This is a backend preparation primitive only. It is not exposed in the UI, is not part of the restore preview, and does not modify the live database. The actual restore transaction, rollback, crash recovery, and physical-device validation remain incomplete; restore stays unavailable.

@@ -684,7 +684,7 @@ This repository is the durable source of truth. ChatGPT conversations are workin
 - [x] Initial complete roadmap drafted.
 
 **Next actions:**
-1. Implement encrypted database restore only against the safety requirements and test gates in [BACKUP-RESTORE-DESIGN.md](docs/BACKUP-RESTORE-DESIGN.md). Keep restore unavailable until transactional copy, safety archive, rollback, runtime coordination, and failure-injection tests are complete.
+1. Continue the encrypted database restore work against [BACKUP-RESTORE-DESIGN.md](docs/BACKUP-RESTORE-DESIGN.md): integrate the verified safety archive, then prove live-connection copy, rollback, and crash recovery before enabling restore.
 2. Validate local server startup, generation, cancellation, unexpected process-exit reporting, and clean shutdown on physical Windows, Linux, and macOS devices.
 3. Test model compatibility, memory pressure, long sessions, sleep/resume, and unexpected server termination; CI cannot replace hardware testing.
 4. Continue Phase 1 benchmarks for compact models, Pakistani Urdu/Roman Urdu speech, and realistic low-memory hardware profiles.
@@ -2748,6 +2748,6 @@ This batch is a design/safety gate only. It does not add a restore command, chan
 - [x] Reject restore-gate acquisition while the runtime is starting, ready, or generating; the engine must be stopped first.
 - [x] Reuse the same operation mutex as runtime start, generation, stop, and recovery so no new runtime operation can begin while a restore holds the guard.
 - [x] Add regression tests for allowed/blocked states, fail-fast busy behaviour, and exclusive guard lifetime.
-- [ ] Wire the gate into the future restore transaction together with the database lock, encrypted pre-restore archive, validation, and rollback. Restore remains unavailable.
+- [x] Add a separately callable encrypted pre-restore safety-archive operation that holds the runtime gate and live database lock, verifies the encrypted archive, and refuses destination overwrite.\n- [ ] Wire the safety archive into the future restore transaction together with source validation, live-connection copy, rollback, and crash recovery. Restore remains unavailable.
 
 This is a coordination primitive only. It does not modify the database or enable restore.
