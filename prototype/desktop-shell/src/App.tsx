@@ -67,7 +67,7 @@ type ModelVerification = { valid: boolean; status: string; detail: string };
 type SetupFileCheck = { status: string; detail: string };
 type LocalSetupReadiness = { executable: SetupFileCheck; model: SetupFileCheck };
 type DiskSpaceCheck = { status: string; totalBytes: number | null; availableBytes: number | null; detail: string };
-type DiagnosticsSnapshot = { appVersion: string; operatingSystem: string; architecture: string; database: { status: string; schemaVersion: number; detail: string }; modelCount: number | null; runtimeStatus: string; serverExecutable: SetupFileCheck; modelFile: ModelVerification; appDataVolume: DiskSpaceCheck; modelVolume: DiskSpaceCheck };
+type DiagnosticsSnapshot = { appVersion: string; operatingSystem: string; architecture: string; checkedAtUnixSeconds: number; database: { status: string; schemaVersion: number; detail: string }; modelCount: number | null; runtimeStatus: string; serverExecutable: SetupFileCheck; modelFile: ModelVerification; appDataVolume: DiskSpaceCheck; modelVolume: DiskSpaceCheck };
 type GgufMetadata = { formatVersion:number; fileSizeBytes:number; tensorCount:number; metadataEntryCount:number; architecture:string|null; modelName:string|null; fileTypeCode:number|null; fileTypeDescription:string|null; parameterCount:number|null; contextLength:number|null; blockCount:number|null; embeddingLength:number|null; attentionHeadCount:number|null; attentionKvHeadCount:number|null; attentionKeyLength:number|null; attentionValueLength:number|null; ropeDimensionCount:number|null; expertCount:number|null; expertUsedCount:number|null; quantizationVersion:number|null; alignment:number|null };
 type TensorStorageAnalysis = { status:string; tensorCount:number; analysedTensorCount:number; unknownSizeTensorCount:number; knownPayloadBytes:number; tensorElementCount:number; reportedParameterCount:number|null; parameterCountStatus:string; dataStartOffset:number; alignment:number; types:{ typeCode:number; typeName:string; tensorCount:number; knownPayloadBytes:number; unknownSizeTensorCount:number }[]; note:string };
 type KvCacheEstimate = { status:string; contextTokens:number; bytesPerElement:number; keyCacheBytes:number|null; valueCacheBytes:number|null; totalBytes:number|null; reportedContextLength:number|null; contextLimitStatus:string; contextLimitNote:string; assumptions:string };
@@ -1194,6 +1194,9 @@ export default function App() {
   async function runDiagnostics() {
     setDiagnosticsBusy(true);
     setDiagnosticsError("");
+    setDiagnosticsSnapshot(null);
+    setDiagnosticsExportReviewed(false);
+    setDiagnosticsExportStatus("");
     try {
       const snapshot = await invoke<DiagnosticsSnapshot>("get_diagnostics_snapshot");
       setDiagnosticsSnapshot(snapshot);
@@ -2256,13 +2259,14 @@ export default function App() {
                 <div className="diagnostic-item"><span>Included: engine state</span><strong>{diagnosticsSnapshot.runtimeStatus.replace(/([A-Z])/g, " $1").replace(/_/g, " ")}</strong></div>
                 <div className="diagnostic-item"><span>Included: app data storage</span><strong>{diagnosticsSnapshot.appDataVolume.status.replace(/_/g, " ")}</strong><small>{diagnosticsSnapshot.appDataVolume.availableBytes === null ? diagnosticsSnapshot.appDataVolume.detail : `${(diagnosticsSnapshot.appDataVolume.availableBytes / 1024 ** 3).toFixed(1)} GiB available of ${(diagnosticsSnapshot.appDataVolume.totalBytes! / 1024 ** 3).toFixed(1)} GiB`}</small></div>
                 <div className="diagnostic-item"><span>Included: model storage</span><strong>{diagnosticsSnapshot.modelVolume.status.replace(/_/g, " ")}</strong><small>{diagnosticsSnapshot.modelVolume.availableBytes === null ? diagnosticsSnapshot.modelVolume.detail : `${(diagnosticsSnapshot.modelVolume.availableBytes / 1024 ** 3).toFixed(1)} GiB available of ${(diagnosticsSnapshot.modelVolume.totalBytes! / 1024 ** 3).toFixed(1)} GiB`}</small></div>
+                <div className="diagnostic-item"><span>Included: health-check time</span><strong>{new Date(diagnosticsSnapshot.checkedAtUnixSeconds * 1000).toLocaleString()}</strong><small>When this local diagnostic snapshot was collected.</small></div>
                 <div className="diagnostic-item"><span>Added when saved</span><strong>Report timestamp</strong><small>Generated locally at export time.</small></div>
                 <div className="diagnostic-item"><span>Not included</span><strong>Private content and identifiers</strong><small>No conversations, memories, credentials, local paths, model contents, hardware identifiers, or process IDs.</small></div>
               </div>}
               {diagnosticsExportStatus && <p className="settings-footnote" role="status" aria-live="polite">{diagnosticsExportStatus}</p>}
               {diagnosticsError && <p className="hardware-error" role="alert">{diagnosticsError}</p>}
               {diagnosticsSnapshot && <div className="diagnostics-grid" aria-live="polite">
-                <div className="diagnostic-item"><span>Application</span><strong>midSunday {diagnosticsSnapshot.appVersion}</strong><small>{diagnosticsSnapshot.operatingSystem} · {diagnosticsSnapshot.architecture}</small></div>
+                <div className="diagnostic-item"><span>Application</span><strong>midSunday {diagnosticsSnapshot.appVersion}</strong><small>{diagnosticsSnapshot.operatingSystem} · {diagnosticsSnapshot.architecture}</small><small>Checked {new Date(diagnosticsSnapshot.checkedAtUnixSeconds * 1000).toLocaleString()}</small></div>
                 <div className="diagnostic-item"><span>Conversation database</span><strong className={"diagnostic-status diagnostic-" + diagnosticsSnapshot.database.status}>{diagnosticsSnapshot.database.status.replace(/_/g, " ")}</strong><small>Schema v{diagnosticsSnapshot.database.schemaVersion} · {diagnosticsSnapshot.database.detail}</small></div>
                 <div className="diagnostic-item"><span>Local model catalogue</span><strong>{diagnosticsSnapshot.modelCount === null ? "Unavailable" : diagnosticsSnapshot.modelCount + " registered"}</strong><small>Only catalogue metadata is counted here.</small></div>
                 <div className="diagnostic-item"><span>Server executable</span><strong className={"diagnostic-status diagnostic-" + diagnosticsSnapshot.serverExecutable.status}>{diagnosticsSnapshot.serverExecutable.status.replace(/_/g, " ")}</strong><small>{diagnosticsSnapshot.serverExecutable.detail}</small></div>

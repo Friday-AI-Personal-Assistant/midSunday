@@ -335,6 +335,7 @@ struct DiagnosticsSnapshot {
     app_version: String,
     operating_system: String,
     architecture: String,
+    checked_at_unix_seconds: u64,
     database: DatabaseHealth,
     model_count: Option<usize>,
     runtime_status: String,
@@ -455,6 +456,10 @@ async fn get_diagnostics_snapshot(
         app_version: env!("CARGO_PKG_VERSION").to_owned(),
         operating_system: std::env::consts::OS.to_owned(),
         architecture: std::env::consts::ARCH.to_owned(),
+        checked_at_unix_seconds: std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_err(|_| "The system clock is earlier than the Unix epoch.".to_owned())?
+            .as_secs(),
         database,
         model_count,
         runtime_status,
@@ -468,6 +473,7 @@ async fn get_diagnostics_snapshot(
 #[derive(Clone, Debug, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 struct DiagnosticsExport {
+    format_version: u32,
     generated_at_unix_seconds: u64,
     snapshot: DiagnosticsSnapshot,
 }
@@ -481,7 +487,7 @@ fn write_diagnostics_report(file_path: &str, snapshot: DiagnosticsSnapshot) -> R
         .duration_since(std::time::UNIX_EPOCH)
         .map_err(|_| "The system clock is earlier than the Unix epoch.".to_owned())?
         .as_secs();
-    let report = DiagnosticsExport { generated_at_unix_seconds, snapshot };
+    let report = DiagnosticsExport { format_version: 1, generated_at_unix_seconds, snapshot };
     let contents = serde_json::to_vec_pretty(&report)
         .map_err(|_| "The diagnostic report could not be encoded.".to_owned())?;
     std::fs::write(path, contents)
@@ -884,6 +890,7 @@ mod diagnostics_export_tests {
             app_version: "0.1.0".to_owned(),
             operating_system: "test-os".to_owned(),
             architecture: "test-arch".to_owned(),
+            checked_at_unix_seconds: 1_795_000_000,
             database: DatabaseHealth { status: "ok".to_owned(), schema_version: 1, detail: "Integrity check passed.".to_owned() },
             model_count: Some(2),
             runtime_status: "stopped".to_owned(),
@@ -901,6 +908,8 @@ mod diagnostics_export_tests {
         let value: serde_json::Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
         assert_eq!(value["snapshot"]["operatingSystem"], "test-os");
         assert_eq!(value["snapshot"]["modelCount"], 2);
+        assert_eq!(value["formatVersion"], 1);
+        assert_eq!(value["snapshot"]["checkedAtUnixSeconds"], 1_795_000_000);
         assert!(value.get("generatedAtUnixSeconds").is_some());
         assert!(value.get("conversations").is_none());
         assert!(value.get("memories").is_none());

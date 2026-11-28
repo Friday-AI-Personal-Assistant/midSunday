@@ -2568,3 +2568,15 @@ The boundary protects React rendering and lifecycle work only. It does not catch
 - [x] Mount the root-level React error boundary around the application at the actual ReactDOM root, inside StrictMode.
 - [x] Keep strict TypeScript unused-import checks enabled; the boundary is now actively used rather than suppressing the compiler warning.
 - [ ] Validate deliberate render-failure recovery and accessibility on physical Windows, Linux, and macOS devices.
+
+
+### 2026-11-28 — Diagnostic report freshness and format versioning (Batch #252)
+
+- [x] Record the local health-check collection time in each diagnostic snapshot and include it in the exported JSON report.
+- [x] Add an explicit diagnostic report format version so future readers can distinguish schema revisions.
+- [x] Show the check time in Settings and in the reviewed report preview, separately from the report-save timestamp.
+- [x] Clear an older snapshot, review approval, and export status as soon as a new health check starts, so a failed retry cannot leave an old report available as if it were current.
+- [x] Add regression assertions for the report format version and snapshot timestamp.
+- [ ] Validate local time display, retry/failure states, and exported report compatibility on physical Windows, Linux, and macOS devices.
+
+The check timestamp records when the snapshot was assembled; the report timestamp records when the JSON file was saved. Both are local system-clock values, not a trusted audit clock.
