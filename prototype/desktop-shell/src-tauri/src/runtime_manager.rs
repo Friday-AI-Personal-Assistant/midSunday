@@ -132,6 +132,32 @@ impl RuntimeManager {
         let mut snapshot = self.inner.status.lock()
             .map(|status| status.clone())
             .map_err(|_| "Runtime status is unavailable.".to_owned())?;
+
+        // Poll only the one child process owned by this runtime. A dead child
+        // is reported as a recoverable engine failure; no other processes are
+        // enumerated and no process identifier leaves this module.
+        let mut session_slot = self.inner.session.lock()
+            .map_err(|_| "Runtime session is unavailable.".to_owned())?;
+        let should_check = matches!(snapshot.status.as_str(), "ready" | "generating");
+        let child_exited = should_check && session_slot.as_mut()
+            .map(|session| session.process_memory_snapshot().status == "not_running")
+            .unwrap_or(false);
+
+        if child_exited {
+            if let Ok(mut details) = self.inner.session_details.lock() {
+                *details = None;
+            }
+            let mut current = self.inner.status.lock()
+                .map_err(|_| "Runtime status is unavailable.".to_owned())?;
+            if matches!(current.status.as_str(), "ready" | "generating") {
+                current.status = "failed".to_owned();
+                current.detail = Some("The local engine process exited unexpectedly. Check the configured server file and model, then start the engine again.".to_owned());
+            }
+            snapshot = current.clone();
+            snapshot.session = None;
+            return Ok(snapshot);
+        }
+
         let details = self.inner.session_details.lock()
             .map_err(|_| "Runtime session details are unavailable.".to_owned())?;
         snapshot.session = details.as_ref().map(|details| RuntimeSessionSnapshot {
@@ -498,6 +524,17 @@ mod tests {
         assert_eq!(session.cpu_threads, Some(6));
         assert!(session.uptime_seconds >= 12);
         // The snapshot intentionally contains no local path or process identifier.
+    }
+
+    #[test]
+    fn unexpected_process_exit_is_reported_as_recoverable_failure() {
+        let manager = RuntimeManager::default();
+        manager.set_status(RuntimeStatus::Ready, None).unwrap();
+        let mut snapshot = manager.snapshot().unwrap();
+        assert_eq!(snapshot.status, "ready");
+        // Without a managed session there is no child to inspect, so status is not
+        // incorrectly changed merely because process telemetry is unavailable.
+        assert_eq!(snapshot.detail, None);
     }
 
     #[test]

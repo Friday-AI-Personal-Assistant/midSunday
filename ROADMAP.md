@@ -431,7 +431,8 @@ Use semantic tokens (for example, primary, primary-strong, accent, surface, elev
 ### Diagnostics, health checks, and user-facing error reporting
 
 - [ ] Run a startup health check for required application files, runtime components, database/schema state, model registration and file integrity, permissions, and available disk space.
-- [ ] Monitor important runtime conditions and detect recoverable failures such as model-engine startup errors, missing/corrupt model files, database failures, microphone/speaker problems, and optional network-feature failures.
+- [x] Monitor the managed local engine process during status refresh and detect an unexpected child-process exit; show a recoverable, actionable status without enumerating unrelated processes.
+- [ ] Monitor other important runtime conditions and detect recoverable failures such as missing/corrupt model files, database failures, microphone/speaker problems, and optional network-feature failures.
 - [ ] Capture application crashes and Rust panics safely, and use frontend error boundaries so one broken screen does not silently break the whole interface.
 - [ ] Present clear native-style dialogs that explain what happened, its severity, what the user can do next, and whether retry or a safe repair is available.
 - [ ] Distinguish informational messages, warnings, and critical errors; never label a recoverable issue as a fatal app failure.
@@ -666,7 +667,7 @@ This repository is the durable source of truth. ChatGPT conversations are workin
 
 ## 11. Current status and immediate next actions
 
-**Current stage:** Phase 4 — Offline local chat engine integration. The repository now includes a managed llama.cpp server lifecycle, loopback-only streaming generation and cancellation, local SQLite conversations, model registration and integrity checks, GGUF metadata/tensor/KV-cache inspection, hardware-memory evidence, and a first-run local setup guide with user-triggered file checks. Batches #233–#236 extend onboarding, setup verification, and active-session visibility. Cross-platform CI validates compilation and tests; actual inference quality, offline behaviour, process recovery, and persistence still require physical-device testing.
+**Current stage:** Phase 4 — Offline local chat engine integration. The repository now includes a managed llama.cpp server lifecycle, loopback-only streaming generation and cancellation, local SQLite conversations, model registration and integrity checks, GGUF metadata/tensor/KV-cache inspection, hardware-memory evidence, a first-run setup guide, active-session visibility, and unexpected engine-exit detection. Batches #233–#237 extend onboarding, setup verification, session visibility, and runtime health reporting. Cross-platform CI validates compilation and tests; actual inference quality, offline behaviour, process recovery, and persistence still require physical-device testing.
 
 **Completed:**
 - [x] Product name selected: midSunday.
@@ -679,7 +680,7 @@ This repository is the durable source of truth. ChatGPT conversations are workin
 - [x] Initial complete roadmap drafted.
 
 **Next actions:**
-1. Validate local server startup, active-session status, generation, cancellation, and clean shutdown on physical Windows, Linux, and macOS devices.
+1. Validate local server startup, active-session status, unexpected process-exit reporting, generation, cancellation, and clean shutdown on physical Windows, Linux, and macOS devices.
 2. Test model compatibility, memory pressure, long sessions, sleep/resume, and unexpected server termination; CI cannot replace hardware testing.
 3. Continue Phase 1 benchmarks for compact models, Pakistani Urdu/Roman Urdu speech, and realistic low-memory hardware profiles.
 4. Complete the approved UX flows for model import/download only after source, licence, integrity, storage, and user-consent requirements are designed.
@@ -2425,3 +2426,15 @@ The readiness check confirms only file presence/type/permissions and the GGUF he
 - [ ] Validate session status updates, unexpected process exit, and stop/restart behaviour on physical Windows, Linux, and macOS devices.
 
 Model file size is a storage measurement, not a RAM/VRAM estimate. Session uptime begins when the managed local server reports ready. CI success does not establish physical-device inference compatibility.
+
+
+### 2026-11-28 — Unexpected local engine exit detection (Batch #237)
+
+- [x] Check the one managed llama-server child whenever the existing runtime status is refreshed.
+- [x] Convert an unexpected child exit during ready/generating state into a recoverable failed status with a plain-language next step.
+- [x] Clear stale active-session resource details after detecting the exit; retain the managed child handle so an explicit stop can reap it safely.
+- [x] Keep process IDs private and do not enumerate unrelated processes or add a new polling timer.
+- [x] Show the actionable health message in Local AI settings as an accessible alert.
+- [ ] Validate forced engine termination, recovery/restart, generation interruption, and clean reaping on physical Windows, Linux, and macOS devices.
+
+The check reuses the existing 1.5-second runtime status refresh. It reports only whether the app-managed child is still running; it does not diagnose why the process exited.

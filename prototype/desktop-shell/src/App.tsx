@@ -1829,6 +1829,7 @@ export default function App() {
             </section>
             <section className="settings-section runtime-settings"><div className="settings-section-title"><div><h2>Local AI engine</h2><p>Connect an existing llama.cpp server executable and a GGUF model stored on this device.</p></div><span className="settings-symbol">◈</span></div>
               <div className="runtime-status-line"><span className={runtimeStatus.status === "ready" || runtimeStatus.status === "generating" ? "core-dot good" : runtimeStatus.status === "failed" ? "core-dot bad" : "core-dot"} />Engine status: <strong>{runtimeStatus.status}</strong></div>
+              {runtimeStatus.status === "failed" && runtimeStatus.detail === "The local engine process exited unexpectedly. Check the configured server file and model, then start the engine again." && <p className="memory-notice" role="alert">{runtimeStatus.detail}</p>}
               {runtimeStatus.session && <div className="model-kv-estimate">
                 <strong>Active local session</strong>
                 <p className="settings-footnote">Details describe the model session currently managed by midSunday. The local executable path, model path, and process ID are not exposed here.</p>

@@ -1,4 +1,7 @@
 ## 2026-11-28
+- Added runtime health detection for unexpected termination of the single managed llama-server child. Existing status refresh now marks a ready/generating session as failed if its child has exited, clears stale active-session details, and presents a plain-language recovery hint. No unrelated processes are enumerated, no process ID is exposed, and no additional polling timer is introduced.
+
+## 2026-11-28
 - Added an active local runtime session summary with model file size, configured context length, CPU-thread setting, and monotonic uptime. Session details are cleared after a successful stop or failed startup, and the status response deliberately omits local file paths and process IDs. Model file size is explicitly described as storage size rather than a memory-fit estimate.
 
 ## 2026-11-28
