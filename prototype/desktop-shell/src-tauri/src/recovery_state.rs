@@ -138,7 +138,7 @@ mod tests {
         let path = directory.path().join(MARKER_FILE);
         fs::write(&path, br#"{"formatVersion":1"#).unwrap();
         let error = ensure_database_not_blocked(directory.path()).unwrap_err();
-        assert!(error.contains("damaged or incomplete"));
+        assert!(error.contains("damaged, incomplete, or contains unsupported fields"));
     }
 
     #[test]
