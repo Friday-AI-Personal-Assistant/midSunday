@@ -4,7 +4,7 @@ use std::net::{IpAddr, SocketAddr};
 use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
 use std::thread;
 use std::time::{Duration, Instant};
-use serde::{Deserialize, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use crate::llama_process::LlamaServerProcess;
 use crate::runtime::{GenerationRequest, RuntimeConfig};
 
@@ -59,8 +59,10 @@ impl LlamaHttpClient {
             Err(ureq::Error::StatusCode(code)) => return Err(LlamaClientError::HttpStatus(code)),
             Err(error) => return Err(LlamaClientError::Transport(error.to_string())),
         };
-        let health = response.body_mut().read_json::<HealthResponse>()
-            .map_err(|_| LlamaClientError::InvalidResponse)?;
+        let health = read_bounded_json::<HealthResponse>(
+            response.body_mut().as_reader(),
+            MAX_HEALTH_RESPONSE_BYTES,
+        )?;
         if health.status == "ok" { Ok(HealthStatus::Ready) } else { Ok(HealthStatus::Loading) }
     }
 
@@ -73,8 +75,10 @@ impl LlamaHttpClient {
         };
         let mut response = self.agent.post(format!("{}/v1/chat/completions", self.base_url))
             .send_json(&body).map_err(map_http_error)?;
-        let completion = response.body_mut().read_json::<ChatCompletionResponse>()
-            .map_err(|_| LlamaClientError::InvalidResponse)?;
+        let completion = read_bounded_json::<ChatCompletionResponse>(
+            response.body_mut().as_reader(),
+            MAX_GENERATION_RESPONSE_BYTES,
+        )?;
         completion.choices.into_iter().next()
             .and_then(|choice| choice.message.content)
             .filter(|content| !content.trim().is_empty())
@@ -173,6 +177,27 @@ impl LlamaHttpClient {
             Err(LlamaClientError::InvalidResponse)
         }
     }
+}
+
+const MAX_HEALTH_RESPONSE_BYTES: usize = 64 * 1024;
+const MAX_GENERATION_RESPONSE_BYTES: usize = 4 * 1024 * 1024;
+
+/// Read a complete JSON response without allowing the server to grow the body
+/// allocation without bound. One extra byte distinguishes an exact-limit body
+/// from a truncated oversized response.
+fn read_bounded_json<T: DeserializeOwned>(
+    reader: impl Read,
+    max_bytes: usize,
+) -> Result<T, LlamaClientError> {
+    let read_limit = u64::try_from(max_bytes).unwrap_or(u64::MAX).saturating_add(1);
+    let mut bytes = Vec::with_capacity(max_bytes.min(8 * 1024));
+    reader.take(read_limit)
+        .read_to_end(&mut bytes)
+        .map_err(|error| LlamaClientError::StreamRead(error.to_string()))?;
+    if bytes.len() > max_bytes {
+        return Err(LlamaClientError::InvalidResponse);
+    }
+    serde_json::from_slice(&bytes).map_err(|_| LlamaClientError::InvalidResponse)
 }
 
 #[derive(Deserialize)]
@@ -326,6 +351,24 @@ mod tests {
 
     fn config(port: u16) -> RuntimeConfig {
         RuntimeConfig { host: "127.0.0.1".to_owned(), port, ..RuntimeConfig::default() }
+    }
+
+    #[test]
+    fn bounded_json_reader_accepts_a_valid_response_within_the_limit() {
+        let health = read_bounded_json::<HealthResponse>(
+            br#"{"status":"ok"}"#.as_slice(),
+            MAX_HEALTH_RESPONSE_BYTES,
+        ).unwrap();
+        assert_eq!(health.status, "ok");
+    }
+
+    #[test]
+    fn bounded_json_reader_rejects_oversized_responses() {
+        let body = format!(r#"{{"status":"ok","padding":"{}"}}"#, "x".repeat(128));
+        assert!(matches!(
+            read_bounded_json::<HealthResponse>(body.as_bytes(), 64),
+            Err(LlamaClientError::InvalidResponse)
+        ));
     }
 
     #[test]

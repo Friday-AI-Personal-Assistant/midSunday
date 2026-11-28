@@ -1,3 +1,7 @@
+## 2026-11-28 — Batch #329
+- Bounded local llama.cpp JSON responses before deserialization: health responses are limited to 64 KiB and non-streaming generation responses to 4 MiB.
+- Oversized or malformed response bodies now fail as invalid responses instead of allowing unbounded JSON-body allocation. Added tests for valid and oversized bounded reads.
+
 ## 2026-11-28 — Batch #328
 - Enforced the existing application resource ceilings at the `RuntimeConfig` boundary as well, so direct backend callers cannot request more than 32,768 context tokens or 256 CPU threads.
 - Added exact-boundary and over-limit tests for both settings; loopback validation and existing defaults are unchanged.
