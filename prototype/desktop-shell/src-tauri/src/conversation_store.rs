@@ -262,10 +262,20 @@ impl ConversationStore {
         }
         let backup = Connection::open_with_flags(backup_path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
             .map_err(|_| "The selected file could not be opened as a read-only SQLite database.".to_owned())?;
-        let integrity: String = backup.query_row("PRAGMA quick_check(1)", [], |row| row.get(0))
-            .map_err(|_| "The selected database could not complete its integrity check.".to_owned())?;
+        let integrity: String = backup.query_row("PRAGMA integrity_check(1)", [], |row| row.get(0))
+            .map_err(|_| "The selected database could not complete its full integrity check.".to_owned())?;
         if integrity != "ok" {
             return Err("SQLite reported an integrity problem in this backup. Do not restore it.".to_owned());
+        }
+        let mut foreign_key_statement = backup.prepare("PRAGMA foreign_key_check")
+            .map_err(|_| "The backup's relationship integrity could not be checked.".to_owned())?;
+        let mut foreign_key_rows = foreign_key_statement.query([])
+            .map_err(|_| "The backup's relationship integrity could not be checked.".to_owned())?;
+        if foreign_key_rows.next()
+            .map_err(|_| "The backup's relationship integrity could not be checked.".to_owned())?
+            .is_some()
+        {
+            return Err("The backup contains broken record relationships. Do not restore this file.".to_owned());
         }
         let schema_version: i64 = backup.pragma_query_value(None, "user_version", |row| row.get(0))
             .map_err(|_| "The selected database schema version could not be read.".to_owned())?;
@@ -386,7 +396,7 @@ impl ConversationStore {
             backup_format_version,
             created_at,
             app_version,
-            detail: "SQLite integrity, required midSunday structures, and available backup metadata passed read-only verification.".to_owned(),
+            detail: "Full SQLite integrity, foreign-key relationships, required midSunday structures, and available backup metadata passed read-only verification.".to_owned(),
         })
     }
 
@@ -2178,6 +2188,43 @@ mod tests {
 
         let _ = std::fs::remove_file(incomplete_path);
         let _ = std::fs::remove_file(unsupported_path);
+    }
+
+    #[test]
+    fn rejects_backup_with_broken_foreign_key_relationships() {
+        let backup_path = backup_test_path("verify-foreign-key", "sqlite3");
+        let store = store();
+        let chat = store.create("Foreign key fixture").unwrap();
+        store.append(chat.id, "user", "Private fixture").unwrap();
+        store.backup_to(&backup_path).unwrap();
+
+        // Deliberately bypass SQLite's write-time FK enforcement to simulate a damaged archive.
+        let writer = Connection::open(&backup_path).unwrap();
+        writer.execute(
+            "UPDATE conversation_messages SET conversation_id = 9223372036854775807",
+            [],
+        ).unwrap();
+        drop(writer);
+
+        let error = ConversationStore::verify_backup_file(&backup_path).unwrap_err();
+        assert!(error.contains("broken record relationships"));
+        let _ = std::fs::remove_file(backup_path);
+    }
+
+    #[test]
+    fn accepts_backup_after_full_integrity_and_foreign_key_checks() {
+        let store = store();
+        let chat = store.create("Integrity fixture").unwrap();
+        store.append(chat.id, "user", "Private fixture").unwrap();
+        let backup_path = backup_test_path("verify-full-integrity", "sqlite3");
+        store.backup_to(&backup_path).unwrap();
+
+        let verification = ConversationStore::verify_backup_file(&backup_path).unwrap();
+        assert!(verification.valid);
+        assert!(verification.detail.contains("Full SQLite integrity"));
+        assert!(verification.detail.contains("foreign-key"));
+
+        let _ = std::fs::remove_file(backup_path);
     }
 
     #[test]
