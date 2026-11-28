@@ -121,6 +121,52 @@ mod tests {
     }
 
     #[test]
+    fn rollback_failure_persists_marker_before_critical_error() {
+        use crate::conversation_store::ConversationStore;
+        use std::cell::Cell;
+
+        let directory = tempfile::tempdir().unwrap();
+        let source_store = ConversationStore::open(&directory.path().join("source-live.sqlite3")).unwrap();
+        let source_conversation = source_store.create("Replacement source").unwrap();
+        source_store.append(source_conversation.id, "user", "Replacement content").unwrap();
+        let source_backup = directory.path().join("source.sqlite3");
+        source_store.backup_to(&source_backup).unwrap();
+        let source_candidate = ConversationStore::prepare_verified_restore_candidate(&source_backup).unwrap();
+
+        let target_store = ConversationStore::open(&directory.path().join("target-live.sqlite3")).unwrap();
+        let original_conversation = target_store.create("Original database").unwrap();
+        target_store.append(original_conversation.id, "user", "Original content").unwrap();
+        let rollback_backup = directory.path().join("rollback.sqlite3");
+        target_store.backup_to(&rollback_backup).unwrap();
+        let rollback_candidate = ConversationStore::prepare_verified_restore_candidate(&rollback_backup).unwrap();
+
+        let app_data_dir = directory.path().join("app-data");
+        let state = RecoveryState::in_data_dir(&app_data_dir);
+        let mut guard = target_store.try_acquire_restore_lock().unwrap();
+        let copy_calls = Cell::new(0usize);
+        let error = guard.copy_from_candidate_with_operations_and_recovery(
+            &source_candidate,
+            &rollback_candidate,
+            |current, candidate| {
+                let call = copy_calls.get();
+                copy_calls.set(call + 1);
+                if call == 1 {
+                    Err("injected rollback copy failure".to_owned())
+                } else {
+                    current.copy_from_candidate(candidate)
+                }
+            },
+            |_current, _expected| Err("injected requested-candidate verification failure".to_owned()),
+            || state.mark_required(),
+        ).unwrap_err();
+
+        assert!(error.contains("persistent recovery block was saved"));
+        assert!(ensure_database_not_blocked(&app_data_dir)
+            .unwrap_err().contains("recovery is required"));
+        drop(guard);
+    }
+
+    #[test]
     fn unsupported_marker_version_fails_closed() {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join(MARKER_FILE);

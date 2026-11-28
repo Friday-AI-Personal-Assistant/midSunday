@@ -1,4 +1,5 @@
 use rusqlite::{params, Connection, OptionalExtension};
+use crate::recovery_state::RecoveryState;
 use sha2::{Digest, Sha256};
 use serde::{Deserialize, Serialize};
 use std::{path::{Path, PathBuf}, sync::{Arc, Mutex}, time::{Duration, SystemTime, UNIX_EPOCH}};
@@ -371,11 +372,14 @@ impl RestoreDatabaseGuard<'_> {
         &mut self,
         candidate: &VerifiedRestoreCandidate,
         rollback_candidate: &VerifiedRestoreCandidate,
+        recovery_state: &RecoveryState,
     ) -> Result<(), String> {
-        self.copy_from_candidate_with_rollback_and_check(
+        self.copy_from_candidate_with_operations_and_recovery(
             candidate,
             rollback_candidate,
+            |guard, source| guard.copy_from_candidate(source),
             |guard, expected| guard.verify_current_matches(expected),
+            || recovery_state.mark_required(),
         )
     }
 
@@ -403,12 +407,36 @@ impl RestoreDatabaseGuard<'_> {
         &mut self,
         candidate: &VerifiedRestoreCandidate,
         rollback_candidate: &VerifiedRestoreCandidate,
-        mut copy: C,
-        mut verify: V,
+        copy: C,
+        verify: V,
     ) -> Result<(), String>
     where
         C: FnMut(&mut Self, &VerifiedRestoreCandidate) -> Result<(), String>,
         V: FnMut(&Self, &VerifiedRestoreCandidate) -> Result<(), String>,
+    {
+        self.copy_from_candidate_with_operations_and_recovery(
+            candidate,
+            rollback_candidate,
+            copy,
+            verify,
+            || Ok(()),
+        )
+    }
+
+    /// Persists the fail-closed recovery marker before returning a critical
+    /// rollback error. Production restore code must supply RecoveryState::mark_required.
+    pub(crate) fn copy_from_candidate_with_operations_and_recovery<C, V, R>(
+        &mut self,
+        candidate: &VerifiedRestoreCandidate,
+        rollback_candidate: &VerifiedRestoreCandidate,
+        mut copy: C,
+        mut verify: V,
+        mut mark_recovery_required: R,
+    ) -> Result<(), String>
+    where
+        C: FnMut(&mut Self, &VerifiedRestoreCandidate) -> Result<(), String>,
+        V: FnMut(&Self, &VerifiedRestoreCandidate) -> Result<(), String>,
+        R: FnMut() -> Result<(), String>,
     {
         let restore_result = copy(self, candidate)
             .and_then(|_| verify(self, candidate));
@@ -421,9 +449,17 @@ impl RestoreDatabaseGuard<'_> {
                     Ok(()) => Err(format!(
                         "The requested database candidate could not be applied and verified ({restore_error}); the pre-restore database candidate was successfully restored and verified."
                     )),
-                    Err(rollback_error) => Err(format!(
-                        "CRITICAL: the requested database candidate could not be applied and verified ({restore_error}), and automatic rollback could not be verified ({rollback_error}). Keep the encrypted pre-restore safety archive and do not continue using this database; recovery is required."
-                    )),
+                    Err(rollback_error) => {
+                        let marker_result = mark_recovery_required();
+                        match marker_result {
+                            Ok(()) => Err(format!(
+                                "CRITICAL: the requested database candidate could not be applied and verified ({restore_error}), and automatic rollback could not be verified ({rollback_error}). A persistent recovery block was saved before returning. Keep the encrypted pre-restore safety archive and do not continue using this database; recovery is required."
+                            )),
+                            Err(marker_error) => Err(format!(
+                                "CRITICAL: the requested database candidate could not be applied and verified ({restore_error}), automatic rollback could not be verified ({rollback_error}), and the persistent recovery block could not be saved ({marker_error}). Keep the encrypted pre-restore safety archive, stop using this database, and seek manual recovery immediately."
+                            )),
+                        }
+                    }
                 }
             }
         }

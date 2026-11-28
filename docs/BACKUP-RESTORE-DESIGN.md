@@ -125,6 +125,12 @@ The guarded rollback helper now routes both candidate copies and both verificati
 
 These tests exercise additional in-process failure boundaries only. They do not persist a recovery-blocked state, simulate abrupt process termination, prove journal recovery after a crash, or enable restore. Those requirements and physical Windows/Linux/macOS validation remain release gates.
 
+## 17. Rollback failure persists the recovery block (Batch #306)
+
+The guarded restore transaction now accepts a recovery-state writer and invokes it whenever rollback copying or rollback verification fails. The marker is written before the critical error is returned. If marker creation succeeds, the error explicitly reports that normal startup will be blocked; if marker creation fails, the error escalates to a manual-recovery warning while instructing the user to preserve the encrypted safety archive and stop using the database.
+
+A regression test injects an initial destination-verification failure followed by rollback-copy failure, then confirms that the marker exists and the normal-startup guard rejects the application data directory. The production transaction entry point supplies the persistent marker writer. This remains a private transaction primitive: no restore command or UI is enabled, and abrupt process termination/restart recovery and physical-device validation remain outstanding.
+
 ## 16. Persistent recovery marker and fail-closed startup (Batch #305)
 
 A small versioned recovery marker now lives in the application data directory, outside SQLite. It contains only a fixed reason code, format version, and timestamp; it never stores conversation content, database paths, backup paths, passwords, or arbitrary error strings. Marker creation uses exclusive create semantics and flushes the file. Existing markers are never overwritten. If a marker is present but malformed, incomplete, unreadable, or from an unsupported version, startup fails closed.

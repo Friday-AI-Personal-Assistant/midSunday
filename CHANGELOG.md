@@ -468,3 +468,11 @@ All notable project changes are recorded here. The project is in foundation/prot
 - Marker creation is exclusive and durable; existing markers are preserved, and malformed, partial, unreadable, or unsupported markers fail closed.
 - App startup checks the marker before opening SQLite and blocks normal database startup when recovery is required.
 - Added regression tests for clean startup, persistent blocking, marker preservation, malformed/partial markers, and unsupported versions. The marker is not yet wired into rollback failures and has no clearing/bypass command; restore remains unavailable.
+
+
+## 2026-11-28 — Batch #306
+
+- Connected rollback-copy or rollback-verification failure to the persistent recovery marker.
+- The marker is written before returning a critical rollback error; errors distinguish successful marker persistence from marker-write failure.
+- Added an integration regression test proving a rollback failure persists a marker that blocks normal startup.
+- Restore remains unavailable; crash/restart recovery and physical Windows/Linux/macOS validation are still required.
