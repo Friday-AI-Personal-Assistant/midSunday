@@ -274,6 +274,64 @@ impl RestoreDatabaseGuard<'_> {
     pub(crate) fn backup_to(&self, backup_path: &Path) -> Result<(), String> {
         ConversationStore::backup_connection_to(&self.connection, backup_path)
     }
+
+    /// Copies an already verified, isolated candidate into this existing live
+    /// SQLite connection. The caller must retain the runtime gate and this
+    /// database guard for the entire transaction and provide rollback protection.
+    pub(crate) fn copy_from_candidate(
+        &mut self,
+        candidate: &VerifiedRestoreCandidate,
+    ) -> Result<(), String> {
+        let source = Connection::open_with_flags(
+            candidate.path(),
+            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+        ).map_err(|_| "The verified restore candidate could not be reopened read-only.".to_owned())?;
+        let backup = rusqlite::backup::Backup::new(&source, &mut *self.connection)
+            .map_err(|_| "SQLite could not initialise the guarded live-database copy.".to_owned())?;
+        backup.run_to_completion(64, Duration::from_millis(20), None)
+            .map_err(|_| "SQLite could not complete the guarded live-database copy.".to_owned())?;
+        Ok(())
+    }
+
+    /// Creates a private, verified snapshot of the guarded live connection and
+    /// compares its schema and complete aggregate inventory with the candidate.
+    /// The snapshot contains no personal content in its returned result.
+    pub(crate) fn verify_current_matches(
+        &self,
+        expected: &DatabaseBackupVerification,
+    ) -> Result<(), String> {
+        let workspace = tempfile::Builder::new()
+            .prefix("midsunday-live-restore-check-")
+            .tempdir()
+            .map_err(|_| "A private workspace could not be created to verify the restored database.".to_owned())?;
+        let snapshot = workspace.path().join("live-check.sqlite3");
+        let result = (|| -> Result<(), String> {
+            ConversationStore::backup_connection_to(&self.connection, &snapshot)?;
+            let actual = ConversationStore::verify_backup_file(&snapshot)?;
+            let matches = actual.valid
+                && actual.schema_version == expected.schema_version
+                && actual.conversation_count == expected.conversation_count
+                && actual.message_count == expected.message_count
+                && actual.saved_memory_count == expected.saved_memory_count
+                && actual.awareness_item_count == expected.awareness_item_count
+                && actual.awareness_activity_count == expected.awareness_activity_count
+                && actual.awareness_history_count == expected.awareness_history_count
+                && actual.awareness_suppression_count == expected.awareness_suppression_count
+                && actual.awareness_suggestion_count == expected.awareness_suggestion_count
+                && actual.app_preference_count == expected.app_preference_count;
+            if !matches {
+                return Err("The live database did not match the verified restore candidate's schema and aggregate inventory.".to_owned());
+            }
+            Ok(())
+        })();
+        let cleanup = workspace.close();
+        match (result, cleanup) {
+            (Ok(()), Ok(())) => Ok(()),
+            (Err(error), Ok(())) => Err(error),
+            (Ok(()), Err(_)) => Err("The restored database passed verification, but its private verification workspace could not be removed.".to_owned()),
+            (Err(error), Err(_)) => Err(format!("{error} The private verification workspace could not be removed.")),
+        }
+    }
 }
 
 #[derive(Clone)]
