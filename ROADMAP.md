@@ -2531,3 +2531,15 @@ Storage values are a point-in-time read-only snapshot. The app does not reserve 
 - [ ] Validate drive roots, removable/network volumes, symlinks, and newly created app-data/model directories on physical Windows, Linux, and macOS devices.
 
 The nearest existing ancestor is used only to identify the containing volume. Reported free space is a current volume snapshot, not a reservation or guarantee.
+
+
+### 2026-11-28 — Diagnostics storage-state hardening (Batch #247)
+
+- [x] Treat a volume reporting zero total capacity as unavailable rather than incorrectly reporting critical free space.
+- [x] Centralize storage status calculation and clamp reported available capacity to the reported total.
+- [x] Add boundary tests for zero capacity, impossible available-capacity values, absolute free-space thresholds, and percentage thresholds.
+- [x] Correct Windows path test fixtures to use ordinary single-separator drive paths and verify drive-root handling.
+- [x] Clarify the missing nested-path test: resolution should find a real existing ancestor, not describe an intentionally missing descendant as wholly unresolved.
+- [ ] Validate unusual filesystem reports and removable/network volumes on physical Windows, Linux, and macOS devices.
+
+Storage status remains an advisory point-in-time classification; unavailable capacity is not represented as zero free space.

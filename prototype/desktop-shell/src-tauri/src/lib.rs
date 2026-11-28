@@ -364,6 +364,21 @@ fn resolve_existing_path_or_ancestor(path: &std::path::Path) -> Option<std::path
     path.ancestors().find_map(|candidate| std::fs::canonicalize(candidate).ok())
 }
 
+fn diagnostics_storage_status(total_bytes: u64, available_bytes: u64) -> Option<&'static str> {
+    if total_bytes == 0 {
+        return None;
+    }
+    let available = available_bytes.min(total_bytes);
+    let free_ratio = available as f64 / total_bytes as f64;
+    Some(if available < 2 * 1024 * 1024 * 1024 || free_ratio < 0.05 {
+        "critical"
+    } else if available < 10 * 1024 * 1024 * 1024 || free_ratio < 0.10 {
+        "low"
+    } else {
+        "healthy"
+    })
+}
+
 fn collect_diagnostics_disk_space(path: Option<&std::path::Path>, disks: &sysinfo::Disks) -> DiskSpaceCheck {
     let Some(path) = path else {
         return DiskSpaceCheck { status: "not_configured".to_owned(), total_bytes: None, available_bytes: None, detail: "No model location is configured.".to_owned() };
@@ -379,13 +394,8 @@ fn collect_diagnostics_disk_space(path: Option<&std::path::Path>, disks: &sysinf
     };
     let total = disk.total_space();
     let available = disk.available_space().min(total);
-    let free_ratio = if total == 0 { 0.0 } else { available as f64 / total as f64 };
-    let status = if available < 2 * 1024 * 1024 * 1024 || free_ratio < 0.05 {
-        "critical"
-    } else if available < 10 * 1024 * 1024 * 1024 || free_ratio < 0.10 {
-        "low"
-    } else {
-        "healthy"
+    let Some(status) = diagnostics_storage_status(total, available) else {
+        return DiskSpaceCheck { status: "unavailable".to_owned(), total_bytes: None, available_bytes: None, detail: "The storage volume did not report a usable capacity.".to_owned() };
     };
     let detail = match status {
         "critical" => "Very little free space remains on this volume.".to_owned(),
@@ -813,9 +823,27 @@ mod diagnostics_disk_space_tests {
     #[cfg(windows)]
     #[test]
     fn windows_mount_matching_normalizes_separators_and_case() {
-        assert!(path_is_within_mount(std::path::Path::new(r"c:/Users/Test/AppData"), std::path::Path::new(r"C:\\")));
-        assert!(path_is_within_mount(std::path::Path::new(r"C:\\Users\\Test"), std::path::Path::new(r"c:/")));
-        assert!(!path_is_within_mount(std::path::Path::new(r"C:\\Users2\\Test"), std::path::Path::new(r"C:\\Users")));
+        assert!(path_is_within_mount(std::path::Path::new(r"c:/Users/Test/AppData"), std::path::Path::new("C:\\")));
+        assert!(path_is_within_mount(std::path::Path::new(r"C:\Users\Test"), std::path::Path::new("c:/")));
+        assert!(!path_is_within_mount(std::path::Path::new(r"C:\Users2\Test"), std::path::Path::new(r"C:\Users")));
+    }
+
+    #[test]
+    fn storage_status_handles_zero_capacity_and_clamps_available_bytes() {
+        assert_eq!(diagnostics_storage_status(0, 0), None);
+        assert_eq!(diagnostics_storage_status(100, 150), Some("healthy"));
+        assert_eq!(diagnostics_storage_status(100, 4), Some("critical"));
+        assert_eq!(diagnostics_storage_status(100, 9), Some("low"));
+    }
+
+    #[test]
+    fn storage_status_applies_absolute_and_percentage_thresholds() {
+        const GIB: u64 = 1024 * 1024 * 1024;
+        assert_eq!(diagnostics_storage_status(100 * GIB, 2 * GIB - 1), Some("critical"));
+        assert_eq!(diagnostics_storage_status(100 * GIB, 10 * GIB - 1), Some("low"));
+        assert_eq!(diagnostics_storage_status(100 * GIB, 10 * GIB), Some("healthy"));
+        assert_eq!(diagnostics_storage_status(100 * GIB, 5 * GIB - 1), Some("critical"));
+        assert_eq!(diagnostics_storage_status(100 * GIB, 5 * GIB), Some("low"));
     }
 
     #[test]
@@ -829,9 +857,11 @@ mod diagnostics_disk_space_tests {
     }
 
     #[test]
-    fn unresolved_path_has_no_existing_ancestor() {
-        let path = std::path::Path::new("/").join(format!("midsunday-missing-root-{}", std::process::id())).join("nested");
-        assert_eq!(resolve_existing_path_or_ancestor(&path), fs::canonicalize("/").ok());
+    fn missing_nested_path_resolves_to_an_existing_filesystem_ancestor() {
+        let path = std::env::temp_dir().join(format!("midsunday-missing-root-{}", std::process::id())).join("nested");
+        let resolved = resolve_existing_path_or_ancestor(&path);
+        assert!(resolved.is_some());
+        assert!(resolved.unwrap().is_dir());
     }
 }
 

@@ -1,3 +1,6 @@
+## 2026-11-28 — Batch #247
+- Hardened diagnostic storage classification: zero-capacity volumes now report unavailable instead of a false critical warning, and inconsistent available-space values are safely clamped. Added threshold and Windows drive-path regression coverage.
+
 ## 2026-11-28
 - Fixed Windows diagnostic volume matching so drive roots and nested paths use normalized separators and case-insensitive component boundaries. Also resolve the nearest existing ancestor for nested app-data/model locations that have not been created yet. Added regression tests; no paths or drive identifiers are exposed.
 
