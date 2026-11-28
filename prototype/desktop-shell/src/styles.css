@@ -802,5 +802,7 @@ body { color:var(--text-main); background:var(--app-bg); }
 .database-backup-card strong { color: var(--text-strong); font-size: 12px; }
 .database-backup-card p { margin: 5px 0 0; color: var(--soft); font-size: 10px; line-height: 1.55; }
 .database-backup-card .secondary-action { flex: 0 0 auto; }
+.database-backup-card { flex-wrap: wrap; }
+.database-backup-card .secondary-action { min-width: 150px; }
 .database-backup-status { margin: 10px 0 0; color: var(--green); font-size: 11px; line-height: 1.5; }
 @media (max-width: 560px) { .database-backup-card { align-items: stretch; flex-direction: column; } .database-backup-card .secondary-action { width: 100%; } }

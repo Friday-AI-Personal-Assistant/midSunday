@@ -500,6 +500,11 @@ fn export_diagnostics_report(file_path: String, snapshot: DiagnosticsSnapshot) -
 }
 
 #[tauri::command]
+fn verify_local_database_backup(file_path: String) -> Result<conversation_store::DatabaseBackupVerification, String> {
+    ConversationStore::verify_backup_file(std::path::Path::new(&file_path))
+}
+
+#[tauri::command]
 fn backup_local_database(file_path: String, store: State<'_, ConversationStore>) -> Result<(), String> {
     store.backup_to(std::path::Path::new(&file_path))
 }
@@ -733,6 +738,7 @@ pub fn run() {
             get_diagnostics_snapshot,
             export_diagnostics_report,
             backup_local_database,
+            verify_local_database_backup,
             get_hardware_snapshot,
             get_live_system_metrics,
             list_local_models,

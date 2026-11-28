@@ -333,3 +333,9 @@ All notable project changes are recorded here. The project is in foundation/prot
 - Added an explicit local SQLite database backup. SQLite creates a consistent snapshot while database access is serialized, then the app opens the result read-only and verifies integrity plus schema version before reporting success.
 - The backup includes conversations, saved memories, and Awareness data stored in SQLite. It stays on the device, refuses to overwrite an existing file, and uses a dedicated .sqlite3 destination.
 - Clearly disclosed that this initial database-only backup is unencrypted and does not include model files or separate application settings. Restore, encryption, and cloud backup remain future work.
+
+
+## 2026-11-28 — Batch #258
+- Added a Settings action to verify an existing local SQLite backup. The selected file is opened read-only, checked with SQLite quick_check, checked against the current schema version, and checked for required midSunday database structures.
+- Verification reports only integrity status, schema version, and file size. It does not read out personal content, modify the selected file, or restore data.
+- Added clear rejection for empty, invalid, incomplete, or unsupported-schema files. Successful verification is not a substitute for end-to-end restore testing.

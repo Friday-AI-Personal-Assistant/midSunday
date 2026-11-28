@@ -202,11 +202,67 @@ pub struct DatabaseHealth {
     pub detail: String,
 }
 
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct DatabaseBackupVerification {
+    pub valid: bool,
+    pub schema_version: i64,
+    pub file_size_bytes: u64,
+    pub detail: String,
+}
+
 pub struct ConversationStore {
     connection: Mutex<Connection>,
 }
 
 impl ConversationStore {
+    /// Validates a previously created local database backup without modifying it.
+    pub fn verify_backup_file(backup_path: &Path) -> Result<DatabaseBackupVerification, String> {
+        if !backup_path.extension().and_then(|value| value.to_str()).is_some_and(|value| value.eq_ignore_ascii_case("sqlite3")) {
+            return Err("Choose a .sqlite3 database backup file.".to_owned());
+        }
+        let metadata = std::fs::metadata(backup_path)
+            .map_err(|_| "The selected backup file could not be found or accessed.".to_owned())?;
+        if !metadata.is_file() || metadata.len() == 0 {
+            return Err("The selected backup is not a non-empty regular file.".to_owned());
+        }
+        let backup = Connection::open_with_flags(backup_path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
+            .map_err(|_| "The selected file could not be opened as a read-only SQLite database.".to_owned())?;
+        let integrity: String = backup.query_row("PRAGMA quick_check(1)", [], |row| row.get(0))
+            .map_err(|_| "The selected database could not complete its integrity check.".to_owned())?;
+        if integrity != "ok" {
+            return Err("SQLite reported an integrity problem in this backup. Do not restore it.".to_owned());
+        }
+        let schema_version: i64 = backup.pragma_query_value(None, "user_version", |row| row.get(0))
+            .map_err(|_| "The selected database schema version could not be read.".to_owned())?;
+        if schema_version != 8 {
+            return Err(format!("This backup uses database schema version {schema_version}; this app currently expects version 8."));
+        }
+        const REQUIRED_TABLES: &[&str] = &[
+            "conversations", "conversation_messages", "saved_memories", "app_preferences",
+            "awareness_items", "awareness_activity", "awareness_history",
+            "awareness_suppressions", "awareness_suggestions", "saved_memories_fts",
+        ];
+        for table in REQUIRED_TABLES {
+            let present: i64 = backup.query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type IN ('table', 'view') AND name = ?1",
+                [table],
+                |row| row.get(0),
+            ).map_err(|_| "The selected backup's database structure could not be inspected.".to_owned())?;
+            if present != 1 {
+                return Err("The selected file is missing required midSunday database structures. It is not a supported backup.".to_owned());
+            }
+        }
+        Ok(DatabaseBackupVerification {
+            valid: true,
+            schema_version,
+            file_size_bytes: metadata.len(),
+            detail: "SQLite integrity and required midSunday database structures passed read-only verification.".to_owned(),
+        })
+    }
+}
+
+
     pub fn open(path: &Path) -> Result<Self, String> {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent).map_err(|error| format!("Could not create local data directory: {error}"))?;

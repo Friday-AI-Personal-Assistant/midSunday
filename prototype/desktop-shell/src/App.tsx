@@ -307,6 +307,9 @@ export default function App() {
   const [databaseBackupBusy, setDatabaseBackupBusy] = useState(false);
   const [databaseBackupStatus, setDatabaseBackupStatus] = useState("");
   const [databaseBackupError, setDatabaseBackupError] = useState("");
+  const [databaseVerifyBusy, setDatabaseVerifyBusy] = useState(false);
+  const [databaseVerifyStatus, setDatabaseVerifyStatus] = useState("");
+  const [databaseVerifyError, setDatabaseVerifyError] = useState("");
   const [localSetupReadiness, setLocalSetupReadiness] = useState<LocalSetupReadiness | null>(null);
   const [localSetupBusy, setLocalSetupBusy] = useState(false);
   const localSetupCheckSequence = useRef(0);
@@ -1257,6 +1260,28 @@ export default function App() {
       setDiagnosticsError("The local diagnostic check could not complete. Check that the app is running correctly and try again.");
     } finally {
       setDiagnosticsBusy(false);
+    }
+  }
+
+  async function verifyLocalDatabaseBackup() {
+    if (databaseVerifyBusy) return;
+    setDatabaseVerifyBusy(true);
+    setDatabaseVerifyStatus("");
+    setDatabaseVerifyError("");
+    try {
+      const selected = await open({
+        title: "Verify a midSunday SQLite database backup",
+        multiple: false,
+        directory: false,
+        filters: [{ name: "SQLite database backup", extensions: ["sqlite3"] }],
+      });
+      if (!selected || Array.isArray(selected)) return;
+      const result = await invoke<{ valid: boolean; schemaVersion: number; fileSizeBytes: number; detail: string }>("verify_local_database_backup", { filePath: selected });
+      setDatabaseVerifyStatus(result.detail + " Schema v" + result.schemaVersion + " · " + formatModelSize(result.fileSizeBytes) + ". The selected file was not changed.");
+    } catch (error) {
+      setDatabaseVerifyError(typeof error === "string" ? error : "The selected file could not be verified. It was not changed.");
+    } finally {
+      setDatabaseVerifyBusy(false);
     }
   }
 
@@ -2319,10 +2344,13 @@ export default function App() {
               <div className="database-backup-card">
                 <div><strong>Keep a copy of your personal data</strong><p>The backup is created on this device only and verified before the app reports success. It does not include model files or separate application settings, and restore is not available yet.</p></div>
                 <button className="secondary-action" type="button" onClick={() => void createLocalDatabaseBackup()} disabled={databaseBackupBusy}>{databaseBackupBusy ? "Creating and verifying…" : "Create local database backup"}</button>
+                <button className="secondary-action" type="button" onClick={() => void verifyLocalDatabaseBackup()} disabled={databaseVerifyBusy}>{databaseVerifyBusy ? "Checking backup…" : "Verify existing backup"}</button>
               </div>
               <p className="settings-footnote">Important: this first local backup format is an unencrypted SQLite file. Choose a private location, protect the file yourself, and do not share or upload it. Existing files are never overwritten. No cloud transfer occurs.</p>
               {databaseBackupStatus && <p className="database-backup-status" role="status" aria-live="polite">{databaseBackupStatus}</p>}
               {databaseBackupError && <p className="hardware-error" role="alert">{databaseBackupError}</p>}
+              {databaseVerifyStatus && <p className="database-backup-status" role="status" aria-live="polite">{databaseVerifyStatus}</p>}
+              {databaseVerifyError && <p className="hardware-error" role="alert">{databaseVerifyError}</p>}
             </section>
             <section className="settings-section diagnostics-section">
               <div className="settings-section-title"><div><h2>Diagnostics</h2><p>Run a read-only local health check. No conversations, memories, file paths, or private content are collected.</p></div><span className="settings-symbol">⌁</span></div>

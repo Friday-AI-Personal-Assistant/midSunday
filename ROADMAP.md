@@ -2633,3 +2633,15 @@ The overview is derived entirely from the existing diagnostic snapshot. It does 
 - [ ] Validate backup creation, low-space failure, interruption, and data recovery on physical Windows, Linux, and macOS devices.
 
 This first backup covers the SQLite database only. Model files and separate JSON settings are not included, and restore/cloud backup are not implemented by this batch.
+
+
+### 2026-11-28 — Read-only database backup verification (Batch #258)
+
+- [x] Add an explicit file-picker action to verify an existing .sqlite3 backup without changing it.
+- [x] Open the selected file in SQLite read-only mode and reject missing, empty, non-database, and unsupported-extension files.
+- [x] Run SQLite quick_check(1), require the current schema version, and check all required midSunday database tables/index structures before declaring the backup valid.
+- [x] Keep file contents, conversations, memories, paths, and identifiers out of verification results; display only integrity outcome, schema version, and file size.
+- [x] Add regression coverage for valid backups, corrupted or incomplete files, unsupported schema versions, and non-mutating verification.
+- [ ] Validate read-only verification and malformed-file handling on physical Windows, Linux, and macOS devices.
+
+Verification does not restore, repair, or modify the selected file. It only checks backups created for the current database schema; it does not establish that the backup can be restored successfully.
