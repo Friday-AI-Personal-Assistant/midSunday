@@ -542,3 +542,9 @@ All notable project changes are recorded here. The project is in foundation/prot
 - Added a shared opened-handle validation step to both GGUF metadata inspection and tensor-storage analysis.
 - The parsers now require the actual opened handle to identify a regular file before trusting its length, preserving the same-handle size check used for bounded parsing.
 - Added regular-file coverage and a Unix directory-handle regression test; path-level extension and existence checks remain in place.
+
+
+## 2026-11-28 — Batch #334
+- Updated the local llama-server supervisor to clear its child-process handle after `try_wait` observes and reaps an exited process.
+- Prevents the supervisor from continuing to expose a stale process ID after an unexpected server exit; repeated stop calls remain safe.
+- Expanded the child-process lifecycle regression test to assert that the PID is cleared after exit detection.

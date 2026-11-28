@@ -62,11 +62,19 @@ impl LlamaServerProcess {
         self.child.as_ref().map(|child| child.id())
     }
 
-    /// Returns false when the child has already exited.
+    /// Returns false when the child has exited, clearing the reaped handle.
     pub fn is_running(&mut self) -> Result<bool, std::io::Error> {
-        match self.child.as_mut() {
-            Some(child) => Ok(child.try_wait()?.is_none()),
-            None => Ok(false),
+        let status = match self.child.as_mut() {
+            Some(child) => child.try_wait()?,
+            None => return Ok(false),
+        };
+        if status.is_some() {
+            // try_wait has collected the exit status. Drop the now-reaped
+            // handle so callers cannot mistake its stale PID for a live server.
+            self.child = None;
+            Ok(false)
+        } else {
+            Ok(true)
         }
     }
 
@@ -184,7 +192,8 @@ mod tests {
             thread::sleep(Duration::from_millis(10));
         }
         assert!(!process.is_running().expect("inspect exited child again"));
-        process.stop().expect("reap already-exited child");
+        assert_eq!(process.process_id(), None, "an exited and reaped child must not retain a stale PID");
+        process.stop().expect("stop after child was already reaped");
     }
 
     #[test]
