@@ -476,3 +476,11 @@ All notable project changes are recorded here. The project is in foundation/prot
 - The marker is written before returning a critical rollback error; errors distinguish successful marker persistence from marker-write failure.
 - Added an integration regression test proving a rollback failure persists a marker that blocks normal startup.
 - Restore remains unavailable; crash/restart recovery and physical Windows/Linux/macOS validation are still required.
+
+
+## 2026-11-28 — Batch #307
+
+- Made recovery-marker writes idempotent when a valid marker already exists, preserving its original contents.
+- Added regression coverage for rollback-verification failure and confirmed that the persisted marker blocks normal startup.
+- Added regression coverage for marker-write failure and the distinct manual-recovery error path.
+- Restore remains unavailable pending recovery-only startup, crash/restart testing, and physical platform validation.

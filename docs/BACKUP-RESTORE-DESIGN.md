@@ -125,6 +125,12 @@ The guarded rollback helper now routes both candidate copies and both verificati
 
 These tests exercise additional in-process failure boundaries only. They do not persist a recovery-blocked state, simulate abrupt process termination, prove journal recovery after a crash, or enable restore. Those requirements and physical Windows/Linux/macOS validation remain release gates.
 
+## 18. Recovery marker idempotence and failure coverage (Batch #307)
+
+Writing a marker is now idempotent when a valid marker already exists: the writer validates it and reports success without overwriting the original record. This does not weaken startup protection; normal startup still rejects any valid, malformed, or unsupported marker.
+
+Regression tests now cover rollback-verification failure persisting a marker and blocking startup, plus marker-write failure returning a distinct critical manual-recovery warning without falsely claiming that a marker exists. Restore remains private and unavailable; recovery-only startup, crash/restart testing, and physical platform validation are still outstanding.
+
 ## 17. Rollback failure persists the recovery block (Batch #306)
 
 The guarded restore transaction now accepts a recovery-state writer and invokes it whenever rollback copying or rollback verification fails. The marker is written before the critical error is returned. If marker creation succeeds, the error explicitly reports that normal startup will be blocked; if marker creation fails, the error escalates to a manual-recovery warning while instructing the user to preserve the encrypted safety archive and stop using the database.

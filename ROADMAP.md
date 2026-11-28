@@ -2833,6 +2833,15 @@ This batch adds a private rollback building block only. It does not register a r
 
 This batch expands in-process failure-injection coverage only. It does not enable a restore command or UI and does not claim crash-safe recovery.
 
+### 2026-11-28 — Recovery marker idempotence and failure coverage (Batch #307)
+
+- [x] Make writing an already-valid recovery marker an idempotent success without overwriting its original contents.
+- [x] Keep startup behavior fail-closed: a valid existing marker still prevents normal database startup.
+- [x] Add failure-injection coverage for rollback-verification failure and verify the marker blocks startup.
+- [x] Add failure-injection coverage for marker-write failure and ensure the returned error explicitly requires manual recovery rather than claiming a block was saved.
+- [ ] Add a deliberate recovery-only startup path and verified marker clearing; do not provide a normal-startup bypass.
+- [ ] Demonstrate process termination/restart at every restore transaction boundary and complete physical Windows/Linux/macOS validation before enabling restore.
+
 ### 2026-11-28 — Rollback failure persists recovery block (Batch #306)
 
 - [x] Connect the guarded restore transaction's rollback-failure branch to a persistent recovery-marker callback.

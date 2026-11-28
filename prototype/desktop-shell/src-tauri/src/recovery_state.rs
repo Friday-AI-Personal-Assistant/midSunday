@@ -51,7 +51,9 @@ impl RecoveryState {
         let mut file = match OpenOptions::new().write(true).create_new(true).open(&self.marker_path) {
             Ok(file) => file,
             Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
-                return self.ensure_required();
+                // An already-valid marker is an idempotent success for the
+                // writer, even though it continues to block normal startup.
+                return self.validate_existing_marker();
             }
             Err(_) => return Err("The database recovery marker could not be created. Preserve the encrypted safety archive and do not continue using this database.".to_owned()),
         };
@@ -60,7 +62,7 @@ impl RecoveryState {
             .map_err(|_| "The database recovery marker could not be durably written. Preserve the encrypted safety archive and do not continue using this database.".to_owned())
     }
 
-    fn ensure_required(&self) -> Result<(), String> {
+    fn validate_existing_marker(&self) -> Result<(), String> {
         let mut file = OpenOptions::new().read(true).open(&self.marker_path)
             .map_err(|_| "A database recovery marker exists but could not be read. Preserve the encrypted safety archive and do not continue using this database.".to_owned())?;
         let mut encoded = Vec::new();
@@ -74,6 +76,11 @@ impl RecoveryState {
         {
             return Err("A database recovery marker has an unsupported or invalid format. Preserve the encrypted safety archive; normal database startup is blocked.".to_owned());
         }
+        Ok(())
+    }
+
+    fn ensure_required(&self) -> Result<(), String> {
+        self.validate_existing_marker()?;
         Err("Database recovery is required because a previous restore could not verify rollback. Preserve the encrypted pre-restore safety archive. midSunday has not opened the database; do not delete the recovery marker or continue using this database.".to_owned())
     }
 }
@@ -107,7 +114,7 @@ mod tests {
         let path = directory.path().join(MARKER_FILE);
         let original = fs::read(&path).unwrap();
         assert!(ensure_database_not_blocked(directory.path()).unwrap_err().contains("recovery is required"));
-        assert!(state.mark_required().is_err());
+        state.mark_required().unwrap();
         assert_eq!(fs::read(path).unwrap(), original);
     }
 
@@ -163,6 +170,86 @@ mod tests {
         assert!(error.contains("persistent recovery block was saved"));
         assert!(ensure_database_not_blocked(&app_data_dir)
             .unwrap_err().contains("recovery is required"));
+        drop(guard);
+    }
+
+    #[test]
+    fn rollback_verification_failure_persists_marker() {
+        use crate::conversation_store::ConversationStore;
+        use std::cell::Cell;
+
+        let directory = tempfile::tempdir().unwrap();
+        let source_store = ConversationStore::open(&directory.path().join("source-live.sqlite3")).unwrap();
+        let source_conversation = source_store.create("Replacement source").unwrap();
+        source_store.append(source_conversation.id, "user", "Replacement content").unwrap();
+        let source_backup = directory.path().join("source.sqlite3");
+        source_store.backup_to(&source_backup).unwrap();
+        let source_candidate = ConversationStore::prepare_verified_restore_candidate(&source_backup).unwrap();
+
+        let target_store = ConversationStore::open(&directory.path().join("target-live.sqlite3")).unwrap();
+        let original_conversation = target_store.create("Original database").unwrap();
+        target_store.append(original_conversation.id, "user", "Original content").unwrap();
+        let rollback_backup = directory.path().join("rollback.sqlite3");
+        target_store.backup_to(&rollback_backup).unwrap();
+        let rollback_candidate = ConversationStore::prepare_verified_restore_candidate(&rollback_backup).unwrap();
+
+        let app_data_dir = directory.path().join("app-data");
+        let state = RecoveryState::in_data_dir(&app_data_dir);
+        let mut guard = target_store.try_acquire_restore_lock().unwrap();
+        let verify_calls = Cell::new(0usize);
+        let error = guard.copy_from_candidate_with_operations_and_recovery(
+            &source_candidate,
+            &rollback_candidate,
+            |current, candidate| current.copy_from_candidate(candidate),
+            |_current, _expected| {
+                let call = verify_calls.get();
+                verify_calls.set(call + 1);
+                Err(if call == 0 {
+                    "injected requested-candidate verification failure".to_owned()
+                } else {
+                    "injected rollback verification failure".to_owned()
+                })
+            },
+            || state.mark_required(),
+        ).unwrap_err();
+
+        assert!(error.contains("persistent recovery block was saved"));
+        assert!(ensure_database_not_blocked(&app_data_dir).unwrap_err().contains("recovery is required"));
+        drop(guard);
+    }
+
+    #[test]
+    fn marker_write_failure_is_reported_as_manual_recovery() {
+        use crate::conversation_store::ConversationStore;
+
+        let directory = tempfile::tempdir().unwrap();
+        let source_store = ConversationStore::open(&directory.path().join("source-live.sqlite3")).unwrap();
+        let source_conversation = source_store.create("Replacement source").unwrap();
+        source_store.append(source_conversation.id, "user", "Replacement content").unwrap();
+        let source_backup = directory.path().join("source.sqlite3");
+        source_store.backup_to(&source_backup).unwrap();
+        let source_candidate = ConversationStore::prepare_verified_restore_candidate(&source_backup).unwrap();
+
+        let target_store = ConversationStore::open(&directory.path().join("target-live.sqlite3")).unwrap();
+        let original_conversation = target_store.create("Original database").unwrap();
+        target_store.append(original_conversation.id, "user", "Original content").unwrap();
+        let rollback_backup = directory.path().join("rollback.sqlite3");
+        target_store.backup_to(&rollback_backup).unwrap();
+        let rollback_candidate = ConversationStore::prepare_verified_restore_candidate(&rollback_backup).unwrap();
+
+        let app_data_dir = directory.path().join("app-data");
+        let mut guard = target_store.try_acquire_restore_lock().unwrap();
+        let error = guard.copy_from_candidate_with_operations_and_recovery(
+            &source_candidate,
+            &rollback_candidate,
+            |_current, _candidate| Err("injected copy failure".to_owned()),
+            |_current, _expected| Err("injected verification failure".to_owned()),
+            || Err("injected marker persistence failure".to_owned()),
+        ).unwrap_err();
+
+        assert!(error.contains("persistent recovery block could not be saved"));
+        assert!(error.contains("injected marker persistence failure"));
+        assert!(!app_data_dir.join(MARKER_FILE).exists());
         drop(guard);
     }
 
