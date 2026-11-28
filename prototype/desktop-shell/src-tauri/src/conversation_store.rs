@@ -244,10 +244,15 @@ pub struct DatabaseRestorePreview {
     pub current: DatabaseContentInventory,
 }
 
-#[derive(Clone)]
 /// An exclusive reservation of the live database connection for a restore transaction.
 pub(crate) struct RestoreDatabaseGuard<'a> {
     connection: std::sync::MutexGuard<'a, Connection>,
+}
+
+impl std::fmt::Debug for RestoreDatabaseGuard<'_> {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("RestoreDatabaseGuard { connection: <locked> }")
+    }
 }
 
 impl RestoreDatabaseGuard<'_> {
@@ -258,6 +263,7 @@ impl RestoreDatabaseGuard<'_> {
     }
 }
 
+#[derive(Clone)]
 pub struct ConversationStore {
     connection: Arc<Mutex<Connection>>,
 }
