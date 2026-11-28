@@ -2459,10 +2459,23 @@ This avoids making the UI's periodic status refresh wait behind an in-flight inf
 - [x] Report registered model count and managed local engine state without opening model files or exposing model paths.
 - [x] Keep the check read-only, local-only, and free of telemetry, uploads, or automatic repair.
 - [x] Add a Rust regression test for healthy database reporting and schema metadata.
-- [x] Extend diagnostics with configured server-file checks, Unix execute-permission / Windows executable-type checks, GGUF header validation, and registered-model size/SHA-256 verification on a blocking worker.\n- [ ] Add app-data/model-volume disk-space checks and reviewed, explicitly user-exported redacted reports; validate recovery scenarios on physical devices.
+- [x] Extend diagnostics with configured server-file checks, Unix execute-permission / Windows executable-type checks, GGUF header validation, and registered-model size/SHA-256 verification on a blocking worker.
+- [ ] Add app-data/model-volume disk-space checks and reviewed, explicitly user-exported redacted reports; validate recovery scenarios on physical devices.
 
 This is an initial diagnostic slice, not a complete health or repair system. A healthy SQLite check does not guarantee model compatibility or overall application health.
-\n\n### 2026-11-28 — Expanded local setup diagnostics (Batch #240)\n\n- [x] Extend the explicit Diagnostics check to inspect the configured llama.cpp server file without launching it.\n- [x] Report missing files, non-file paths, wrong Windows executable type, and missing Unix execute permission as distinct readiness states.\n- [x] Validate the configured GGUF file header and, when it is registered, verify its saved file size and SHA-256 fingerprint.\n- [x] Run potentially slow model-file checks on a blocking worker so the desktop UI remains responsive.\n- [x] Keep paths private, perform no repair or launch, and preserve read-only local-only behaviour.\n- [ ] Validate large-file check responsiveness, permissions, moved/modified models, and user-facing recovery guidance on physical Windows, Linux, and macOS devices.\n\nAn unregistered GGUF receives only file/header checks because no trusted fingerprint is stored. A successful file check does not prove the server binary or model is compatible with the host.\n
+
+
+### 2026-11-28 — Expanded local setup diagnostics (Batch #240)
+
+- [x] Extend the explicit Diagnostics check to inspect the configured llama.cpp server file without launching it.
+- [x] Report missing files, non-file paths, wrong Windows executable type, and missing Unix execute permission as distinct readiness states.
+- [x] Validate the configured GGUF file header and, when it is registered, verify its saved file size and SHA-256 fingerprint.
+- [x] Run potentially slow model-file checks on a blocking worker so the desktop UI remains responsive.
+- [x] Keep paths private, perform no repair or launch, and preserve read-only local-only behaviour.
+- [ ] Validate large-file check responsiveness, permissions, moved/modified models, and user-facing recovery guidance on physical Windows, Linux, and macOS devices.
+
+An unregistered GGUF receives only file/header checks because no trusted fingerprint is stored. A successful file check does not prove the server binary or model is compatible with the host.
+
 
 ### 2026-11-28 — Diagnostics build correction (Batch #241)
 
@@ -2487,3 +2500,15 @@ This is an initial diagnostic slice, not a complete health or repair system. A h
 - Explicitly lists excluded private content and identifiers so users can make an informed sharing decision.
 - Saving stays disabled until the user reviews the report; a fresh health check resets the review approval.
 - No automatic upload, network transfer, or sharing was introduced.
+
+
+### 2026-11-28 — Diagnostic storage headroom checks (Batch #244)
+
+- [x] Report available and total capacity for the volume containing midSunday's app-data directory.
+- [x] Report available and total capacity for the configured model's volume, or clearly mark it not configured/unavailable.
+- [x] Classify storage as healthy, low, or critical using conservative free-space thresholds.
+- [x] Match the longest containing mount point and avoid exposing mount paths or drive identifiers in diagnostics or exported reports.
+- [x] Add regression coverage ensuring mount matching respects path-component boundaries.
+- [ ] Validate volume matching, removable/network volumes, permission failures, and low-space states on physical Windows, Linux, and macOS devices.
+
+Storage values are a point-in-time read-only snapshot. The app does not reserve space, delete files, or guarantee that future model downloads or database writes will fit.

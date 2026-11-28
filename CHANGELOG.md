@@ -271,3 +271,6 @@ All notable project changes are recorded here. The project is in foundation/prot
 
 ## 2026-11-28 — Batch #243
 - Added a privacy review step before diagnostic report export. Users can inspect every included category and value, see the timestamp behavior, and review explicit exclusions before the save action becomes available. Running a fresh health check resets review approval.
+
+
+- Added privacy-preserving Diagnostics checks for free and total space on the app-data and configured model volumes, with conservative healthy/low/critical states and no mount-path or drive-identifier disclosure.

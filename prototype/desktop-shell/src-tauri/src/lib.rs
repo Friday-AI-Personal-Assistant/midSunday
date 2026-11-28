@@ -322,6 +322,15 @@ fn verify_local_model(catalog: State<'_, ModelCatalog>, id: String) -> Result<Mo
 
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
+struct DiskSpaceCheck {
+    status: String,
+    total_bytes: Option<u64>,
+    available_bytes: Option<u64>,
+    detail: String,
+}
+
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct DiagnosticsSnapshot {
     app_version: String,
     operating_system: String,
@@ -331,10 +340,60 @@ struct DiagnosticsSnapshot {
     runtime_status: String,
     server_executable: setup_readiness::SetupFileCheck,
     model_file: ModelVerification,
+    app_data_volume: DiskSpaceCheck,
+    model_volume: DiskSpaceCheck,
+}
+
+fn path_is_within_mount(path: &std::path::Path, mount: &std::path::Path) -> bool {
+    #[cfg(windows)]
+    {
+        let path = path.to_string_lossy().replace('/', "\\\\").to_lowercase();
+        let mount = mount.to_string_lossy().replace('/', "\\\\").to_lowercase();
+        let mount = mount.trim_end_matches('\\');
+        path == mount || path.starts_with(&format!("{mount}\\\\"))
+    }
+    #[cfg(not(windows))]
+    {
+        path.starts_with(mount)
+    }
+}
+
+fn collect_diagnostics_disk_space(path: Option<&std::path::Path>, disks: &sysinfo::Disks) -> DiskSpaceCheck {
+    let Some(path) = path else {
+        return DiskSpaceCheck { status: "not_configured".to_owned(), total_bytes: None, available_bytes: None, detail: "No model location is configured.".to_owned() };
+    };
+    let resolved = std::fs::canonicalize(path)
+        .or_else(|_| path.parent().and_then(|parent| std::fs::canonicalize(parent)).ok().ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, "path unavailable")));
+    let Ok(resolved) = resolved else {
+        return DiskSpaceCheck { status: "unavailable".to_owned(), total_bytes: None, available_bytes: None, detail: "The storage volume could not be identified.".to_owned() };
+    };
+    let Some(disk) = disks.list().iter()
+        .filter(|disk| path_is_within_mount(&resolved, disk.mount_point()))
+        .max_by_key(|disk| disk.mount_point().components().count())
+    else {
+        return DiskSpaceCheck { status: "unavailable".to_owned(), total_bytes: None, available_bytes: None, detail: "The storage volume could not be identified.".to_owned() };
+    };
+    let total = disk.total_space();
+    let available = disk.available_space().min(total);
+    let free_ratio = if total == 0 { 0.0 } else { available as f64 / total as f64 };
+    let status = if available < 2 * 1024 * 1024 * 1024 || free_ratio < 0.05 {
+        "critical"
+    } else if available < 10 * 1024 * 1024 * 1024 || free_ratio < 0.10 {
+        "low"
+    } else {
+        "healthy"
+    };
+    let detail = match status {
+        "critical" => "Very little free space remains on this volume.".to_owned(),
+        "low" => "Free space on this volume is getting low.".to_owned(),
+        _ => "The volume has a reasonable amount of free space.".to_owned(),
+    };
+    DiskSpaceCheck { status: status.to_owned(), total_bytes: Some(total), available_bytes: Some(available), detail }
 }
 
 #[tauri::command]
 async fn get_diagnostics_snapshot(
+    app: tauri::AppHandle,
     store: State<'_, ConversationStore>,
     catalog: State<'_, ModelCatalog>,
     settings: State<'_, EngineSettingsStore>,
@@ -353,7 +412,8 @@ async fn get_diagnostics_snapshot(
     let catalog = catalog.inner().clone();
     let executable_path = engine_settings.executable_path;
     let model_path = engine_settings.model_path;
-    let (server_executable, model_file) = tauri::async_runtime::spawn_blocking(move || {
+    let app_data_path = app.path().app_data_dir().ok();
+    let (server_executable, model_file, app_data_volume, model_volume) = tauri::async_runtime::spawn_blocking(move || {
         let readiness = setup_readiness::check_local_setup(&executable_path, &model_path);
         let model_file = if readiness.model.status != "ready" {
             ModelVerification {
@@ -368,7 +428,14 @@ async fn get_diagnostics_snapshot(
                 detail: "The configured model could not be verified. Check that the file is accessible and try again.".to_owned(),
             })
         };
-        (readiness.executable, model_file)
+        let disks = sysinfo::Disks::new_with_refreshed_list();
+        let app_data_volume = collect_diagnostics_disk_space(app_data_path.as_deref(), &disks);
+        let model_volume = if model_path.trim().is_empty() {
+            collect_diagnostics_disk_space(None, &disks)
+        } else {
+            collect_diagnostics_disk_space(Some(std::path::Path::new(&model_path)), &disks)
+        };
+        (readiness.executable, model_file, app_data_volume, model_volume)
     }).await.map_err(|_| "The local file-diagnostics worker could not complete.".to_owned())?;
     Ok(DiagnosticsSnapshot {
         app_version: env!("CARGO_PKG_VERSION").to_owned(),
@@ -379,6 +446,8 @@ async fn get_diagnostics_snapshot(
         runtime_status,
         server_executable,
         model_file,
+        app_data_volume,
+        model_volume,
     })
 }
 
@@ -724,6 +793,16 @@ mod awareness_analysis_tests {
     }
 }
 
+
+#[cfg(test)]
+mod diagnostics_disk_space_tests {
+    use super::*;
+    #[test]
+    fn mount_matching_uses_path_components_not_prefixes() {
+        assert!(path_is_within_mount(std::path::Path::new("/home/user/models/model.gguf"), std::path::Path::new("/home")));
+        assert!(!path_is_within_mount(std::path::Path::new("/home2/models/model.gguf"), std::path::Path::new("/home")));
+    }
+}
 
 #[cfg(test)]
 mod diagnostics_export_tests {
