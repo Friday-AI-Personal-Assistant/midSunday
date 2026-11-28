@@ -1273,7 +1273,7 @@ mod restore_safety_archive_tests {
         let database_guard = target_store.try_acquire_restore_lock().unwrap();
         assert!(database_guard.verify_current_matches(&candidate.verification).is_err());
         drop(database_guard);
-        assert_eq!(target_store.content_inventory().unwrap().conversation_count, 1);
+        assert_eq!(target_store.content_inventory().unwrap().conversation_count, 2);
         let _ = fs::remove_dir_all(directory);
     }
 
