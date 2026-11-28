@@ -1,3 +1,9 @@
+## 2026-11-28 — Batch #270
+- Added a separate password-protected .msbackup format using Argon2id and XChaCha20-Poly1305 authenticated encryption, processed in bounded 1 MiB chunks.
+- Encrypted backups are decrypted to a temporary file and checked with the existing SQLite integrity and manifest verifier before publication. Existing .msbackup destinations are never overwritten.
+- Added password-based encrypted-backup verification; the selected encrypted file remains unchanged and temporary plaintext is removed after checking.
+- Kept the original unencrypted .sqlite3 backup option separate. Passwords are not saved; losing one means the encrypted backup cannot be recovered. Restore and cloud backup remain unavailable.
+
 ## 2026-11-28 — Batch #247
 - Hardened diagnostic storage classification: zero-capacity volumes now report unavailable instead of a false critical warning, and inconsistent available-space values are safely clamped. Added threshold and Windows drive-path regression coverage.
 

@@ -2700,3 +2700,18 @@ These structural checks strengthen format validation but do not make the manifes
 - [ ] Validate v1, v2, and legacy backup inventory verification with real databases on physical Windows, Linux, and macOS devices.
 
 The inventory reports aggregate counts only. App-preference records may contain local configuration values, but those values are never displayed by verification. This remains an unencrypted SQLite backup; encryption and restore are not implemented.
+
+
+### 2026-11-28 — Password-protected local database backups (Batch #270)
+
+- [x] Add a separate .msbackup encrypted container using Argon2id password-based key derivation and XChaCha20-Poly1305 authenticated encryption.
+- [x] Encrypt and authenticate the SQLite snapshot in bounded 1 MiB chunks, with an authenticated final marker to detect truncation and reordering.
+- [x] Require a password of at least 12 bytes; do not save it in app preferences, the database, the backup header, or logs.
+- [x] Verify each newly encrypted backup by decrypting to a temporary file and checking the existing SQLite integrity and v2 manifest before publishing.
+- [x] Add password-based verification for existing encrypted backups without changing the selected encrypted file.
+- [x] Preserve the existing unencrypted .sqlite3 backup and verification actions as separate options; refuse to overwrite existing destinations.
+- [x] Add regression coverage for multi-chunk round trips, incorrect passwords, modified ciphertext, truncation, and short passwords.
+- [ ] Add a separately designed restore workflow with explicit confirmation, pre-restore safety backup, and rollback testing.
+- [ ] Validate encrypted backup creation, verification, password handling, large databases, low-space failures, and recovery on physical Windows, Linux, and macOS devices.
+
+Encrypted backups remain local-only. Password loss makes an encrypted backup unrecoverable; midSunday does not store or reset the password. Cloud backup and restore are not implemented.
