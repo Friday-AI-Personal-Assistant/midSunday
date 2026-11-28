@@ -1,3 +1,9 @@
+## 2026-11-28 — Batch #291
+- Added SQLite's online-backup API as an explicitly enabled rusqlite capability and a private restore-candidate preparation primitive.
+- The primitive first fully verifies a v2 source backup, copies it into an isolated temporary SQLite database, runs the complete integrity/foreign-key/schema/manifest verifier again, and compares every aggregate inventory and manifest field with the source.
+- The candidate owns a private temporary workspace and is removed when dropped. Candidate preparation never opens or mutates the live ConversationStore connection and is not wired to a restore command or UI.
+- Added regression tests for successful online-copy fidelity, candidate cleanup, live-database non-mutation, and invalid-source rejection. Actual live restore, rollback, crash recovery, and physical-device validation remain incomplete.
+
 ## 2026-11-28 — Batch #290
 - Added a separately callable encrypted pre-restore safety-archive operation. It acquires the runtime operation gate first and then the exact live SQLite connection lock used by normal database operations.
 - While both gates are held, it snapshots the current database through the restore guard, encrypts the snapshot with the existing Argon2id/XChaCha20-Poly1305 format, decrypts it into a private verification workspace, and checks SQLite integrity, foreign keys, schema, and the v2 manifest before publishing.

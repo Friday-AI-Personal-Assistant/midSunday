@@ -684,7 +684,7 @@ This repository is the durable source of truth. ChatGPT conversations are workin
 - [x] Initial complete roadmap drafted.
 
 **Next actions:**
-1. Continue the encrypted database restore work against [BACKUP-RESTORE-DESIGN.md](docs/BACKUP-RESTORE-DESIGN.md): integrate the verified safety archive, then prove live-connection copy, rollback, and crash recovery before enabling restore.
+1. Continue the encrypted database restore work against [BACKUP-RESTORE-DESIGN.md](docs/BACKUP-RESTORE-DESIGN.md): integrate the verified safety archive, then prove live-connection copy, rollback, and crash recovery before enabling restore. Batch #291 now validates the SQLite online-copy API in an isolated, disposable candidate database only.
 2. Validate local server startup, generation, cancellation, unexpected process-exit reporting, and clean shutdown on physical Windows, Linux, and macOS devices.
 3. Test model compatibility, memory pressure, long sessions, sleep/resume, and unexpected server termination; CI cannot replace hardware testing.
 4. Continue Phase 1 benchmarks for compact models, Pakistani Urdu/Roman Urdu speech, and realistic low-memory hardware profiles.
@@ -2751,3 +2751,15 @@ This batch is a design/safety gate only. It does not add a restore command, chan
 - [x] Add a separately callable encrypted pre-restore safety-archive operation that holds the runtime gate and live database lock, verifies the encrypted archive, and refuses destination overwrite.\n- [ ] Wire the safety archive into the future restore transaction together with source validation, live-connection copy, rollback, and crash recovery. Restore remains unavailable.
 
 This is a coordination primitive only. It does not modify the database or enable restore.
+
+
+### 2026-11-28 — Isolated restore-candidate staging (Batch #291)
+
+- [x] Enable rusqlite's SQLite online-backup API.
+- [x] Add a private staging primitive that verifies the source archive, copies it into an isolated temporary database, and fully re-verifies the copied candidate.
+- [x] Compare schema, all aggregate inventory counts, and available manifest metadata between source and candidate.
+- [x] Ensure candidate plaintext remains in a private temporary workspace that is removed when the candidate is dropped.
+- [x] Add regression tests for candidate fidelity, cleanup, invalid-source rejection, and preservation of the live database.
+- [ ] Integrate the candidate with the guarded live-connection restore transaction, encrypted safety archive, rollback, and crash recovery. Restore remains unavailable.
+
+This milestone validates the SQLite online-copy mechanism in isolation. It does not perform or enable live database restore.

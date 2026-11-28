@@ -1,7 +1,7 @@
 use rusqlite::{params, Connection, OptionalExtension};
 use sha2::{Digest, Sha256};
 use serde::{Deserialize, Serialize};
-use std::{path::Path, sync::{Arc, Mutex}, time::{SystemTime, UNIX_EPOCH}};
+use std::{path::{Path, PathBuf}, sync::{Arc, Mutex}, time::{Duration, SystemTime, UNIX_EPOCH}};
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -244,6 +244,19 @@ pub struct DatabaseRestorePreview {
     pub current: DatabaseContentInventory,
 }
 
+/// A fully copied and re-verified restore candidate held in private temporary storage.
+/// The workspace is deleted when this value is dropped. This candidate is deliberately
+/// separate from the live ConversationStore connection; preparing it never mutates user data.
+pub(crate) struct VerifiedRestoreCandidate {
+    workspace: tempfile::TempDir,
+    path: PathBuf,
+    pub verification: DatabaseBackupVerification,
+}
+
+impl VerifiedRestoreCandidate {
+    pub(crate) fn path(&self) -> &Path { &self.path }
+}
+
 /// An exclusive reservation of the live database connection for a restore transaction.
 pub(crate) struct RestoreDatabaseGuard<'a> {
     connection: std::sync::MutexGuard<'a, Connection>,
@@ -417,6 +430,69 @@ impl ConversationStore {
             app_version,
             detail: "Full SQLite integrity, foreign-key relationships, required midSunday structures, and available backup metadata passed read-only verification.".to_owned(),
         })
+    }
+
+    /// Copies a previously verified backup into an isolated temporary SQLite database
+    /// using SQLite's online-backup API, then performs the complete verifier against the
+    /// copied candidate and compares every aggregate/manifest field. The returned object
+    /// owns the private workspace. It must never be treated as the live database.
+    pub(crate) fn prepare_verified_restore_candidate(backup_path: &Path) -> Result<VerifiedRestoreCandidate, String> {
+        let expected = Self::verify_backup_file(backup_path)?;
+        if !expected.valid || expected.backup_format_version != Some(2) {
+            return Err("The selected backup is not a supported, verified v2 midSunday archive.".to_owned());
+        }
+        let workspace = tempfile::Builder::new().prefix("midsunday-restore-candidate-").tempdir()
+            .map_err(|_| "A private temporary restore-candidate workspace could not be created.".to_owned())?;
+        let candidate_path = workspace.path().join("candidate.sqlite3");
+        let copy_result = (|| -> Result<(), String> {
+            let source = Connection::open_with_flags(backup_path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
+                .map_err(|_| "The verified backup could not be reopened for safe candidate preparation.".to_owned())?;
+            let mut destination = Connection::open(&candidate_path)
+                .map_err(|_| "A temporary restore candidate database could not be created.".to_owned())?;
+            let backup = rusqlite::backup::Backup::new(&source, &mut destination)
+                .map_err(|_| "SQLite could not initialise the isolated restore-candidate copy.".to_owned())?;
+            backup.run_to_completion(64, Duration::from_millis(20), None)
+                .map_err(|_| "SQLite could not complete the isolated restore-candidate copy.".to_owned())?;
+            drop(backup);
+            drop(destination);
+            drop(source);
+            Ok(())
+        })();
+        if let Err(error) = copy_result {
+            return match workspace.close() {
+                Ok(()) => Err(error),
+                Err(_) => Err(format!("{error} The temporary candidate workspace could not be removed; check the temporary folder and keep this device private.")),
+            };
+        }
+        let copied = match Self::verify_backup_file(&candidate_path) {
+            Ok(value) => value,
+            Err(error) => {
+                return match workspace.close() {
+                    Ok(()) => Err(format!("The copied restore candidate failed verification: {error}")),
+                    Err(_) => Err(format!("The copied restore candidate failed verification: {error} The temporary workspace could not be removed; check the temporary folder and keep this device private.")),
+                };
+            }
+        };
+        let same_inventory = copied.schema_version == expected.schema_version
+            && copied.conversation_count == expected.conversation_count
+            && copied.message_count == expected.message_count
+            && copied.saved_memory_count == expected.saved_memory_count
+            && copied.awareness_item_count == expected.awareness_item_count
+            && copied.awareness_activity_count == expected.awareness_activity_count
+            && copied.awareness_history_count == expected.awareness_history_count
+            && copied.awareness_suppression_count == expected.awareness_suppression_count
+            && copied.awareness_suggestion_count == expected.awareness_suggestion_count
+            && copied.app_preference_count == expected.app_preference_count
+            && copied.backup_format_version == expected.backup_format_version
+            && copied.created_at == expected.created_at
+            && copied.app_version == expected.app_version;
+        if !copied.valid || !same_inventory {
+            return match workspace.close() {
+                Ok(()) => Err("The isolated restore candidate did not preserve the verified schema, manifest, and aggregate inventory.".to_owned()),
+                Err(_) => Err("The isolated restore candidate did not preserve the verified inventory, and its temporary workspace could not be removed.".to_owned()),
+            };
+        }
+        Ok(VerifiedRestoreCandidate { workspace, path: candidate_path, verification: copied })
     }
 
     pub fn open(path: &Path) -> Result<Self, String> {
@@ -3217,6 +3293,40 @@ mod tests {
         drop(restore_guard);
         assert!(finished_rx.recv_timeout(Duration::from_secs(2)).unwrap());
         worker.join().unwrap();
+    }
+
+    #[test]
+    fn restore_candidate_uses_sqlite_online_backup_and_preserves_verified_inventory() {
+        let directory = tempfile::tempdir().unwrap();
+        let live_path = directory.path().join("live.sqlite3");
+        let backup_path = directory.path().join("source.sqlite3");
+        let store = ConversationStore::open(&live_path).unwrap();
+        let conversation = store.create("Candidate copy test").unwrap();
+        store.append(conversation.id, "user", "A private message stays in the local test database.").unwrap();
+        store.create_memory("A user-approved memory").unwrap();
+        store.backup_to(&backup_path).unwrap();
+
+        let candidate = ConversationStore::prepare_verified_restore_candidate(&backup_path).unwrap();
+        assert!(candidate.path().is_file());
+        assert!(candidate.verification.valid);
+        assert_eq!(candidate.verification.backup_format_version, Some(2));
+        assert_eq!(candidate.verification.conversation_count, 1);
+        assert_eq!(candidate.verification.message_count, 1);
+        assert_eq!(candidate.verification.saved_memory_count, 1);
+        assert_eq!(ConversationStore::verify_backup_file(candidate.path()).unwrap(), candidate.verification);
+        assert_eq!(store.content_inventory().unwrap().conversation_count, 1);
+        let workspace_path = candidate.path().parent().unwrap().to_path_buf();
+        drop(candidate);
+        assert!(!workspace_path.exists());
+    }
+
+    #[test]
+    fn restore_candidate_rejects_invalid_source_without_modifying_it() {
+        let directory = tempfile::tempdir().unwrap();
+        let invalid_path = directory.path().join("invalid.sqlite3");
+        std::fs::write(&invalid_path, b"not a sqlite backup").unwrap();
+        assert!(ConversationStore::prepare_verified_restore_candidate(&invalid_path).is_err());
+        assert_eq!(std::fs::read(&invalid_path).unwrap(), b"not a sqlite backup");
     }
 
     #[test]
