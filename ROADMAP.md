@@ -2774,3 +2774,16 @@ This milestone validates the SQLite online-copy mechanism in isolation. It does 
 - [ ] Integrate staged candidates with guarded live-database replacement, encrypted safety archive, rollback, and crash recovery. Restore remains unavailable.
 
 This milestone still does not modify the live database or enable restore.
+
+
+### 2026-11-28 — Guarded live-connection copy and verification primitives (Batch #293)
+
+- [x] Add a private guarded online-backup copy from a fully staged restore candidate into the existing live SQLite connection.
+- [x] Add full destination verification through a private snapshot, including SQLite integrity, foreign-key checks, schema, manifest consistency, and aggregate inventory comparison.
+- [x] Compare all supported aggregate content counts with the verified candidate before considering the copy valid.
+- [x] Test guarded copy under the runtime/database gates and reject mismatched destination inventory without changing it.
+- [ ] Integrate the copy with encrypted pre-restore safety archive creation, automatic rollback, and a persistent recovery-blocked state if rollback fails.
+- [ ] Demonstrate crash/restart recovery and failure injection at every transaction boundary.
+- [ ] Complete physical Windows, Linux, and macOS validation before enabling restore.
+
+This batch adds internal copy/verification building blocks only. No restore command or UI is enabled, and restore remains unavailable.
