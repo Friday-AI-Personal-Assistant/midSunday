@@ -155,7 +155,7 @@ mod tests {
     #[test]
     fn invalid_and_oversized_paths_are_rejected_before_filesystem_access() {
         let oversized = "x".repeat(4097);
-        for invalid in ["\\0", oversized.as_str()] {
+        for invalid in ["\0", oversized.as_str()] {
             let checked = check_local_setup(invalid, invalid);
             assert_eq!(checked.executable.status, "invalid_path");
             assert_eq!(checked.model.status, "invalid_path");
