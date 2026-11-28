@@ -510,25 +510,6 @@ fn backup_local_database(file_path: String, store: State<'_, ConversationStore>)
     store.backup_to(std::path::Path::new(&file_path))
 }
 
-fn reserve_backup_temp_path(parent: &std::path::Path, label: &str, extension: &str) -> Result<std::path::PathBuf, String> {
-    use std::sync::atomic::{AtomicU64, Ordering};
-    static NEXT: AtomicU64 = AtomicU64::new(1);
-    for _ in 0..32 {
-        let sequence = NEXT.fetch_add(1, Ordering::Relaxed);
-        let path = parent.join(format!(".midsunday-{label}-{}-{sequence}.{extension}", std::process::id()));
-        match std::fs::OpenOptions::new().write(true).create_new(true).open(&path) {
-            Ok(file) => {
-                drop(file);
-                std::fs::remove_file(&path).map_err(|_| "Could not prepare a temporary backup file.".to_owned())?;
-                return Ok(path);
-            }
-            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
-            Err(_) => return Err("Could not prepare a temporary backup file. Check folder permissions and available disk space.".to_owned()),
-        }
-    }
-    Err("Could not reserve a unique temporary backup filename. Try again.".to_owned())
-}
-
 fn create_encrypted_database_backup(
     store: &ConversationStore,
     file_path: &str,
@@ -540,9 +521,13 @@ fn create_encrypted_database_backup(
         return Err("Choose a .msbackup file for an encrypted midSunday backup.".to_owned());
     }
     let parent = destination.parent().filter(|path| !path.as_os_str().is_empty()).unwrap_or_else(|| Path::new("."));
-    let plaintext = reserve_backup_temp_path(&std::env::temp_dir(), "encrypted-source", "sqlite3")?;
-    let encrypted = reserve_backup_temp_path(parent, "encrypted-output", "msbackup")?;
-    let verification_copy = reserve_backup_temp_path(&std::env::temp_dir(), "encrypted-check", "sqlite3")?;
+    let plaintext_dir = tempfile::Builder::new().prefix("midsunday-encrypted-source-").tempdir()
+        .map_err(|_| "A private temporary workspace could not be created for the encrypted backup.".to_owned())?;
+    let output_dir = tempfile::Builder::new().prefix(".midsunday-encrypted-output-").tempdir_in(parent)
+        .map_err(|_| "A temporary encrypted-backup workspace could not be created in the selected folder.".to_owned())?;
+    let plaintext = plaintext_dir.path().join("source.sqlite3");
+    let encrypted = output_dir.path().join("backup.msbackup");
+    let verification_copy = plaintext_dir.path().join("verified.sqlite3");
 
     let result = (|| -> Result<(), String> {
         store.backup_to(&plaintext)?;
@@ -562,10 +547,15 @@ fn create_encrypted_database_backup(
         Ok(())
     })();
 
-    let _ = std::fs::remove_file(&plaintext);
-    let _ = std::fs::remove_file(&encrypted);
-    let _ = std::fs::remove_file(&verification_copy);
-    result
+    let output_cleanup = output_dir.close();
+    let plaintext_cleanup = plaintext_dir.close();
+    let cleanup_failed = output_cleanup.is_err() || plaintext_cleanup.is_err();
+    match (result, cleanup_failed) {
+        (Ok(()), false) => Ok(()),
+        (Err(error), false) => Err(error),
+        (Ok(()), true) => Err("The encrypted backup was saved and verified, but a temporary working file could not be removed. Check the temporary folders and keep this device private.".to_owned()),
+        (Err(error), true) => Err(format!("{error} A temporary working file could not be removed; check the temporary folders and keep this device private.")),
+    }
 }
 
 fn verify_encrypted_database_backup(
@@ -577,7 +567,9 @@ fn verify_encrypted_database_backup(
     if !source.extension().and_then(|value| value.to_str()).is_some_and(|value| value.eq_ignore_ascii_case("msbackup")) {
         return Err("Choose a .msbackup encrypted midSunday backup.".to_owned());
     }
-    let plaintext = reserve_backup_temp_path(&std::env::temp_dir(), "encrypted-verify", "sqlite3")?;
+    let working_dir = tempfile::Builder::new().prefix("midsunday-encrypted-verify-").tempdir()
+        .map_err(|_| "A private temporary verification workspace could not be created.".to_owned())?;
+    let plaintext = working_dir.path().join("verified.sqlite3");
     let result = (|| -> Result<conversation_store::DatabaseBackupVerification, String> {
         backup_encryption::decrypt_file(source, &plaintext, password)?;
         let verification = ConversationStore::verify_backup_file(&plaintext)?;
@@ -586,8 +578,13 @@ fn verify_encrypted_database_backup(
         }
         Ok(verification)
     })();
-    let _ = std::fs::remove_file(&plaintext);
-    result
+    let cleanup = working_dir.close();
+    match (result, cleanup.is_err()) {
+        (Ok(value), false) => Ok(value),
+        (Err(error), false) => Err(error),
+        (Ok(_), true) => Err("The encrypted backup was verified, but its temporary plaintext copy could not be removed. Check the temporary folder and keep this device private.".to_owned()),
+        (Err(error), true) => Err(format!("{error} The temporary plaintext copy could not be removed; check the temporary folder and keep this device private.")),
+    }
 }
 
 #[tauri::command]
