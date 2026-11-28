@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::{
-    fs::{self, OpenOptions},
+    fs::{self, File, OpenOptions},
     io::{Read, Write},
     path::{Path, PathBuf},
     time::{SystemTime, UNIX_EPOCH},
@@ -60,7 +60,17 @@ impl RecoveryState {
         };
         file.write_all(&encoded)
             .and_then(|_| file.sync_all())
-            .map_err(|_| "The database recovery marker could not be durably written. Preserve the encrypted safety archive and do not continue using this database.".to_owned())
+            .map_err(|_| "The database recovery marker could not be durably written. Preserve the encrypted safety archive and do not continue using this database.".to_owned())?;
+
+        // On Unix, syncing the containing directory makes the newly created
+        // directory entry durable as well as the marker's file contents.
+        #[cfg(unix)]
+        if let Some(parent) = self.marker_path.parent() {
+            File::open(parent)
+                .and_then(|directory| directory.sync_all())
+                .map_err(|_| "The database recovery marker was written but its directory entry could not be confirmed durable. Preserve the encrypted safety archive and do not continue using this database.".to_owned())?;
+        }
+        Ok(())
     }
 
     fn validate_existing_marker(&self) -> Result<(), String> {
@@ -130,6 +140,19 @@ mod tests {
         assert!(ensure_database_not_blocked(directory.path()).unwrap_err().contains("recovery is required"));
         state.mark_required().unwrap();
         assert_eq!(fs::read(path).unwrap(), original);
+    }
+
+    #[test]
+    fn marking_required_never_replaces_an_existing_damaged_marker() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join(MARKER_FILE);
+        let damaged = br#"{\"formatVersion\":1"#;
+        fs::write(&path, damaged).unwrap();
+
+        let error = RecoveryState::in_data_dir(directory.path()).mark_required().unwrap_err();
+
+        assert!(error.contains("damaged, incomplete, or contains unsupported fields"));
+        assert_eq!(fs::read(path).unwrap(), damaged);
     }
 
     #[test]
