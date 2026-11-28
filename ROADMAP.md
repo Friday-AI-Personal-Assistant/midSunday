@@ -671,7 +671,7 @@ This repository is the durable source of truth. ChatGPT conversations are workin
 
 ## 11. Current status and immediate next actions
 
-**Current stage:** Phase 4 — Offline local chat engine integration. The repository now includes a managed llama.cpp server lifecycle, loopback-only streaming generation and cancellation, local SQLite conversations, model registration and integrity checks, GGUF metadata/tensor/KV-cache inspection, hardware-memory evidence, a first-run setup guide, active-session visibility, and unexpected engine-exit detection. Batches #233–#242 extend onboarding, setup verification, session visibility, runtime health reporting, and explicit local diagnostic export. Cross-platform CI validates compilation and tests; actual inference quality, offline behaviour, process recovery, and persistence still require physical-device testing.
+**Current stage:** Phase 4 — Offline local chat engine integration. The repository includes a managed llama.cpp server lifecycle, loopback-only streaming generation and cancellation, local SQLite conversations and memories, model registration and integrity checks, GGUF metadata/tensor/KV-cache and memory evidence, hardware monitoring, first-run setup guidance, runtime health reporting, and local diagnostics. Batches #257–#282 built the local database backup, manifest and inventory verification, authenticated encrypted backups, read-only restore preview, and full SQLite/foreign-key verification. Cross-platform CI validates compilation and tests; real inference quality, offline behaviour, crash recovery, and physical-device restore safety still require testing.
 
 **Completed:**
 - [x] Product name selected: midSunday.
@@ -684,13 +684,13 @@ This repository is the durable source of truth. ChatGPT conversations are workin
 - [x] Initial complete roadmap drafted.
 
 **Next actions:**
-1. Validate local server startup, active-session status, unexpected process-exit reporting, generation, cancellation, and clean shutdown on physical Windows, Linux, and macOS devices.
-2. Test model compatibility, memory pressure, long sessions, sleep/resume, and unexpected server termination; CI cannot replace hardware testing.
-3. Continue Phase 1 benchmarks for compact models, Pakistani Urdu/Roman Urdu speech, and realistic low-memory hardware profiles.
-4. Complete the approved UX flows for model import/download only after source, licence, integrity, storage, and user-consent requirements are designed.
-5. Continue the read-only FRIDAY review and record reusable patterns without modifying FRIDAY.
+1. Implement encrypted database restore only against the safety requirements and test gates in [BACKUP-RESTORE-DESIGN.md](docs/BACKUP-RESTORE-DESIGN.md). Keep restore unavailable until transactional copy, safety archive, rollback, runtime coordination, and failure-injection tests are complete.
+2. Validate local server startup, generation, cancellation, unexpected process-exit reporting, and clean shutdown on physical Windows, Linux, and macOS devices.
+3. Test model compatibility, memory pressure, long sessions, sleep/resume, and unexpected server termination; CI cannot replace hardware testing.
+4. Continue Phase 1 benchmarks for compact models, Pakistani Urdu/Roman Urdu speech, and realistic low-memory hardware profiles.
+5. Complete model import/download UX only after source, licence, integrity, storage, and user-consent requirements are designed.
 
-**Not yet done:** No AI runtime, model, persistent chat/memory storage, voice engine, hardware detector, or verified Windows installer is implemented. The current chat is a local-session UI demonstration and does not generate AI replies.
+**Not yet done:** Encrypted backup restore, cloud backup, model-file backup, separate JSON-settings backup, physical-device recovery validation, and a verified release installer remain incomplete. Cross-platform CI success is not physical-device validation.
 
 ---
 
@@ -2729,3 +2729,14 @@ Encrypted backups remain local-only. Password loss makes an encrypted backup unr
 - [ ] Validate encrypted backup creation, verification, and restore on physical Windows, Linux, and macOS devices.
 
 This batch strengthens the encrypted container's regression coverage. It does not add restore, cloud transfer, or physical-device validation.
+
+
+### 2026-11-28 — Encrypted restore safety design (Batch #283)
+
+- [x] Document the current encrypted-backup and read-only preview capabilities and their limits.
+- [x] Define a no-blind-file-replacement design based on the existing live SQLite connection and a candidate SQLite online-backup API approach.
+- [x] Specify explicit confirmation, user-selected encrypted pre-restore safety archive, runtime coordination, database locking, destination verification, rollback, and crash-recovery requirements.
+- [x] Define automated failure-injection tests and physical Windows/Linux/macOS validation gates.
+- [ ] Implement and validate the restore transaction; restore remains unavailable until every safety gate passes.
+
+This batch is a design/safety gate only. It does not add a restore command, change user data, or enable restore in the UI.

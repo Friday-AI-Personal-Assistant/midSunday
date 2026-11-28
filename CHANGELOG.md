@@ -1,3 +1,7 @@
+## 2026-11-28 — Batch #283
+- Added a dedicated encrypted Backup & Restore safety design covering live SQLite connection constraints, explicit confirmation, a user-selected encrypted pre-restore safety archive, runtime coordination, database locking, destination verification, rollback, crash recovery, failure-injection tests, and physical-device validation.
+- Updated the roadmap's current status and immediate next actions to reflect the implemented local runtime and backup work. Actual restore remains unavailable; this batch changes documentation only.
+
 ## 2026-11-28 — Batch #281
 - Corrected the foreign-key corruption regression fixture to disable SQLite write-time foreign-key enforcement only on its isolated test connection, allowing the read-only verifier to be tested against a deliberately damaged backup. Normal application connections remain unchanged.
 
