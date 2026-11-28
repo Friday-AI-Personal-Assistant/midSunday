@@ -358,3 +358,9 @@ All notable project changes are recorded here. The project is in foundation/prot
 - Added regression checks for existing destination preservation and missing-folder failure. Filesystem-specific physical-device validation remains pending.
 
 - Added a versioned metadata manifest to new local SQLite backups, recording creation time, app/schema versions, and privacy-safe aggregate counts. Verification rejects mismatched or unsupported manifests while continuing to recognise older pre-manifest backups as legacy. The manifest contains no personal content and does not add encryption or enable restore.
+
+
+## 2026-11-28 — Batch #265
+- Hardened read-only SQLite backup verification so an absent manifest is treated as legacy only when the manifest object is genuinely absent. A view or other unexpected SQLite object using the manifest name is rejected.
+- Required every present manifest table to contain exactly one metadata row before its fields are trusted; malformed lookalikes and extra rows now fail closed.
+- Added regression tests for valid legacy backups, manifest views, and multiple metadata rows. Verification remains read-only; this does not add encryption, cryptographic authenticity, or restore.

@@ -279,14 +279,25 @@ impl ConversationStore {
 
         // Manifest metadata is optional only for older backups created before format v1.
         // If a manifest exists, every field and every recorded aggregate must agree.
-        let manifest_table_count: i64 = backup.query_row(
-            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'midsunday_backup_manifest'",
+        let manifest_object: Option<String> = backup.query_row(
+            "SELECT type FROM sqlite_master WHERE name = 'midsunday_backup_manifest'",
             [],
             |row| row.get(0),
-        ).map_err(|_| "The backup manifest could not be inspected.".to_owned())?;
-        let (backup_format_version, created_at, app_version) = if manifest_table_count == 0 {
+        ).optional().map_err(|_| "The backup manifest could not be inspected.".to_owned())?;
+        let (backup_format_version, created_at, app_version) = if manifest_object.is_none() {
             (None, None, None)
         } else {
+            if manifest_object.as_deref() != Some("table") {
+                return Err("The backup manifest is not stored as a regular SQLite table. Do not restore this file.".to_owned());
+            }
+            let manifest_row_count: i64 = backup.query_row(
+                "SELECT COUNT(*) FROM midsunday_backup_manifest",
+                [],
+                |row| row.get(0),
+            ).map_err(|_| "The backup manifest could not be inspected.".to_owned())?;
+            if manifest_row_count != 1 {
+                return Err("The backup manifest must contain exactly one metadata record. Do not restore this file.".to_owned());
+            }
             let manifest: (i64, i64, i64, String, i64, i64, i64, i64) = backup.query_row(
                 "SELECT format_version, created_at, schema_version, app_version, conversation_count, message_count, saved_memory_count, awareness_item_count FROM midsunday_backup_manifest WHERE id = 1",
                 [],
@@ -2085,6 +2096,63 @@ mod tests {
         let error = ConversationStore::verify_backup_file(&backup_path).unwrap_err();
         assert!(error.contains("manifest is unsupported or does not match"));
         let _ = std::fs::remove_file(backup_path);
+    }
+
+    #[test]
+    fn accepts_legacy_database_backup_without_manifest() {
+        let backup_path = backup_test_path("manifest-legacy", "sqlite3");
+        let store = store();
+        store.backup_to(&backup_path).unwrap();
+        let writer = Connection::open(&backup_path).unwrap();
+        writer.execute("DROP TABLE midsunday_backup_manifest", []).unwrap();
+        drop(writer);
+
+        let verification = ConversationStore::verify_backup_file(&backup_path).unwrap();
+        assert!(verification.valid);
+        assert_eq!(verification.backup_format_version, None);
+        assert_eq!(verification.created_at, None);
+        assert_eq!(verification.app_version, None);
+        let _ = std::fs::remove_file(backup_path);
+    }
+
+    #[test]
+    fn rejects_manifest_views_and_multiple_manifest_rows() {
+        let view_path = backup_test_path("manifest-view", "sqlite3");
+        let rows_path = backup_test_path("manifest-extra-rows", "sqlite3");
+        let store = store();
+        store.backup_to(&view_path).unwrap();
+        store.backup_to(&rows_path).unwrap();
+
+        let view_writer = Connection::open(&view_path).unwrap();
+        view_writer.execute_batch(
+            "DROP TABLE midsunday_backup_manifest;
+             CREATE VIEW midsunday_backup_manifest AS
+             SELECT 1 AS id, 1 AS format_version, 1 AS created_at, 8 AS schema_version,
+                    'test' AS app_version, 0 AS conversation_count, 0 AS message_count,
+                    0 AS saved_memory_count, 0 AS awareness_item_count;"
+        ).unwrap();
+        drop(view_writer);
+
+        let rows_writer = Connection::open(&rows_path).unwrap();
+        rows_writer.execute_batch(
+            "DROP TABLE midsunday_backup_manifest;
+             CREATE TABLE midsunday_backup_manifest (
+                id INTEGER, format_version INTEGER, created_at INTEGER, schema_version INTEGER,
+                app_version TEXT, conversation_count INTEGER, message_count INTEGER,
+                saved_memory_count INTEGER, awareness_item_count INTEGER
+             );
+             INSERT INTO midsunday_backup_manifest VALUES (1, 1, 1, 8, 'test', 0, 0, 0, 0);
+             INSERT INTO midsunday_backup_manifest VALUES (2, 1, 1, 8, 'test', 0, 0, 0, 0);"
+        ).unwrap();
+        drop(rows_writer);
+
+        let view_error = ConversationStore::verify_backup_file(&view_path).unwrap_err();
+        let rows_error = ConversationStore::verify_backup_file(&rows_path).unwrap_err();
+        assert!(view_error.contains("regular SQLite table"));
+        assert!(rows_error.contains("exactly one metadata record"));
+
+        let _ = std::fs::remove_file(view_path);
+        let _ = std::fs::remove_file(rows_path);
     }
 
     #[test]

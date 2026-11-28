@@ -2678,3 +2678,14 @@ The summary helps users understand what a verified database backup contains befo
 - [ ] Validate manifest creation and legacy-backup compatibility using real user databases on physical Windows, Linux, and macOS devices.
 
 The manifest is metadata inside the unencrypted SQLite backup; it is not a cryptographic signature and does not provide confidentiality or tamper-proof authenticity. Restore remains unavailable.
+
+### 2026-11-28 — Strict backup manifest structure checks (Batch #265)
+
+- [x] Distinguish a genuinely absent manifest (legacy backup) from a manifest name occupied by a view or another unexpected SQLite object.
+- [x] Require a present manifest to be a regular SQLite table containing exactly one metadata row before reading its fields.
+- [x] Reject view-based manifest lookalikes and extra metadata rows rather than silently treating them as legacy or trusting only the row with ID 1.
+- [x] Preserve read-only verification and support for genuine pre-manifest legacy backups.
+- [x] Add regression tests for legacy compatibility, view lookalikes, and multiple manifest rows.
+- [ ] Validate strict manifest handling against real legacy and current backups on physical Windows, Linux, and macOS devices.
+
+These structural checks strengthen format validation but do not make the manifest cryptographically authentic or tamper-proof. The backup remains unencrypted, and restore remains unavailable.
