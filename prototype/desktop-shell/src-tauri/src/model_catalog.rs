@@ -1,7 +1,7 @@
 //! User-managed inventory of existing local GGUF model files.
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::{fmt::Write as _, fs::{self, File}, io::{BufReader, Read}, path::{Path, PathBuf}, sync::Mutex, time::{SystemTime, UNIX_EPOCH}};
+use std::{fmt::Write as _, fs::{self, File}, io::{BufReader, Read}, path::{Path, PathBuf}, sync::{Arc, Mutex}, time::{SystemTime, UNIX_EPOCH}};
 const MAX_LABEL_BYTES: usize = 512;
 const HASH_BUFFER_BYTES: usize = 1024 * 1024;
 
@@ -19,7 +19,7 @@ pub struct ModelVerification {
     pub status: String,
     pub detail: String,
 }
-pub struct ModelCatalog { path: PathBuf, models: Mutex<Vec<LocalModel>> }
+#[derive(Clone)]\npub struct ModelCatalog { path: PathBuf, models: Arc<Mutex<Vec<LocalModel>>> }
 
 impl ModelCatalog {
     pub fn open(path: &Path) -> Result<Self, String> {
@@ -29,7 +29,7 @@ impl ModelCatalog {
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Vec::new(),
             Err(e) => return Err(format!("Could not read local model catalogue: {e}")),
         };
-        Ok(Self { path: path.to_path_buf(), models: Mutex::new(models) })
+        Ok(Self { path: path.to_path_buf(), models: Arc::new(Mutex::new(models)) })
     }
     pub fn list(&self) -> Result<Vec<LocalModel>, String> {
         self.models.lock().map(|m| m.clone()).map_err(|_| "Local model catalogue is unavailable.".to_owned())

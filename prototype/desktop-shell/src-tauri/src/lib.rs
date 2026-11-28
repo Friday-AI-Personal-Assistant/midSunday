@@ -329,30 +329,57 @@ struct DiagnosticsSnapshot {
     database: DatabaseHealth,
     model_count: Option<usize>,
     runtime_status: String,
+    server_executable: setup_readiness::SetupFileCheck,
+    model_file: ModelVerification,
 }
 
 #[tauri::command]
-fn get_diagnostics_snapshot(
+async fn get_diagnostics_snapshot(
     store: State<'_, ConversationStore>,
     catalog: State<'_, ModelCatalog>,
+    settings: State<'_, EngineSettingsStore>,
     manager: State<'_, RuntimeManager>,
-) -> DiagnosticsSnapshot {
+) -> Result<DiagnosticsSnapshot, String> {
     let database = store.health_check().unwrap_or_else(|_| DatabaseHealth {
         status: "unavailable".to_owned(),
         schema_version: 0,
         detail: "The local database integrity check could not complete. Check disk space and file permissions; preserve the database before attempting recovery.".to_owned(),
     });
-    let model_count = catalog.list().ok().map(|models| models.len());
+    let models = catalog.list();
+    let model_count = models.as_ref().ok().map(|items| items.len());
     let runtime_status = manager.snapshot().map(|snapshot| snapshot.status)
         .unwrap_or_else(|_| "unavailable".to_owned());
-    DiagnosticsSnapshot {
+    let engine_settings = settings.get()?;
+    let catalog = catalog.inner().clone();
+    let executable_path = engine_settings.executable_path;
+    let model_path = engine_settings.model_path;
+    let (server_executable, model_file) = tauri::async_runtime::spawn_blocking(move || {
+        let readiness = setup_readiness::check_local_setup(&executable_path, &model_path);
+        let model_file = if readiness.model.status != "ready" {
+            ModelVerification {
+                valid: false,
+                status: readiness.model.status.clone(),
+                detail: readiness.model.detail.clone(),
+            }
+        } else {
+            catalog.verify_path(&model_path).unwrap_or_else(|_| ModelVerification {
+                valid: false,
+                status: "unavailable".to_owned(),
+                detail: "The configured model could not be verified. Check that the file is accessible and try again.".to_owned(),
+            })
+        };
+        (readiness.executable, model_file)
+    }).await.map_err(|_| "The local file-diagnostics worker could not complete.".to_owned())?;
+    Ok(DiagnosticsSnapshot {
         app_version: env!("CARGO_PKG_VERSION"),
         operating_system: std::env::consts::OS,
         architecture: std::env::consts::ARCH,
         database,
         model_count,
         runtime_status,
-    }
+        server_executable,
+        model_file,
+    })
 }
 
 #[tauri::command]

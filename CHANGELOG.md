@@ -258,3 +258,4 @@ All notable project changes are recorded here. The project is in foundation/prot
 
 
 - Batch #239: Added Settings → Diagnostics with an explicit read-only local health check for app version/platform, SQLite integrity and schema version, registered model count, and managed engine state. The check does not read conversation or memory content, open model files, expose local paths, repair data, or send telemetry. Added a Rust database-health regression test.
+\n\n## 2026-11-28\n- Expanded the local Diagnostics health check to inspect configured llama.cpp executable readiness and the selected GGUF file. Registered models are checked against their saved size and SHA-256 fingerprint; unregistered files receive only a GGUF header check. Slow file verification runs off the UI thread, remains read-only, and never launches binaries or exposes paths.\n
