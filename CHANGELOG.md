@@ -345,3 +345,8 @@ All notable project changes are recorded here. The project is in foundation/prot
 - Added regression tests for successful read-only verification of a real SQLite backup, including byte-for-byte confirmation that verification does not modify it.
 - Added rejection coverage for empty files, non-SQLite data, unsupported extensions, incomplete midSunday schemas, and unsupported schema versions.
 - Updated the roadmap to mark the implemented backup-verification test coverage complete. Physical-device validation remains pending.
+
+
+## 2026-11-28 — Batch #261
+- Extended read-only backup verification to report aggregate counts for conversations, messages, saved memories, and Awareness items, helping users understand a backup before a future restore workflow.
+- Kept the summary free of personal text, titles, timestamps, record IDs, and paths. Added regression assertions for all four counts; verification remains non-mutating.

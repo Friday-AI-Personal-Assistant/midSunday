@@ -208,6 +208,10 @@ pub struct DatabaseBackupVerification {
     pub valid: bool,
     pub schema_version: i64,
     pub file_size_bytes: u64,
+    pub conversation_count: u64,
+    pub message_count: u64,
+    pub saved_memory_count: u64,
+    pub awareness_item_count: u64,
     pub detail: String,
 }
 
@@ -253,10 +257,31 @@ impl ConversationStore {
                 return Err("The selected file is missing required midSunday database structures. It is not a supported backup.".to_owned());
             }
         }
+        let count_rows = |table: &str| -> Result<u64, String> {
+            let sql = match table {
+                "conversations" => "SELECT COUNT(*) FROM conversations",
+                "conversation_messages" => "SELECT COUNT(*) FROM conversation_messages",
+                "saved_memories" => "SELECT COUNT(*) FROM saved_memories",
+                "awareness_items" => "SELECT COUNT(*) FROM awareness_items",
+                _ => return Err("Unsupported backup summary field.".to_owned()),
+            };
+            backup.query_row(sql, [], |row| row.get::<_, i64>(0))
+                .map(|count| count.max(0) as u64)
+                .map_err(|_| "The backup's safe content summary could not be read.".to_owned())
+        };
+        let conversation_count = count_rows("conversations")?;
+        let message_count = count_rows("conversation_messages")?;
+        let saved_memory_count = count_rows("saved_memories")?;
+        let awareness_item_count = count_rows("awareness_items")?;
+
         Ok(DatabaseBackupVerification {
             valid: true,
             schema_version,
             file_size_bytes: metadata.len(),
+            conversation_count,
+            message_count,
+            saved_memory_count,
+            awareness_item_count,
             detail: "SQLite integrity and required midSunday database structures passed read-only verification.".to_owned(),
         })
     }
@@ -1844,6 +1869,7 @@ mod tests {
         let chat = store.create("Verification fixture").unwrap();
         store.append(chat.id, "user", "Private fixture content").unwrap();
         store.create_memory("Private memory fixture").unwrap();
+        store.create_awareness_item("Private Awareness fixture", "interests").unwrap();
         let backup_path = backup_test_path("verify-valid", "sqlite3");
 
         store.backup_to(&backup_path).unwrap();
@@ -1854,6 +1880,10 @@ mod tests {
         assert!(verification.valid);
         assert_eq!(verification.schema_version, 8);
         assert_eq!(verification.file_size_bytes, before.len() as u64);
+        assert_eq!(verification.conversation_count, 1);
+        assert_eq!(verification.message_count, 1);
+        assert_eq!(verification.saved_memory_count, 1);
+        assert_eq!(verification.awareness_item_count, 1);
         assert!(verification.detail.contains("read-only"));
         assert_eq!(before, after, "verification must not modify the backup");
 

@@ -1276,8 +1276,8 @@ export default function App() {
         filters: [{ name: "SQLite database backup", extensions: ["sqlite3"] }],
       });
       if (!selected || Array.isArray(selected)) return;
-      const result = await invoke<{ valid: boolean; schemaVersion: number; fileSizeBytes: number; detail: string }>("verify_local_database_backup", { filePath: selected });
-      setDatabaseVerifyStatus(result.detail + " Schema v" + result.schemaVersion + " · " + formatModelSize(result.fileSizeBytes) + ". The selected file was not changed.");
+      const result = await invoke<{ valid: boolean; schemaVersion: number; fileSizeBytes: number; conversationCount: number; messageCount: number; savedMemoryCount: number; awarenessItemCount: number; detail: string }>("verify_local_database_backup", { filePath: selected });
+      setDatabaseVerifyStatus(result.detail + " Schema v" + result.schemaVersion + " · " + formatModelSize(result.fileSizeBytes) + ". Contains " + result.conversationCount + " conversations, " + result.messageCount + " messages, " + result.savedMemoryCount + " saved memories, and " + result.awarenessItemCount + " Awareness items. The selected file was not changed.");
     } catch (error) {
       setDatabaseVerifyError(typeof error === "string" ? error : "The selected file could not be verified. It was not changed.");
     } finally {

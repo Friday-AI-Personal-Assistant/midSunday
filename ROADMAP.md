@@ -2645,3 +2645,14 @@ This first backup covers the SQLite database only. Model files and separate JSON
 - [ ] Validate read-only verification and malformed-file handling on physical Windows, Linux, and macOS devices.
 
 Verification does not restore, repair, or modify the selected file. It only checks backups created for the current database schema; it does not establish that the backup can be restored successfully.
+
+
+### 2026-11-28 — Privacy-safe backup contents summary (Batch #261)
+
+- [x] Extend read-only backup verification with aggregate counts for conversations, messages, saved memories, and Awareness items.
+- [x] Display only aggregate counts alongside schema version and file size; do not reveal text, titles, timestamps, record IDs, or local paths.
+- [x] Keep summary queries read-only and perform them only after integrity, schema, and required-structure checks pass.
+- [x] Add regression assertions for all four counts using a synthetic backup fixture.
+- [ ] Validate count accuracy and narrow-layout readability with real user data on physical Windows, Linux, and macOS devices.
+
+The summary helps users understand what a verified database backup contains before a future restore workflow. Counts are metadata only and do not establish that a restore will succeed.
