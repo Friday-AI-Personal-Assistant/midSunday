@@ -128,11 +128,11 @@ impl LlamaHttpClient {
             }
 
             pending.extend_from_slice(&bytes[..count]);
-            if pending.len() > MAX_STREAM_LINE_BYTES {
-                return Err(LlamaClientError::InvalidResponse);
-            }
 
             while let Some(line_end) = pending.iter().position(|byte| *byte == b'\n') {
+                if line_end > MAX_STREAM_LINE_BYTES {
+                    return Err(LlamaClientError::InvalidResponse);
+                }
                 let mut line: Vec<u8> = pending.drain(..=line_end).collect();
                 line.pop();
                 if line.last() == Some(&b'\r') {
@@ -148,6 +148,12 @@ impl LlamaHttpClient {
                 if cancellation.is_cancelled() {
                     return Err(LlamaClientError::Cancelled);
                 }
+            }
+
+            // Bound the unfinished line, not the total bytes in a socket read:
+            // one read may legitimately contain many short SSE events.
+            if pending.len() > MAX_STREAM_LINE_BYTES {
+                return Err(LlamaClientError::InvalidResponse);
             }
         }
 
