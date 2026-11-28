@@ -1299,6 +1299,148 @@ mod restore_safety_archive_tests {
     }
 
     #[test]
+    fn guarded_restore_rolls_back_after_injected_initial_copy_failure() {
+        use std::cell::Cell;
+        let directory = temp_dir();
+        let source_store = ConversationStore::open(&directory.join("source-live.sqlite3")).unwrap();
+        let source_conversation = source_store.create("Replacement source").unwrap();
+        source_store.append(source_conversation.id, "user", "Replacement content").unwrap();
+        let source_backup = directory.join("source.sqlite3");
+        source_store.backup_to(&source_backup).unwrap();
+        let source_candidate = ConversationStore::prepare_verified_restore_candidate(&source_backup).unwrap();
+
+        let target_store = ConversationStore::open(&directory.join("target-live.sqlite3")).unwrap();
+        let original_conversation = target_store.create("Original database").unwrap();
+        target_store.append(original_conversation.id, "user", "Original content survives a failed first copy").unwrap();
+        let rollback_backup = directory.join("rollback.sqlite3");
+        target_store.backup_to(&rollback_backup).unwrap();
+        let rollback_candidate = ConversationStore::prepare_verified_restore_candidate(&rollback_backup).unwrap();
+
+        let mut guard = target_store.try_acquire_restore_lock().unwrap();
+        let copy_calls = Cell::new(0usize);
+        let error = guard.copy_from_candidate_with_operations(
+            &source_candidate,
+            &rollback_candidate,
+            |current, candidate| {
+                let call = copy_calls.get();
+                copy_calls.set(call + 1);
+                if call == 0 {
+                    Err("injected initial candidate copy failure".to_owned())
+                } else {
+                    current.copy_from_candidate(candidate)
+                }
+            },
+            |current, expected| current.verify_current_matches(expected),
+        ).unwrap_err();
+
+        assert!(error.contains("pre-restore database candidate was successfully restored and verified"));
+        guard.verify_current_matches(&rollback_candidate).unwrap();
+        drop(guard);
+        let messages = target_store.messages(original_conversation.id).unwrap();
+        assert_eq!(messages.len(), 1);
+        assert_eq!(messages[0].content, "Original content survives a failed first copy");
+    }
+
+    #[test]
+    fn guarded_restore_reports_critical_error_when_rollback_copy_fails() {
+        use std::cell::Cell;
+        let directory = temp_dir();
+        let source_store = ConversationStore::open(&directory.join("source-live.sqlite3")).unwrap();
+        let source_conversation = source_store.create("Replacement source").unwrap();
+        source_store.append(source_conversation.id, "user", "Replacement content").unwrap();
+        let source_backup = directory.join("source.sqlite3");
+        source_store.backup_to(&source_backup).unwrap();
+        let source_candidate = ConversationStore::prepare_verified_restore_candidate(&source_backup).unwrap();
+
+        let target_store = ConversationStore::open(&directory.join("target-live.sqlite3")).unwrap();
+        target_store.create("Original database").unwrap();
+        let rollback_backup = directory.join("rollback.sqlite3");
+        target_store.backup_to(&rollback_backup).unwrap();
+        let rollback_candidate = ConversationStore::prepare_verified_restore_candidate(&rollback_backup).unwrap();
+
+        let mut guard = target_store.try_acquire_restore_lock().unwrap();
+        let copy_calls = Cell::new(0usize);
+        let verify_calls = Cell::new(0usize);
+        let error = guard.copy_from_candidate_with_operations(
+            &source_candidate,
+            &rollback_candidate,
+            |current, candidate| {
+                let call = copy_calls.get();
+                copy_calls.set(call + 1);
+                if call == 1 {
+                    Err("injected rollback copy failure".to_owned())
+                } else {
+                    current.copy_from_candidate(candidate)
+                }
+            },
+            |current, expected| {
+                let call = verify_calls.get();
+                verify_calls.set(call + 1);
+                if call == 0 {
+                    Err("injected requested-candidate verification failure".to_owned())
+                } else {
+                    current.verify_current_matches(expected)
+                }
+            },
+        ).unwrap_err();
+
+        assert!(error.contains("CRITICAL:"));
+        assert!(error.contains("injected rollback copy failure"));
+        assert!(error.contains("do not continue using this database"));
+    }
+
+    #[test]
+    fn guarded_restore_reports_critical_error_when_rollback_verification_fails() {
+        use std::cell::Cell;
+        let directory = temp_dir();
+        let source_store = ConversationStore::open(&directory.join("source-live.sqlite3")).unwrap();
+        let source_conversation = source_store.create("Replacement source").unwrap();
+        source_store.append(source_conversation.id, "user", "Replacement content").unwrap();
+        let source_backup = directory.join("source.sqlite3");
+        source_store.backup_to(&source_backup).unwrap();
+        let source_candidate = ConversationStore::prepare_verified_restore_candidate(&source_backup).unwrap();
+
+        let target_store = ConversationStore::open(&directory.join("target-live.sqlite3")).unwrap();
+        let original_conversation = target_store.create("Original database").unwrap();
+        target_store.append(original_conversation.id, "user", "Original content survives a failed verification").unwrap();
+        let rollback_backup = directory.join("rollback.sqlite3");
+        target_store.backup_to(&rollback_backup).unwrap();
+        let rollback_candidate = ConversationStore::prepare_verified_restore_candidate(&rollback_backup).unwrap();
+
+        let mut guard = target_store.try_acquire_restore_lock().unwrap();
+        let verify_calls = Cell::new(0usize);
+        let error = guard.copy_from_candidate_with_operations(
+            &source_candidate,
+            &rollback_candidate,
+            |current, candidate| current.copy_from_candidate(candidate),
+            |current, expected| {
+                let call = verify_calls.get();
+                verify_calls.set(call + 1);
+                if call < 2 {
+                    Err(if call == 0 {
+                        "injected requested-candidate verification failure".to_owned()
+                    } else {
+                        "injected rollback verification failure".to_owned()
+                    })
+                } else {
+                    current.verify_current_matches(expected)
+                }
+            },
+        ).unwrap_err();
+
+        assert!(error.contains("CRITICAL:"));
+        assert!(error.contains("injected rollback verification failure"));
+        assert!(error.contains("Keep the encrypted pre-restore safety archive"));
+        // The injected verifier deliberately failed, so perform an independent check
+        // to prove the rollback copy itself restored the original records.
+        guard.verify_current_matches(&rollback_candidate).unwrap();
+        drop(guard);
+        let messages = target_store.messages(original_conversation.id).unwrap();
+        assert_eq!(messages.len(), 1);
+        assert_eq!(messages[0].content, "Original content survives a failed verification");
+    }
+
+    #[test]
     fn guarded_live_verification_rejects_a_different_inventory() {
         let directory = temp_dir();
         let source_store = ConversationStore::open(&directory.join("source-live.sqlite3")).unwrap();

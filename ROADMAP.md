@@ -2821,3 +2821,14 @@ This batch strengthens private verification only. No restore command or UI is en
 - [ ] Complete physical Windows, Linux, and macOS validation before enabling restore.
 
 This batch adds a private rollback building block only. It does not register a restore command, enable UI restore, or claim crash-safe atomicity.
+
+### 2026-11-28 — Restore rollback failure-boundary tests (Batch #304)
+
+- [x] Add deterministic injection for an initial candidate-copy failure and verify the pre-restore candidate is restored.
+- [x] Add deterministic injection for rollback-copy failure and assert a critical recovery error.
+- [x] Add deterministic injection for rollback-verification failure and independently confirm the rollback copy restored the original application records.
+- [ ] Persist a recovery-blocked state when rollback cannot be verified and prevent normal database use until an explicit recovery flow succeeds.
+- [ ] Demonstrate crash/restart recovery and failure injection at every transaction boundary.
+- [ ] Complete physical Windows, Linux, and macOS validation before enabling restore.
+
+This batch expands in-process failure-injection coverage only. It does not enable a restore command or UI and does not claim crash-safe recovery.

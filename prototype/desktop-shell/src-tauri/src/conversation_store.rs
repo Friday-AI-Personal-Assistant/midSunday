@@ -384,18 +384,39 @@ impl RestoreDatabaseGuard<'_> {
         &mut self,
         candidate: &VerifiedRestoreCandidate,
         rollback_candidate: &VerifiedRestoreCandidate,
-        mut verify: F,
+        verify: F,
     ) -> Result<(), String>
     where
         F: FnMut(&Self, &VerifiedRestoreCandidate) -> Result<(), String>,
     {
-        let restore_result = self.copy_from_candidate(candidate)
+        self.copy_from_candidate_with_operations(
+            candidate,
+            rollback_candidate,
+            |guard, source| guard.copy_from_candidate(source),
+            verify,
+        )
+    }
+
+    /// Internal operation seams permit deterministic failures at each copy and
+    /// verification boundary, including the rollback path.
+    pub(crate) fn copy_from_candidate_with_operations<C, V>(
+        &mut self,
+        candidate: &VerifiedRestoreCandidate,
+        rollback_candidate: &VerifiedRestoreCandidate,
+        mut copy: C,
+        mut verify: V,
+    ) -> Result<(), String>
+    where
+        C: FnMut(&mut Self, &VerifiedRestoreCandidate) -> Result<(), String>,
+        V: FnMut(&Self, &VerifiedRestoreCandidate) -> Result<(), String>,
+    {
+        let restore_result = copy(self, candidate)
             .and_then(|_| verify(self, candidate));
         match restore_result {
             Ok(()) => Ok(()),
             Err(restore_error) => {
-                let rollback_result = self.copy_from_candidate(rollback_candidate)
-                    .and_then(|_| self.verify_current_matches(rollback_candidate));
+                let rollback_result = copy(self, rollback_candidate)
+                    .and_then(|_| verify(self, rollback_candidate));
                 match rollback_result {
                     Ok(()) => Err(format!(
                         "The requested database candidate could not be applied and verified ({restore_error}); the pre-restore database candidate was successfully restored and verified."

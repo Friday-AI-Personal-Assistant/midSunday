@@ -457,3 +457,8 @@ All notable project changes are recorded here. The project is in foundation/prot
 - Added a guarded rollback-aware candidate operation: if applying or verifying a staged restore candidate fails, the verified pre-restore candidate is copied back into the existing live SQLite connection and checked with full destination verification.
 - Added deterministic post-copy verification failure injection proving that rollback restores the original conversation content.
 - Critical rollback-verification failures now produce an explicit recovery error directing the caller to preserve the encrypted safety archive and stop using the database. Restore remains unavailable pending persistent recovery blocking, crash/restart recovery, full transaction-boundary failure injection, and physical-device validation.
+
+## 2026-11-28 — Batch #304
+- Expanded the guarded restore operation seams so tests can inject failures in candidate copy, candidate verification, rollback copy, and rollback verification.
+- Added regression tests proving a failed initial copy rolls back successfully, while rollback-copy and rollback-verification failures return the explicit critical recovery error. The rollback-verification test independently confirms the original records were copied back.
+- Restore remains unavailable pending a persistent recovery-blocked state, crash/restart recovery, remaining transaction-boundary tests, and physical-device validation.
