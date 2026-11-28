@@ -226,4 +226,62 @@ mod tests {
         assert!(decrypt_file(&encrypted, &restored, "a-long-test-backup-password").is_err());
         let _ = fs::remove_dir_all(plain.parent().unwrap());
     }
+
+    #[test]
+    fn encrypted_backup_supports_empty_and_exact_chunk_payloads() {
+        for (length, suffix) in [(0usize, "empty"), (CHUNK_BYTES, "exact")] {
+            let (plain, encrypted, restored) = paths();
+            let source = (0..length).map(|index| (index % 239) as u8).collect::<Vec<_>>();
+            fs::write(&plain, &source).unwrap();
+            encrypt_file(&plain, &encrypted, "a-long-test-backup-password").unwrap();
+            decrypt_file(&encrypted, &restored, "a-long-test-backup-password").unwrap();
+            assert_eq!(fs::read(&restored).unwrap(), source, "{suffix} payload did not round-trip");
+            let _ = fs::remove_dir_all(plain.parent().unwrap());
+        }
+    }
+
+    #[test]
+    fn encrypted_backup_rejects_header_changes_oversized_chunks_and_trailing_bytes() {
+        let (plain, encrypted, restored) = paths();
+        fs::write(&plain, b"authenticated payload").unwrap();
+        encrypt_file(&plain, &encrypted, "a-long-test-backup-password").unwrap();
+        let original = fs::read(&encrypted).unwrap();
+
+        let mut changed_header = original.clone();
+        changed_header[0] ^= 1;
+        fs::write(&encrypted, &changed_header).unwrap();
+        assert!(decrypt_file(&encrypted, &restored, "a-long-test-backup-password").is_err());
+        assert!(!restored.exists());
+
+        let mut oversized_chunk = original.clone();
+        let invalid_length = (CHUNK_BYTES as u32 + 1).to_le_bytes();
+        let length_start = MAGIC.len() + SALT_BYTES + NONCE_BYTES;
+        oversized_chunk[length_start..length_start + 4].copy_from_slice(&invalid_length);
+        fs::write(&encrypted, &oversized_chunk).unwrap();
+        assert!(decrypt_file(&encrypted, &restored, "a-long-test-backup-password").is_err());
+        assert!(!restored.exists());
+
+        let mut trailing = original;
+        trailing.push(0xA5);
+        fs::write(&encrypted, trailing).unwrap();
+        assert!(decrypt_file(&encrypted, &restored, "a-long-test-backup-password").is_err());
+        assert!(!restored.exists());
+        let _ = fs::remove_dir_all(plain.parent().unwrap());
+    }
+
+    #[test]
+    fn encryption_and_decryption_never_overwrite_existing_destinations() {
+        let (plain, encrypted, restored) = paths();
+        fs::write(&plain, b"private backup payload").unwrap();
+        fs::write(&encrypted, b"keep existing encrypted file").unwrap();
+        assert!(encrypt_file(&plain, &encrypted, "a-long-test-backup-password").is_err());
+        assert_eq!(fs::read(&encrypted).unwrap(), b"keep existing encrypted file");
+
+        fs::write(&encrypted, b"not an encrypted backup").unwrap();
+        fs::write(&restored, b"keep existing restored file").unwrap();
+        assert!(decrypt_file(&encrypted, &restored, "a-long-test-backup-password").is_err());
+        assert_eq!(fs::read(&restored).unwrap(), b"keep existing restored file");
+        let _ = fs::remove_dir_all(plain.parent().unwrap());
+    }
+
 }

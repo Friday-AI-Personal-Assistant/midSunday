@@ -1,3 +1,7 @@
+## 2026-11-28 — Batch #276
+- Expanded encrypted-backup regression coverage for empty files, exact chunk boundaries, modified headers, oversized chunk declarations, trailing bytes, and destination no-overwrite guarantees.
+- Confirmed malformed encrypted containers fail without leaving partial plaintext output. Restore and cloud backup remain unavailable.
+
 ## 2026-11-28 — Batch #270
 - Added a separate password-protected .msbackup format using Argon2id and XChaCha20-Poly1305 authenticated encryption, processed in bounded 1 MiB chunks.
 - Encrypted backups are decrypted to a temporary file and checked with the existing SQLite integrity and manifest verifier before publication. Existing .msbackup destinations are never overwritten.

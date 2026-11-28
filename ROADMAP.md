@@ -2715,3 +2715,14 @@ The inventory reports aggregate counts only. App-preference records may contain 
 - [ ] Validate encrypted backup creation, verification, password handling, large databases, low-space failures, and recovery on physical Windows, Linux, and macOS devices.
 
 Encrypted backups remain local-only. Password loss makes an encrypted backup unrecoverable; midSunday does not store or reset the password. Cloud backup and restore are not implemented.
+
+
+### 2026-11-28 — Encrypted backup format regression hardening (Batch #276)
+
+- [x] Add round-trip coverage for empty payloads and exact 1 MiB chunk boundaries.
+- [x] Reject modified format headers, oversized declared chunks, and bytes after the authenticated final marker.
+- [x] Verify encryption and decryption preserve pre-existing destination files and never overwrite them.
+- [ ] Implement restore only after a safe live-database replacement design is validated, including crash recovery, preservation of the current database, schema compatibility, and app-session coordination.
+- [ ] Validate encrypted backup creation, verification, and restore on physical Windows, Linux, and macOS devices.
+
+This batch strengthens the encrypted container's regression coverage. It does not add restore, cloud transfer, or physical-device validation.
