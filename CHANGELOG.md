@@ -1,4 +1,7 @@
 ## 2026-11-28
+- Fixed a JSX closing-brace error in the Local AI settings results panel. Also ensure an invalidated in-flight setup check cannot leave the busy state stuck, and clear old results when selecting a model from the library.
+
+## 2026-11-28
 - Added a user-triggered local setup file check for the llama.cpp server and GGUF model. The server check validates file presence/type and platform executable permissions without launching it; the model check validates a regular .gguf file, non-empty data and GGUF header. Results appear in first-run onboarding and Local AI settings, run off the UI thread, and are invalidated when paths change. Existing pre-launch SHA-256 verification remains authoritative for registered models.
 
 - Added Windows live GPU monitoring through PDH GPU Engine and Dedicated Usage counters, generic adapter grouping, peak-engine semantics, optional DXGI memory capacity, and explicit partial/unsupported reporting.

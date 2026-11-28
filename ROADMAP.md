@@ -2406,3 +2406,11 @@ The guide is a lightweight onboarding slice, not a complete first-launch wizard.
 - [ ] Validate actual llama-server binaries, file permissions, valid/invalid GGUF files, and user-facing error states on physical Windows, Linux, and macOS devices.
 
 The readiness check confirms only file presence/type/permissions and the GGUF header. It does not execute the server, test architecture/runtime dependencies, prove model compatibility, or estimate resource fit. A green file check is not a guarantee that the engine will start successfully.
+
+
+### 2026-11-28 — Local setup check JSX and stale-state correction (Batch #235)
+
+- [x] Close the conditional runtime-error JSX expression so the settings page compiles.
+- [x] Clear the in-progress indicator when a file-path edit invalidates an older asynchronous setup check.
+- [x] Invalidate setup results when choosing a different model from the local model library.
+- [ ] Confirm the correction with all three cross-platform CI jobs.
