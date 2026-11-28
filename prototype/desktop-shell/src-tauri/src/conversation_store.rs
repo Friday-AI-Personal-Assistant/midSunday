@@ -2088,7 +2088,7 @@ mod tests {
         assert_eq!(verification.awareness_history_count, 1);
         assert_eq!(verification.awareness_suppression_count, 0);
         assert_eq!(verification.awareness_suggestion_count, 0);
-        assert_eq!(verification.app_preference_count, 1);
+        assert_eq!(verification.app_preference_count, 2);
         assert!(verification.detail.contains("read-only"));
         assert_eq!(before, after, "verification must not modify the backup");
 
