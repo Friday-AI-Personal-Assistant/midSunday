@@ -364,3 +364,9 @@ All notable project changes are recorded here. The project is in foundation/prot
 - Hardened read-only SQLite backup verification so an absent manifest is treated as legacy only when the manifest object is genuinely absent. A view or other unexpected SQLite object using the manifest name is rejected.
 - Required every present manifest table to contain exactly one metadata row before its fields are trusted; malformed lookalikes and extra rows now fail closed.
 - Added regression tests for valid legacy backups, manifest views, and multiple metadata rows. Verification remains read-only; this does not add encryption, cryptographic authenticity, or restore.
+
+
+## 2026-11-28 — Batch #266
+- Upgraded newly created local SQLite backup manifests to format v2, adding privacy-safe aggregate counts for Awareness activity/history, relearning exclusions, pending Learning Review suggestions, and app-preference records.
+- Extended read-only verification to compare all five additional counts with the database. Existing v1 manifests and pre-manifest legacy backups remain supported.
+- Expanded the verification summary with counts only; preference values and all personal content remain hidden. The backup is still unencrypted and restore remains unavailable.

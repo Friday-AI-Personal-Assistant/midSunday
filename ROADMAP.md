@@ -2689,3 +2689,14 @@ The manifest is metadata inside the unencrypted SQLite backup; it is not a crypt
 - [ ] Validate strict manifest handling against real legacy and current backups on physical Windows, Linux, and macOS devices.
 
 These structural checks strengthen format validation but do not make the manifest cryptographically authentic or tamper-proof. The backup remains unencrypted, and restore remains unavailable.
+
+### 2026-11-28 — Expanded backup inventory manifest v2 (Batch #266)
+
+- [x] Upgrade newly created backup manifests to format v2 with aggregate counts for Awareness activity, Awareness history, relearning exclusions, pending Learning Review suggestions, and app-preference records.
+- [x] Verify all five new inventory counts against the read-only database contents before publishing or accepting a v2 backup.
+- [x] Preserve compatibility with existing v1 manifests and genuine pre-manifest legacy backups; v1 verification continues checking its original four counts.
+- [x] Display the expanded inventory without exposing preference values, content, titles, record identifiers, hashes, or local paths.
+- [x] Add regression coverage for v2 inventory values and mismatch rejection while retaining the existing v1/legacy validation paths.
+- [ ] Validate v1, v2, and legacy backup inventory verification with real databases on physical Windows, Linux, and macOS devices.
+
+The inventory reports aggregate counts only. App-preference records may contain local configuration values, but those values are never displayed by verification. This remains an unencrypted SQLite backup; encryption and restore are not implemented.

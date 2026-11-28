@@ -212,6 +212,11 @@ pub struct DatabaseBackupVerification {
     pub message_count: u64,
     pub saved_memory_count: u64,
     pub awareness_item_count: u64,
+    pub awareness_activity_count: u64,
+    pub awareness_history_count: u64,
+    pub awareness_suppression_count: u64,
+    pub awareness_suggestion_count: u64,
+    pub app_preference_count: u64,
     pub backup_format_version: Option<i64>,
     pub created_at: Option<i64>,
     pub app_version: Option<String>,
@@ -266,6 +271,11 @@ impl ConversationStore {
                 "conversation_messages" => "SELECT COUNT(*) FROM conversation_messages",
                 "saved_memories" => "SELECT COUNT(*) FROM saved_memories",
                 "awareness_items" => "SELECT COUNT(*) FROM awareness_items",
+                "awareness_activity" => "SELECT COUNT(*) FROM awareness_activity",
+                "awareness_history" => "SELECT COUNT(*) FROM awareness_history",
+                "awareness_suppressions" => "SELECT COUNT(*) FROM awareness_suppressions",
+                "awareness_suggestions" => "SELECT COUNT(*) FROM awareness_suggestions",
+                "app_preferences" => "SELECT COUNT(*) FROM app_preferences",
                 _ => return Err("Unsupported backup summary field.".to_owned()),
             };
             backup.query_row(sql, [], |row| row.get::<_, i64>(0))
@@ -276,6 +286,11 @@ impl ConversationStore {
         let message_count = count_rows("conversation_messages")?;
         let saved_memory_count = count_rows("saved_memories")?;
         let awareness_item_count = count_rows("awareness_items")?;
+        let awareness_activity_count = count_rows("awareness_activity")?;
+        let awareness_history_count = count_rows("awareness_history")?;
+        let awareness_suppression_count = count_rows("awareness_suppressions")?;
+        let awareness_suggestion_count = count_rows("awareness_suggestions")?;
+        let app_preference_count = count_rows("app_preferences")?;
 
         // Manifest metadata is optional only for older backups created before format v1.
         // If a manifest exists, every field and every recorded aggregate must agree.
@@ -298,18 +313,39 @@ impl ConversationStore {
             if manifest_row_count != 1 {
                 return Err("The backup manifest must contain exactly one metadata record. Do not restore this file.".to_owned());
             }
-            let manifest: (i64, i64, i64, String, i64, i64, i64, i64) = backup.query_row(
-                "SELECT format_version, created_at, schema_version, app_version, conversation_count, message_count, saved_memory_count, awareness_item_count FROM midsunday_backup_manifest WHERE id = 1",
+            let format_version: i64 = backup.query_row(
+                "SELECT format_version FROM midsunday_backup_manifest WHERE id = 1",
                 [],
-                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?, row.get(6)?, row.get(7)?)),
+                |row| row.get(0),
             ).map_err(|_| "The backup manifest is missing or malformed. Do not restore this file.".to_owned())?;
-            if manifest.0 != 1 || manifest.1 <= 0 || manifest.2 != schema_version || manifest.3.trim().is_empty()
-                || manifest.4 < 0 || manifest.5 < 0 || manifest.6 < 0 || manifest.7 < 0
-                || manifest.4 as u64 != conversation_count || manifest.5 as u64 != message_count
-                || manifest.6 as u64 != saved_memory_count || manifest.7 as u64 != awareness_item_count {
+            let (created_at, manifest_schema, app_version, base_counts): (i64, i64, String, (i64, i64, i64, i64)) =
+                backup.query_row(
+                    "SELECT created_at, schema_version, app_version, conversation_count, message_count, saved_memory_count, awareness_item_count FROM midsunday_backup_manifest WHERE id = 1",
+                    [],
+                    |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, (row.get(3)?, row.get(4)?, row.get(5)?, row.get(6)?))),
+                ).map_err(|_| "The backup manifest is missing or malformed. Do not restore this file.".to_owned())?;
+            if !matches!(format_version, 1 | 2) || created_at <= 0 || manifest_schema != schema_version || app_version.trim().is_empty()
+                || base_counts.0 < 0 || base_counts.1 < 0 || base_counts.2 < 0 || base_counts.3 < 0
+                || base_counts.0 as u64 != conversation_count || base_counts.1 as u64 != message_count
+                || base_counts.2 as u64 != saved_memory_count || base_counts.3 as u64 != awareness_item_count {
                 return Err("The backup manifest is unsupported or does not match the verified database contents. Do not restore this file.".to_owned());
             }
-            (Some(manifest.0), Some(manifest.1), Some(manifest.3))
+            if format_version == 2 {
+                let extended: (i64, i64, i64, i64, i64) = backup.query_row(
+                    "SELECT awareness_activity_count, awareness_history_count, awareness_suppression_count, awareness_suggestion_count, app_preference_count FROM midsunday_backup_manifest WHERE id = 1",
+                    [],
+                    |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?)),
+                ).map_err(|_| "The version 2 backup manifest is incomplete. Do not restore this file.".to_owned())?;
+                if extended.0 < 0 || extended.1 < 0 || extended.2 < 0 || extended.3 < 0 || extended.4 < 0
+                    || extended.0 as u64 != awareness_activity_count
+                    || extended.1 as u64 != awareness_history_count
+                    || extended.2 as u64 != awareness_suppression_count
+                    || extended.3 as u64 != awareness_suggestion_count
+                    || extended.4 as u64 != app_preference_count {
+                    return Err("The version 2 backup inventory does not match the verified database contents. Do not restore this file.".to_owned());
+                }
+            }
+            (Some(format_version), Some(created_at), Some(app_version))
         };
 
         Ok(DatabaseBackupVerification {
@@ -320,6 +356,11 @@ impl ConversationStore {
             message_count,
             saved_memory_count,
             awareness_item_count,
+            awareness_activity_count,
+            awareness_history_count,
+            awareness_suppression_count,
+            awareness_suggestion_count,
+            app_preference_count,
             backup_format_version,
             created_at,
             app_version,
@@ -631,17 +672,22 @@ impl ConversationStore {
                     conversation_count INTEGER NOT NULL,
                     message_count INTEGER NOT NULL,
                     saved_memory_count INTEGER NOT NULL,
-                    awareness_item_count INTEGER NOT NULL
+                    awareness_item_count INTEGER NOT NULL,
+                    awareness_activity_count INTEGER NOT NULL,
+                    awareness_history_count INTEGER NOT NULL,
+                    awareness_suppression_count INTEGER NOT NULL,
+                    awareness_suggestion_count INTEGER NOT NULL,
+                    app_preference_count INTEGER NOT NULL
                 );"
             ).map_err(|_| "The backup metadata table could not be created.".to_owned())?;
             backup_writer.execute(
-                "INSERT INTO midsunday_backup_manifest (id, format_version, created_at, schema_version, app_version, conversation_count, message_count, saved_memory_count, awareness_item_count) VALUES (1, 1, ?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-                params![created_at, source_schema, env!("CARGO_PKG_VERSION"), counts.0, counts.1, counts.2, counts.3],
+                "INSERT INTO midsunday_backup_manifest (id, format_version, created_at, schema_version, app_version, conversation_count, message_count, saved_memory_count, awareness_item_count, awareness_activity_count, awareness_history_count, awareness_suppression_count, awareness_suggestion_count, app_preference_count) VALUES (1, 2, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+                params![created_at, source_schema, env!("CARGO_PKG_VERSION"), counts.0, counts.1, counts.2, counts.3, count_rows("awareness_activity")?, count_rows("awareness_history")?, count_rows("awareness_suppressions")?, count_rows("awareness_suggestions")?, count_rows("app_preferences")?],
             ).map_err(|_| "The backup metadata could not be saved.".to_owned())?;
             drop(backup_writer);
 
             let verification = Self::verify_backup_file(&temporary_path)?;
-            if !verification.valid || verification.schema_version != source_schema || verification.backup_format_version != Some(1) {
+            if !verification.valid || verification.schema_version != source_schema || verification.backup_format_version != Some(2) {
                 return Err("The new backup did not pass integrity, schema, and manifest verification.".to_owned());
             }
 
@@ -1981,7 +2027,7 @@ mod tests {
         assert_eq!((manifest.4, manifest.5, manifest.6, manifest.7), (1, 1, 1, 1));
         drop(backup);
         let verified = ConversationStore::verify_backup_file(&backup_path).unwrap();
-        assert_eq!(verified.backup_format_version, Some(1));
+        assert_eq!(verified.backup_format_version, Some(2));
         assert!(verified.created_at.unwrap() > 0);
         assert_eq!(verified.app_version.as_deref(), Some(env!("CARGO_PKG_VERSION")));
         let original_backup_bytes = std::fs::read(&backup_path).unwrap();

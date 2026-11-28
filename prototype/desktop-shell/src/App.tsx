@@ -1276,11 +1276,11 @@ export default function App() {
         filters: [{ name: "SQLite database backup", extensions: ["sqlite3"] }],
       });
       if (!selected || Array.isArray(selected)) return;
-      const result = await invoke<{ valid: boolean; schemaVersion: number; fileSizeBytes: number; conversationCount: number; messageCount: number; savedMemoryCount: number; awarenessItemCount: number; backupFormatVersion: number | null; createdAt: number | null; appVersion: string | null; detail: string }>("verify_local_database_backup", { filePath: selected });
-      const manifestSummary = result.backupFormatVersion === 1 && result.createdAt
-        ? " Backup format v1, created " + new Date(result.createdAt * 1000).toLocaleString() + (result.appVersion ? ", by app version " + result.appVersion : "") + "."
+      const result = await invoke<{ valid: boolean; schemaVersion: number; fileSizeBytes: number; conversationCount: number; messageCount: number; savedMemoryCount: number; awarenessItemCount: number; awarenessActivityCount: number; awarenessHistoryCount: number; awarenessSuppressionCount: number; awarenessSuggestionCount: number; appPreferenceCount: number; backupFormatVersion: number | null; createdAt: number | null; appVersion: string | null; detail: string }>("verify_local_database_backup", { filePath: selected });
+      const manifestSummary = result.backupFormatVersion !== null && result.createdAt
+        ? " Backup format v" + result.backupFormatVersion + ", created " + new Date(result.createdAt * 1000).toLocaleString() + (result.appVersion ? ", by app version " + result.appVersion : "") + "."
         : " This is a legacy backup without an embedded manifest.";
-      setDatabaseVerifyStatus(result.detail + " Schema v" + result.schemaVersion + " · " + formatModelSize(result.fileSizeBytes) + "." + manifestSummary + " Contains " + result.conversationCount + " conversations, " + result.messageCount + " messages, " + result.savedMemoryCount + " saved memories, and " + result.awarenessItemCount + " Awareness items. The selected file was not changed.");
+      setDatabaseVerifyStatus(result.detail + " Schema v" + result.schemaVersion + " · " + formatModelSize(result.fileSizeBytes) + "." + manifestSummary + " Inventory: " + result.conversationCount + " conversations, " + result.messageCount + " messages, " + result.savedMemoryCount + " saved memories, " + result.awarenessItemCount + " Awareness items, " + result.awarenessSuggestionCount + " pending learning suggestions, " + result.awarenessHistoryCount + " Awareness history records, " + result.awarenessSuppressionCount + " relearning exclusions, " + result.awarenessActivityCount + " Awareness activity records, and " + result.appPreferenceCount + " app-preference records. The selected file was not changed.");
     } catch (error) {
       setDatabaseVerifyError(typeof error === "string" ? error : "The selected file could not be verified. It was not changed.");
     } finally {
