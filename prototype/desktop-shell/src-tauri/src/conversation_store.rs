@@ -650,6 +650,11 @@ impl ConversationStore {
                     "conversation_messages" => "SELECT COUNT(*) FROM conversation_messages",
                     "saved_memories" => "SELECT COUNT(*) FROM saved_memories",
                     "awareness_items" => "SELECT COUNT(*) FROM awareness_items",
+                    "awareness_activity" => "SELECT COUNT(*) FROM awareness_activity",
+                    "awareness_history" => "SELECT COUNT(*) FROM awareness_history",
+                    "awareness_suppressions" => "SELECT COUNT(*) FROM awareness_suppressions",
+                    "awareness_suggestions" => "SELECT COUNT(*) FROM awareness_suggestions",
+                    "app_preferences" => "SELECT COUNT(*) FROM app_preferences",
                     _ => return Err("Unsupported backup manifest count.".to_owned()),
                 };
                 backup_writer.query_row(sql, [], |row| row.get::<_, i64>(0))
@@ -2020,7 +2025,7 @@ mod tests {
             [],
             |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?, row.get(6)?, row.get(7)?)),
         ).unwrap();
-        assert_eq!(manifest.0, 1);
+        assert_eq!(manifest.0, 2);
         assert!(manifest.1 > 0);
         assert_eq!(manifest.2, 8);
         assert!(!manifest.3.is_empty());
@@ -2079,6 +2084,11 @@ mod tests {
         assert_eq!(verification.message_count, 1);
         assert_eq!(verification.saved_memory_count, 1);
         assert_eq!(verification.awareness_item_count, 1);
+        assert_eq!(verification.awareness_activity_count, 0);
+        assert_eq!(verification.awareness_history_count, 0);
+        assert_eq!(verification.awareness_suppression_count, 0);
+        assert_eq!(verification.awareness_suggestion_count, 0);
+        assert_eq!(verification.app_preference_count, 1);
         assert!(verification.detail.contains("read-only"));
         assert_eq!(before, after, "verification must not modify the backup");
 
@@ -2141,6 +2151,25 @@ mod tests {
 
         let error = ConversationStore::verify_backup_file(&backup_path).unwrap_err();
         assert!(error.contains("manifest is unsupported or does not match"));
+        let _ = std::fs::remove_file(backup_path);
+    }
+
+    #[test]
+    fn rejects_v2_backup_manifest_when_extended_inventory_counts_do_not_match() {
+        let backup_path = backup_test_path("manifest-v2-count-mismatch", "sqlite3");
+        let store = store();
+        store.create_awareness_item("A private fixture", "interests").unwrap();
+        store.backup_to(&backup_path).unwrap();
+
+        let writer = Connection::open(&backup_path).unwrap();
+        writer.execute(
+            "UPDATE midsunday_backup_manifest SET awareness_activity_count = awareness_activity_count + 1 WHERE id = 1",
+            [],
+        ).unwrap();
+        drop(writer);
+
+        let error = ConversationStore::verify_backup_file(&backup_path).unwrap_err();
+        assert!(error.contains("version 2 backup inventory does not match"));
         let _ = std::fs::remove_file(backup_path);
     }
 
