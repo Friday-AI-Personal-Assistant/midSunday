@@ -2561,3 +2561,10 @@ Storage status remains an advisory point-in-time classification; unavailable cap
 - [ ] Validate deliberate render-failure recovery and accessibility on physical Windows, Linux, and macOS devices.
 
 The boundary protects React rendering and lifecycle work only. It does not catch asynchronous event-handler errors, Rust panics, native crashes, or process termination, and it does not claim that reload repairs the underlying cause.
+
+
+### 2026-11-28 — Recovery boundary mount correction (Batch #251)
+
+- [x] Mount the root-level React error boundary around the application at the actual ReactDOM root, inside StrictMode.
+- [x] Keep strict TypeScript unused-import checks enabled; the boundary is now actively used rather than suppressing the compiler warning.
+- [ ] Validate deliberate render-failure recovery and accessibility on physical Windows, Linux, and macOS devices.

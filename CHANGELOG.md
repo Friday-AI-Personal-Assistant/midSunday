@@ -295,3 +295,7 @@ All notable project changes are recorded here. The project is in foundation/prot
 - Added a root-level React error boundary so render/lifecycle failures display a readable, theme-aware recovery screen instead of blanking the desktop window.
 - Added an explicit reload action and guidance to revisit Settings → Diagnostics if the issue repeats.
 - Kept exception messages and stack traces out of the recovery screen; no error details are persisted or exported. Native crashes, Rust panics, and asynchronous event-handler failures remain separate roadmap work.
+
+
+## 2026-11-28 — Batch #251
+- Fixed the root React entry point to mount App inside AppErrorBoundary. Batch #250 imported the boundary but did not wrap the actual StrictMode root, causing TypeScript's unused-import check to fail on all platforms.
