@@ -245,6 +245,19 @@ pub struct DatabaseRestorePreview {
 }
 
 #[derive(Clone)]
+/// An exclusive reservation of the live database connection for a restore transaction.
+pub(crate) struct RestoreDatabaseGuard<'a> {
+    connection: std::sync::MutexGuard<'a, Connection>,
+}
+
+impl RestoreDatabaseGuard<'_> {
+    /// Creates and verifies a pre-restore snapshot without reacquiring the
+    /// connection mutex already held by this guard.
+    pub(crate) fn backup_to(&self, backup_path: &Path) -> Result<(), String> {
+        ConversationStore::backup_connection_to(&self.connection, backup_path)
+    }
+}
+
 pub struct ConversationStore {
     connection: Arc<Mutex<Connection>>,
 }
@@ -614,18 +627,12 @@ impl ConversationStore {
         let healthy = result == "ok";
         Ok(DatabaseHealth {
             status: if healthy { "healthy" } else { "warning" }.to_owned(),
-            schema_version,
-            detail: if healthy {
-                "SQLite quick_check completed successfully.".to_owned()
-            } else {
-                "SQLite reported an integrity issue. Avoid deleting or replacing this database; make a safe backup before attempting recovery.".to_owned()
-            },
-        })
+              pub fn backup_to(&self, backup_path: &Path) -> Result<(), String> {
+        let connection = self.lock()?;
+        Self::backup_connection_to(&connection, backup_path)
     }
 
-    /// Creates a consistent, verified SQLite snapshot at a user-selected local path.
-    /// The connection mutex prevents concurrent writes; VACUUM INTO includes committed WAL content.
-    pub fn backup_to(&self, backup_path: &Path) -> Result<(), String> {
+    fn backup_connection_to(connection: &Connection, backup_path: &Path) -> Result<(), String> {
         if !backup_path.extension().and_then(|value| value.to_str()).is_some_and(|value| value.eq_ignore_ascii_case("sqlite3")) {
             return Err("Choose a .sqlite3 file for the local database backup.".to_owned());
         }
@@ -665,12 +672,10 @@ impl ConversationStore {
             .ok_or_else(|| "The temporary backup location is not supported.".to_owned())?;
 
         let creation = (|| -> Result<(), String> {
-            let connection = self.lock()?;
             let source_schema: i64 = connection.pragma_query_value(None, "user_version", |row| row.get(0))
                 .map_err(|_| "The local database version could not be checked before backup.".to_owned())?;
             connection.execute("VACUUM INTO ?1", [temporary_path_text])
                 .map_err(|_| "Could not create the local database backup. Check the selected location and available disk space.".to_owned())?;
-            drop(connection);
 
             // Add a compact, versioned manifest to the snapshot itself. It contains only
             // compatibility metadata and aggregate counts, never personal text or paths.
@@ -751,19 +756,32 @@ impl ConversationStore {
         Ok(())
     }
 
+  if let Err(error) = creation {
+            let _ = cleanup_result;
+            return Err(error);
+        }
+        if cleanup_result.is_err() {
+            // The published backup is complete and verified; a leftover hidden temporary
+            // hard-link is harmless, but report it so the user can clean up the extra file.
+            return Err(format!("The verified backup was saved, but a temporary file could not be cleaned up in the selected folder ({backup_path_text})."));
+        }
+        Ok(())
+    }
+
     /// Acquires the database connection exclusively for a future restore transaction.
     ///
     /// This is deliberately non-blocking. A restore must fail fast if a normal
     /// database operation is already in progress, and the returned guard must
     /// remain alive for the entire critical section. Holding this guard prevents
     /// every normal ConversationStore method from acquiring the connection.
-    pub(crate) fn try_acquire_restore_lock(&self) -> Result<std::sync::MutexGuard<'_, Connection>, String> {
-        self.connection.try_lock().map_err(|error| match error {
+    pub(crate) fn try_acquire_restore_lock(&self) -> Result<RestoreDatabaseGuard<'_>, String> {
+        let connection = self.connection.try_lock().map_err(|error| match error {
             std::sync::TryLockError::WouldBlock =>
                 "The local database is busy. Wait for the current operation to finish before attempting a restore.".to_owned(),
             std::sync::TryLockError::Poisoned(_) =>
                 "The local database lock is unavailable. Restart midSunday before attempting a restore.".to_owned(),
-        })
+        })?;
+        Ok(RestoreDatabaseGuard { connection })
     }
 
     fn lock(&self) -> Result<std::sync::MutexGuard<'_, Connection>, String> {
@@ -2129,6 +2147,27 @@ mod tests {
         static NEXT: AtomicU64 = AtomicU64::new(1);
         let suffix = format!("{}-{}", std::process::id(), NEXT.fetch_add(1, Ordering::Relaxed));
         std::env::temp_dir().join(format!("midsunday-{label}-{suffix}.{extension}"))
+    }
+
+    #[test]
+    fn restore_guard_can_create_verified_safety_snapshot_without_relocking_database() {
+        let store = store();
+        let chat = store.create("Pre-restore safety snapshot").unwrap();
+        store.append(chat.id, "user", "Existing data must remain recoverable.").unwrap();
+        let backup_path = backup_test_path("restore-guard-safety", "sqlite3");
+
+        {
+            let restore_guard = store.try_acquire_restore_lock().unwrap();
+            restore_guard.backup_to(&backup_path).unwrap();
+            let verification = ConversationStore::verify_backup_file(&backup_path).unwrap();
+            assert!(verification.valid);
+            assert_eq!(verification.backup_format_version, Some(2));
+            assert_eq!(verification.conversation_count, 1);
+            assert_eq!(verification.message_count, 1);
+        }
+
+        assert_eq!(store.list().unwrap().len(), 1, "the snapshot operation must not change live data");
+        let _ = std::fs::remove_file(backup_path);
     }
 
     #[test]

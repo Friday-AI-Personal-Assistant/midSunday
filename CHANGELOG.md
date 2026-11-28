@@ -1,3 +1,7 @@
+## 2026-11-28 — Batch #286
+- Added a typed exclusive database restore guard that can create a consistent, manifest-bearing, fully verified SQLite safety snapshot while retaining the already-held live connection lock. The guarded path avoids recursively acquiring the same mutex and therefore avoids self-deadlock during the pre-restore safety-copy stage.
+- Refactored ordinary local backup creation to share the same snapshot implementation. Added a regression test that creates and verifies a safety snapshot under the restore guard and confirms live data remains unchanged. The snapshot is still plaintext SQLite at this stage; encrypted safety-archive orchestration and actual restore remain unavailable.
+
 ## 2026-11-28 — Batch #285
 - Added a fail-fast exclusive database restore lock using the exact mutex shared by every ConversationStore read and write. A restore can now reserve the live SQLite connection without replacing the file underneath it; normal database operations remain blocked until the guard is released.
 - Added regression tests proving restore refuses a busy database and that holding the restore guard excludes concurrent normal database work. This is a coordination primitive only; no restore operation or UI is enabled.
