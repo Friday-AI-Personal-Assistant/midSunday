@@ -2543,3 +2543,6 @@ The nearest existing ancestor is used only to identify the containing volume. Re
 - [ ] Validate unusual filesystem reports and removable/network volumes on physical Windows, Linux, and macOS devices.
 
 Storage status remains an advisory point-in-time classification; unavailable capacity is not represented as zero free space.
+
+## 2026-11-28 — Batch #248
+- Corrected the diagnostic storage-capacity regression fixture to use realistic GiB-scale values. The test still verifies that reported free space is clamped to total capacity, while respecting the absolute low-space thresholds.

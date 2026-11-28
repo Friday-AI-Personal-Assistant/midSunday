@@ -831,7 +831,10 @@ mod diagnostics_disk_space_tests {
     #[test]
     fn storage_status_handles_zero_capacity_and_clamps_available_bytes() {
         assert_eq!(diagnostics_storage_status(0, 0), None);
-        assert_eq!(diagnostics_storage_status(100, 150), Some("healthy"));
+        const GIB: u64 = 1024 * 1024 * 1024;
+        // The clamped 20 GiB free-space result is healthy; tiny byte-sized
+        // fixtures would correctly trip the absolute 2 GiB critical threshold.
+        assert_eq!(diagnostics_storage_status(20 * GIB, 30 * GIB), Some("healthy"));
         assert_eq!(diagnostics_storage_status(100, 4), Some("critical"));
         assert_eq!(diagnostics_storage_status(100, 9), Some("low"));
     }

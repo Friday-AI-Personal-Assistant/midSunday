@@ -283,3 +283,6 @@ All notable project changes are recorded here. The project is in foundation/prot
 
 
 - Fixed cross-platform Rust compilation for storage-volume diagnostics and completed the diagnostic export fixture with the new storage fields.
+
+## 2026-11-28 — Batch #248
+- Corrected the diagnostic storage-capacity regression fixture to use realistic GiB-scale values. The test still verifies that reported free space is clamped to total capacity, while respecting the absolute low-space thresholds.
