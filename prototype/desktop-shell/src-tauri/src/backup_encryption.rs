@@ -1,7 +1,7 @@
 use argon2::{Algorithm, Argon2, Params, Version};
 use chacha20poly1305::{aead::{Aead, KeyInit, Payload}, XChaCha20Poly1305, XNonce};
 use rand::{rngs::OsRng, RngCore};
-use std::{fs::{File, OpenOptions}, io::{Read, Write}, path::Path};
+use std::{fs::File, io::{Read, Write}, path::Path};
 
 const MAGIC: &[u8; 8] = b"MSUNENC1";
 const SALT_BYTES: usize = 16;
@@ -52,13 +52,18 @@ fn associated_data(index: u64, length: u32, final_chunk: bool) -> Vec<u8> {
     aad
 }
 
+fn destination_parent(destination: &Path) -> &Path {
+    destination.parent().filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."))
+}
+
 /// Encrypts a file in independently authenticated 1 MiB chunks.
 /// The authenticated final marker makes truncation and reordering detectable.
 pub fn encrypt_file(source: &Path, destination: &Path, password: &str) -> Result<(), String> {
     validate_password(password)?;
     let mut input = File::open(source)
         .map_err(|_| "The database snapshot could not be opened for encryption.".to_owned())?;
-    let mut output = OpenOptions::new().write(true).create_new(true).open(destination)
+    let mut output = tempfile::NamedTempFile::new_in(destination_parent(destination))
         .map_err(|_| "The encrypted backup temporary file could not be created.".to_owned())?;
 
     let result = (|| -> Result<(), String> {
@@ -93,16 +98,15 @@ pub fn encrypt_file(source: &Path, destination: &Path, password: &str) -> Result
         let final_tag = cipher.encrypt(XNonce::from_slice(&nonce), Payload { msg: &[], aad: &aad })
             .map_err(|_| "The encrypted backup could not be finalized.".to_owned())?;
         output.write_all(&0u32.to_le_bytes()).and_then(|_| output.write_all(&final_tag))
-            .and_then(|_| output.flush()).and_then(|_| output.sync_all())
+            .and_then(|_| output.flush()).and_then(|_| output.as_file().sync_all())
             .map_err(|_| "The encrypted backup could not be finalized on disk.".to_owned())?;
         Ok(())
     })();
 
-    if result.is_err() {
-        drop(output);
-        let _ = std::fs::remove_file(destination);
-    }
-    result
+    result?;
+    output.persist_noclobber(destination)
+        .map_err(|_| "The encrypted backup could not be finalized without replacing an existing file.".to_owned())?;
+    Ok(())
 }
 
 /// Decrypts only to a new file. Wrong passwords, altered chunks, truncation,
@@ -111,7 +115,7 @@ pub fn decrypt_file(source: &Path, destination: &Path, password: &str) -> Result
     validate_password(password)?;
     let mut input = File::open(source)
         .map_err(|_| "The encrypted backup could not be opened.".to_owned())?;
-    let mut output = OpenOptions::new().write(true).create_new(true).open(destination)
+    let mut output = tempfile::NamedTempFile::new_in(destination_parent(destination))
         .map_err(|_| "A temporary verification file could not be created.".to_owned())?;
 
     let result = (|| -> Result<(), String> {
@@ -164,16 +168,15 @@ pub fn decrypt_file(source: &Path, destination: &Path, password: &str) -> Result
             index = index.checked_add(1).ok_or_else(|| "The encrypted backup contains too many chunks.".to_owned())?;
         }
 
-        output.flush().and_then(|_| output.sync_all())
+        output.flush().and_then(|_| output.as_file().sync_all())
             .map_err(|_| "The temporary verification copy could not be finalized.".to_owned())?;
         Ok(())
     })();
 
-    if result.is_err() {
-        drop(output);
-        let _ = std::fs::remove_file(destination);
-    }
-    result
+    result?;
+    output.persist_noclobber(destination)
+        .map_err(|_| "The verified plaintext could not be finalized without replacing an existing file.".to_owned())?;
+    Ok(())
 }
 
 #[cfg(test)]
