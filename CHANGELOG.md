@@ -252,3 +252,6 @@ All notable project changes are recorded here. The project is in foundation/prot
 
 ## 2026-11-27
 - Added a first-launch setup guide to the empty conversation workspace. It reflects the configured local llama.cpp executable, GGUF model path, and live engine readiness, with direct links to local AI settings and companion selection. The guide explains that compatible files are user-supplied and introduces no downloads, account, cloud dependency, or network check.
+
+
+- Batch #238: Kept runtime status reads non-blocking during active inference. The UI no longer waits for the session mutex held by streaming generation; idle ready-state refreshes continue checking the managed child, while generation failures flow through the existing result/error path. Added a lock-contention regression test. Physical-device validation remains pending.

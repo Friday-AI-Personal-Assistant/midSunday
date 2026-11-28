@@ -2438,3 +2438,14 @@ Model file size is a storage measurement, not a RAM/VRAM estimate. Session uptim
 - [ ] Validate forced engine termination, recovery/restart, generation interruption, and clean reaping on physical Windows, Linux, and macOS devices.
 
 The check reuses the existing 1.5-second runtime status refresh. It reports only whether the app-managed child is still running; it does not diagnose why the process exited.
+
+
+### 2026-11-28 — Non-blocking runtime status during generation (Batch #238)
+
+- [x] Keep the existing runtime status refresh responsive while a generation request owns the session lock.
+- [x] Restrict direct managed-child liveness polling to the idle ready state; generation failures continue through the generation result and normal failure status.
+- [x] Preserve active-session resource details during generation without waiting for the session mutex.
+- [x] Add a regression test proving a generating-state status snapshot completes while the session lock is held.
+- [ ] Validate long-running generation status refresh, forced engine termination during generation, and recovery on physical Windows, Linux, and macOS devices.
+
+This avoids making the UI's periodic status refresh wait behind an in-flight inference request. Unexpected exits while idle are detected by the existing refresh; exits during inference are reported through the generation outcome.

@@ -133,15 +133,20 @@ impl RuntimeManager {
             .map(|status| status.clone())
             .map_err(|_| "Runtime status is unavailable.".to_owned())?;
 
-        // Poll only the one child process owned by this runtime. A dead child
-        // is reported as a recoverable engine failure; no other processes are
-        // enumerated and no process identifier leaves this module.
-        let mut session_slot = self.inner.session.lock()
-            .map_err(|_| "Runtime session is unavailable.".to_owned())?;
-        let should_check = matches!(snapshot.status.as_str(), "ready" | "generating");
-        let child_exited = should_check && session_slot.as_mut()
-            .map(|session| session.process_memory_snapshot().status == "not_running")
-            .unwrap_or(false);
+        // Poll only the one child process owned by this runtime while idle.
+        // Generation holds the session mutex for the full streaming request, so
+        // trying to inspect it here would block the UI's status refresh. A
+        // generation-time child failure is instead surfaced by the generation
+        // result; the next idle refresh checks the child again if it remains ready.
+        let child_exited = if snapshot.status == "ready" {
+            let mut session_slot = self.inner.session.lock()
+                .map_err(|_| "Runtime session is unavailable.".to_owned())?;
+            session_slot.as_mut()
+                .map(|session| session.process_memory_snapshot().status == "not_running")
+                .unwrap_or(false)
+        } else {
+            false
+        };
 
         if child_exited {
             if let Ok(mut details) = self.inner.session_details.lock() {
@@ -594,6 +599,26 @@ mod tests {
         assert_eq!(manager.snapshot().unwrap().status, "generating");
         release_tx.send(()).unwrap();
         worker.join().unwrap();
+    }
+
+    #[test]
+    fn generating_status_snapshot_does_not_wait_for_the_session_lock() {
+        let manager = RuntimeManager::default();
+        manager.set_status(RuntimeStatus::Generating, None).unwrap();
+        let session_guard = manager.inner.session.lock().unwrap();
+        let worker_manager = manager.clone();
+        let (snapshot_tx, snapshot_rx) = mpsc::channel();
+
+        let worker = thread::spawn(move || {
+            snapshot_tx.send(worker_manager.snapshot()).unwrap();
+        });
+
+        let result = snapshot_rx.recv_timeout(Duration::from_millis(200));
+        drop(session_guard);
+        worker.join().unwrap();
+
+        let snapshot = result.expect("generating status must remain readable during inference").unwrap();
+        assert_eq!(snapshot.status, "generating");
     }
 
     #[test]
