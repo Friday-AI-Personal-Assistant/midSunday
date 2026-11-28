@@ -506,11 +506,16 @@ pub fn assess_model_storage(model_path: Option<&str>, disks: &[HardwareDisk]) ->
 }
 
 /// Reads only total and currently available system RAM for a one-time local estimate.
+fn bounded_available_memory(total_bytes: u64, available_bytes: u64) -> u64 {
+    available_bytes.min(total_bytes)
+}
+
+/// Reads only total and currently available system RAM for a one-time local estimate.
 pub fn collect_system_memory_bytes() -> (u64, u64) {
     let mut system = System::new();
     system.refresh_memory();
     let total = system.total_memory();
-    (total, system.available_memory().min(total))
+    (total, bounded_available_memory(total, system.available_memory()))
 }
 
 /// Collects a one-time snapshot and queries only midSunday's own process memory.
@@ -548,7 +553,7 @@ pub fn collect_hardware_snapshot(model_path: Option<String>) -> HardwareSnapshot
     let gpu_assessment = assess_gpu_inventory(&gpu);
     let gpu_memory_headroom = assess_gpu_memory_headroom(&gpu);
     let total_memory_bytes = system.total_memory();
-    let available_memory_bytes = system.available_memory();
+    let available_memory_bytes = bounded_available_memory(total_memory_bytes, system.available_memory());
     let logical_core_count = system.cpus().len();
 
     HardwareSnapshot {
@@ -1733,6 +1738,13 @@ mod gpu_tests {
         assert_eq!(value["adapters"][0]["memoryBudget"]["local"]["budgetBytes"], 4_u64 * 1024 * 1024 * 1024);
         assert_eq!(value["adapters"][0]["memoryBudget"]["local"]["currentUsageBytes"], 512_u64 * 1024 * 1024);
         assert_eq!(value["adapters"][0]["memoryBudget"]["status"], "detected");
+    }
+
+    #[test]
+    fn available_memory_is_never_reported_above_installed_memory() {
+        assert_eq!(bounded_available_memory(8 * 1024, 12 * 1024), 8 * 1024);
+        assert_eq!(bounded_available_memory(8 * 1024, 4 * 1024), 4 * 1024);
+        assert_eq!(bounded_available_memory(0, u64::MAX), 0);
     }
 
     #[test]
