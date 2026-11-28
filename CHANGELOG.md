@@ -1,3 +1,6 @@
+## 2026-11-28 — Batch #281
+- Corrected the foreign-key corruption regression fixture to disable SQLite write-time foreign-key enforcement only on its isolated test connection, allowing the read-only verifier to be tested against a deliberately damaged backup. Normal application connections remain unchanged.
+
 ## 2026-11-28 — Batch #279
 - Strengthened read-only database backup verification with SQLite's full integrity check and an explicit foreign-key relationship check, in addition to schema, required-table, and manifest/inventory validation.
 - Added regression tests for valid full-integrity backups and backups containing broken conversation-message relationships. Verification remains read-only; actual restore is still disabled.
