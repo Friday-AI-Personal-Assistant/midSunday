@@ -2589,3 +2589,15 @@ The check timestamp records when the snapshot was assembled; the report timestam
 - [x] Serialize a representative diagnostic snapshot and assert a private path marker and private conversation/memory categories are absent.
 - [x] Keep diagnostics collection read-only and avoid adding path, hardware, account, or content identifiers to the report.
 - [ ] Validate report contents and path privacy on physical Windows, Linux, and macOS devices.
+
+
+### 2026-11-28 — Diagnostics health overview and guided findings (Batch #254)
+
+- [x] Summarize the latest read-only health snapshot as healthy, informational/incomplete, or needing attention.
+- [x] Identify database integrity, server executable, configured model, and app/model storage findings with plain-language details.
+- [x] Treat intentionally unconfigured server/model files as setup notes rather than faults; a stopped local engine is not classified as an error.
+- [x] Keep unavailable measurements distinct from zero values and preserve the existing privacy-safe snapshot and export schema.
+- [x] Keep the overview advisory and read-only; no automatic repair, file changes, telemetry, or network requests.
+- [ ] Validate the overview with real healthy, incomplete, low-storage, and database-warning states on physical Windows, Linux, and macOS devices.
+
+The overview is derived entirely from the existing diagnostic snapshot. It does not add data collection or alter the versioned JSON report.

@@ -311,3 +311,9 @@ All notable project changes are recorded here. The project is in foundation/prot
 - Expanded diagnostic-export privacy regression coverage: tests now assert the exact top-level and snapshot JSON field allowlists.
 - Added a regression test using a unique private path marker to ensure server/model readiness details and app-data/model-volume diagnostics do not echo configured paths into serialized diagnostic snapshots.
 - Confirmed private conversation and memory categories remain absent from the report schema.
+
+
+## 2026-11-28 — Batch #254
+- Added a plain-language Diagnostics health overview with an overall state and a short list of findings that need attention or are informational.
+- Unconfigured server/model settings are presented as setup guidance rather than failures, and a stopped local engine is explicitly treated as normal when idle.
+- Kept the overview derived from the existing read-only snapshot; no new collection, automatic repair, telemetry, or network behavior was added.

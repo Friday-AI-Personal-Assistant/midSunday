@@ -68,6 +68,36 @@ type SetupFileCheck = { status: string; detail: string };
 type LocalSetupReadiness = { executable: SetupFileCheck; model: SetupFileCheck };
 type DiskSpaceCheck = { status: string; totalBytes: number | null; availableBytes: number | null; detail: string };
 type DiagnosticsSnapshot = { appVersion: string; operatingSystem: string; architecture: string; checkedAtUnixSeconds: number; database: { status: string; schemaVersion: number; detail: string }; modelCount: number | null; runtimeStatus: string; serverExecutable: SetupFileCheck; modelFile: ModelVerification; appDataVolume: DiskSpaceCheck; modelVolume: DiskSpaceCheck };
+type DiagnosticFinding = { id: string; title: string; level: "attention" | "info"; message: string };
+function getDiagnosticFindings(snapshot: DiagnosticsSnapshot): DiagnosticFinding[] {
+  const findings: DiagnosticFinding[] = [];
+  if (snapshot.database.status !== "healthy") {
+    findings.push({ id: "database", title: "Conversation database", level: "attention", message: snapshot.database.detail });
+  }
+  if (snapshot.serverExecutable.status !== "ready") {
+    const configured = snapshot.serverExecutable.status !== "not_configured";
+    findings.push({ id: "server", title: "Local server executable", level: configured ? "attention" : "info", message: configured ? snapshot.serverExecutable.detail : "No server executable is configured yet. Choose a compatible llama-server file in Local AI settings when you are ready to set up offline chat." });
+  }
+  if (!snapshot.modelFile.valid) {
+    const configured = snapshot.modelFile.status !== "not_configured";
+    findings.push({ id: "model", title: "Configured GGUF model", level: configured ? "attention" : "info", message: configured ? snapshot.modelFile.detail : "No GGUF model is configured yet. Select a model in Local AI settings to enable local inference." });
+  }
+  for (const [id, title, volume] of [
+    ["app-storage", "App-data storage", snapshot.appDataVolume],
+    ["model-storage", "Model storage", snapshot.modelVolume],
+  ] as const) {
+    if (volume.status === "critical" || volume.status === "low") {
+      findings.push({ id, title, level: "attention", message: volume.detail });
+    } else if (volume.status === "unavailable") {
+      findings.push({ id, title, level: "info", message: volume.detail });
+    }
+  }
+  if (snapshot.modelCount === null) {
+    findings.push({ id: "catalogue", title: "Local model catalogue", level: "info", message: "The registered model count could not be read during this check." });
+  }
+  return findings;
+}
+
 type GgufMetadata = { formatVersion:number; fileSizeBytes:number; tensorCount:number; metadataEntryCount:number; architecture:string|null; modelName:string|null; fileTypeCode:number|null; fileTypeDescription:string|null; parameterCount:number|null; contextLength:number|null; blockCount:number|null; embeddingLength:number|null; attentionHeadCount:number|null; attentionKvHeadCount:number|null; attentionKeyLength:number|null; attentionValueLength:number|null; ropeDimensionCount:number|null; expertCount:number|null; expertUsedCount:number|null; quantizationVersion:number|null; alignment:number|null };
 type TensorStorageAnalysis = { status:string; tensorCount:number; analysedTensorCount:number; unknownSizeTensorCount:number; knownPayloadBytes:number; tensorElementCount:number; reportedParameterCount:number|null; parameterCountStatus:string; dataStartOffset:number; alignment:number; types:{ typeCode:number; typeName:string; tensorCount:number; knownPayloadBytes:number; unknownSizeTensorCount:number }[]; note:string };
 type KvCacheEstimate = { status:string; contextTokens:number; bytesPerElement:number; keyCacheBytes:number|null; valueCacheBytes:number|null; totalBytes:number|null; reportedContextLength:number|null; contextLimitStatus:string; contextLimitNote:string; assumptions:string };
@@ -2250,6 +2280,21 @@ export default function App() {
                 <button className="secondary-action" type="button" onClick={() => void exportDiagnosticsReport()} disabled={diagnosticsExportBusy || !diagnosticsExportReviewed}>{diagnosticsExportBusy ? "Saving report…" : "Save reviewed report"}</button>
                 <span className="settings-footnote">Review the included information before saving. The report is created only after you choose a destination and is never uploaded automatically.</span>
               </div>}
+              {diagnosticsSnapshot && (() => {
+                const findings = getDiagnosticFindings(diagnosticsSnapshot);
+                const attentionCount = findings.filter((finding) => finding.level === "attention").length;
+                const overall = attentionCount > 0 ? "attention" : findings.length > 0 ? "incomplete" : "healthy";
+                return <div className={"diagnostics-summary diagnostics-summary-" + overall} role="status" aria-live="polite">
+                  <div className="diagnostics-summary-heading">
+                    <div><span className="diagnostics-summary-kicker">LOCAL HEALTH OVERVIEW</span><strong>{overall === "healthy" ? "No issues found" : overall === "attention" ? "Some checks need attention" : "Setup is not complete yet"}</strong></div>
+                    <span className={"diagnostics-summary-count diagnostics-count-" + overall}>{attentionCount > 0 ? attentionCount + " to review" : findings.length > 0 ? findings.length + " note" + (findings.length === 1 ? "" : "s") : "All clear"}</span>
+                  </div>
+                  {findings.length === 0
+                    ? <p>Database integrity, configured local files, and checked storage volumes look healthy. The AI engine may still be stopped; that is normal when you are not using it.</p>
+                    : <ul>{findings.map((finding) => <li key={finding.id} className={"diagnostics-finding diagnostics-finding-" + finding.level}><span>{finding.level === "attention" ? "Review" : "Note"}</span><div><strong>{finding.title}</strong><p>{finding.message}</p></div></li>)}</ul>}
+                  <small>This is guidance from a read-only snapshot, not an automatic repair. Unconfigured items are informational; a stopped engine is not treated as a fault.</small>
+                </div>;
+              })()}
               {diagnosticsSnapshot && diagnosticsExportReviewed && <div className="diagnostics-grid" role="region" aria-label="Diagnostic report contents preview">
                 <div className="diagnostic-item"><span>Included: application</span><strong>midSunday {diagnosticsSnapshot.appVersion}</strong><small>{diagnosticsSnapshot.operatingSystem} · {diagnosticsSnapshot.architecture}</small></div>
                 <div className="diagnostic-item"><span>Included: database health</span><strong>{diagnosticsSnapshot.database.status.replace(/_/g, " ")}</strong><small>Schema v{diagnosticsSnapshot.database.schemaVersion} · {diagnosticsSnapshot.database.detail}</small></div>

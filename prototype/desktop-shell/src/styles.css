@@ -767,3 +767,23 @@ body { color:var(--text-main); background:var(--app-bg); }
 .app-crash-card button { min-height:42px; margin-top:5px; padding:0 17px; border:0; border-radius:9px; background:var(--green); color:var(--on-accent); font-size:12px; font-weight:750; cursor:pointer; }
 .app-crash-card button:hover { filter:brightness(1.08); }
 .app-crash-card small { color:var(--muted); font-size:10px; line-height:1.5; }
+
+
+/* Read-only Diagnostics health overview */
+.diagnostics-summary { margin: 15px 0 18px; padding: 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.diagnostics-summary-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.diagnostics-summary-heading > div { display: grid; gap: 5px; }
+.diagnostics-summary-kicker { color: var(--muted); font-size: 9px; font-weight: 750; letter-spacing: .13em; }
+.diagnostics-summary-heading strong { color: var(--text-strong); font-size: 13px; }
+.diagnostics-summary-count { padding: 5px 9px; border: 1px solid var(--line); border-radius: 999px; color: var(--soft); font-size: 10px; white-space: nowrap; }
+.diagnostics-count-healthy { color: var(--green); }
+.diagnostics-count-attention { color: #f0b0a7; }
+.diagnostics-summary > p { margin: 12px 0 2px; color: var(--soft); font-size: 11px; line-height: 1.6; }
+.diagnostics-summary ul { display: grid; gap: 11px; margin: 15px 0 12px; padding: 0; list-style: none; }
+.diagnostics-finding { display: grid; grid-template-columns: 54px minmax(0, 1fr); align-items: start; gap: 10px; }
+.diagnostics-finding > span { padding-top: 2px; color: var(--muted); font-size: 9px; font-weight: 750; text-transform: uppercase; letter-spacing: .06em; }
+.diagnostics-finding-attention > span { color: #e6a49a; }
+.diagnostics-finding strong { color: var(--text-strong); font-size: 11px; }
+.diagnostics-finding p { margin: 3px 0 0; color: var(--soft); font-size: 10px; line-height: 1.55; }
+.diagnostics-summary > small { display: block; margin-top: 12px; color: var(--muted); font-size: 9px; line-height: 1.5; }
+@media (max-width: 560px) { .diagnostics-summary { padding: 13px; } .diagnostics-summary-heading { align-items: flex-start; } .diagnostics-finding { grid-template-columns: 44px minmax(0, 1fr); } }
