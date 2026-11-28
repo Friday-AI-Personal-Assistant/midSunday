@@ -2478,3 +2478,12 @@ This is an initial diagnostic slice, not a complete health or repair system. A h
 - Includes only the already displayed app/platform, database health, model count, configured file-check outcomes, and managed engine status, plus the report timestamp.
 - Does not include conversations, memories, local file paths, model contents, credentials, or hardware identifiers; no report is uploaded or shared automatically.
 - Added regression tests for the exported report shape and rejection of non-JSON destinations.
+
+
+### 2026-11-28 — Diagnostic export review step (Batch #243)
+
+- Added a separate Review report contents step before saving a diagnostic JSON report.
+- Preview lists every included category and its current values, plus the timestamp added at save time.
+- Explicitly lists excluded private content and identifiers so users can make an informed sharing decision.
+- Saving stays disabled until the user reviews the report; a fresh health check resets the review approval.
+- No automatic upload, network transfer, or sharing was introduced.

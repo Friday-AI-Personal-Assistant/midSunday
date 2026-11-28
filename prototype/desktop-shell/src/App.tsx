@@ -260,6 +260,7 @@ export default function App() {
   const [diagnosticsBusy, setDiagnosticsBusy] = useState(false);
   const [diagnosticsError, setDiagnosticsError] = useState("");
   const [diagnosticsExportBusy, setDiagnosticsExportBusy] = useState(false);
+  const [diagnosticsExportReviewed, setDiagnosticsExportReviewed] = useState(false);
   const [diagnosticsExportStatus, setDiagnosticsExportStatus] = useState("");
   const [localSetupReadiness, setLocalSetupReadiness] = useState<LocalSetupReadiness | null>(null);
   const [localSetupBusy, setLocalSetupBusy] = useState(false);
@@ -1195,6 +1196,8 @@ export default function App() {
     try {
       const snapshot = await invoke<DiagnosticsSnapshot>("get_diagnostics_snapshot");
       setDiagnosticsSnapshot(snapshot);
+      setDiagnosticsExportReviewed(false);
+      setDiagnosticsExportStatus("");
     } catch {
       setDiagnosticsError("The local diagnostic check could not complete. Check that the app is running correctly and try again.");
     } finally {
@@ -1203,7 +1206,7 @@ export default function App() {
   }
 
   async function exportDiagnosticsReport() {
-    if (!diagnosticsSnapshot || diagnosticsExportBusy) return;
+    if (!diagnosticsSnapshot || !diagnosticsExportReviewed || diagnosticsExportBusy) return;
     setDiagnosticsExportBusy(true);
     setDiagnosticsExportStatus("");
     setDiagnosticsError("");
@@ -2238,7 +2241,21 @@ export default function App() {
             <section className="settings-section diagnostics-section">
               <div className="settings-section-title"><div><h2>Diagnostics</h2><p>Run a read-only local health check. No conversations, memories, file paths, or private content are collected.</p></div><span className="settings-symbol">⌁</span></div>
               <div className="diagnostics-actions"><button className="secondary-action" type="button" onClick={() => void runDiagnostics()} disabled={diagnosticsBusy}>{diagnosticsBusy ? "Checking local files…" : "Run local health check"}</button><span className="settings-footnote">Checks app build information, SQLite integrity, model catalogue, configured server/model files, and local engine state.</span></div>
-              {diagnosticsSnapshot && <div className="diagnostics-actions"><button className="secondary-action" type="button" onClick={() => void exportDiagnosticsReport()} disabled={diagnosticsExportBusy}>{diagnosticsExportBusy ? "Saving report…" : "Export diagnostic report"}</button><span className="settings-footnote">Creates a JSON file only after you choose a save location. It includes the displayed health-check summary, not conversations, memories, file paths, or model contents.</span></div>}
+              {diagnosticsSnapshot && <div className="diagnostics-actions">
+                <button className="secondary-action" type="button" onClick={() => { setDiagnosticsExportReviewed(true); setDiagnosticsExportStatus(""); }} disabled={diagnosticsExportBusy || diagnosticsExportReviewed}>Review report contents</button>
+                <button className="secondary-action" type="button" onClick={() => void exportDiagnosticsReport()} disabled={diagnosticsExportBusy || !diagnosticsExportReviewed}>{diagnosticsExportBusy ? "Saving report…" : "Save reviewed report"}</button>
+                <span className="settings-footnote">Review the included information before saving. The report is created only after you choose a destination and is never uploaded automatically.</span>
+              </div>}
+              {diagnosticsSnapshot && diagnosticsExportReviewed && <div className="diagnostics-grid" role="region" aria-label="Diagnostic report contents preview">
+                <div className="diagnostic-item"><span>Included: application</span><strong>midSunday {diagnosticsSnapshot.appVersion}</strong><small>{diagnosticsSnapshot.operatingSystem} · {diagnosticsSnapshot.architecture}</small></div>
+                <div className="diagnostic-item"><span>Included: database health</span><strong>{diagnosticsSnapshot.database.status.replace(/_/g, " ")}</strong><small>Schema v{diagnosticsSnapshot.database.schemaVersion} · {diagnosticsSnapshot.database.detail}</small></div>
+                <div className="diagnostic-item"><span>Included: model catalogue</span><strong>{diagnosticsSnapshot.modelCount === null ? "Unavailable" : diagnosticsSnapshot.modelCount + " registered"}</strong></div>
+                <div className="diagnostic-item"><span>Included: server check</span><strong>{diagnosticsSnapshot.serverExecutable.status.replace(/_/g, " ")}</strong><small>{diagnosticsSnapshot.serverExecutable.detail}</small></div>
+                <div className="diagnostic-item"><span>Included: GGUF check</span><strong>{diagnosticsSnapshot.modelFile.status.replace(/_/g, " ")}</strong><small>{diagnosticsSnapshot.modelFile.detail}</small></div>
+                <div className="diagnostic-item"><span>Included: engine state</span><strong>{diagnosticsSnapshot.runtimeStatus.replace(/([A-Z])/g, " $1").replace(/_/g, " ")}</strong></div>
+                <div className="diagnostic-item"><span>Added when saved</span><strong>Report timestamp</strong><small>Generated locally at export time.</small></div>
+                <div className="diagnostic-item"><span>Not included</span><strong>Private content and identifiers</strong><small>No conversations, memories, credentials, local paths, model contents, hardware identifiers, or process IDs.</small></div>
+              </div>}
               {diagnosticsExportStatus && <p className="settings-footnote" role="status" aria-live="polite">{diagnosticsExportStatus}</p>}
               {diagnosticsError && <p className="hardware-error" role="alert">{diagnosticsError}</p>}
               {diagnosticsSnapshot && <div className="diagnostics-grid" aria-live="polite">

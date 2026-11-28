@@ -267,3 +267,7 @@ All notable project changes are recorded here. The project is in foundation/prot
 ## 2026-11-28 — Batch #242
 - Added an explicit, user-initiated JSON export for the current sanitized Diagnostics health-check snapshot using the native save dialog. The report contains only displayed health-check fields and a timestamp; it excludes conversations, memories, local paths, model contents, and credentials. No automatic upload or sharing.
 - Added Rust regression tests for report contents and file-extension validation.
+
+
+## 2026-11-28 — Batch #243
+- Added a privacy review step before diagnostic report export. Users can inspect every included category and value, see the timestamp behavior, and review explicit exclusions before the save action becomes available. Running a fresh health check resets review approval.
