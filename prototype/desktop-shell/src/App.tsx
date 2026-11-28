@@ -310,6 +310,15 @@ export default function App() {
   const [databaseVerifyBusy, setDatabaseVerifyBusy] = useState(false);
   const [databaseVerifyStatus, setDatabaseVerifyStatus] = useState("");
   const [databaseVerifyError, setDatabaseVerifyError] = useState("");
+  const [encryptedBackupPassword, setEncryptedBackupPassword] = useState("");
+  const [encryptedBackupPasswordConfirm, setEncryptedBackupPasswordConfirm] = useState("");
+  const [encryptedVerifyPassword, setEncryptedVerifyPassword] = useState("");
+  const [encryptedBackupBusy, setEncryptedBackupBusy] = useState(false);
+  const [encryptedBackupStatus, setEncryptedBackupStatus] = useState("");
+  const [encryptedBackupError, setEncryptedBackupError] = useState("");
+  const [encryptedVerifyBusy, setEncryptedVerifyBusy] = useState(false);
+  const [encryptedVerifyStatus, setEncryptedVerifyStatus] = useState("");
+  const [encryptedVerifyError, setEncryptedVerifyError] = useState("");
   const [localSetupReadiness, setLocalSetupReadiness] = useState<LocalSetupReadiness | null>(null);
   const [localSetupBusy, setLocalSetupBusy] = useState(false);
   const localSetupCheckSequence = useRef(0);
@@ -1306,6 +1315,70 @@ export default function App() {
       setDatabaseBackupError(typeof error === "string" ? error : "The local backup could not be created. Check the selected location and available disk space.");
     } finally {
       setDatabaseBackupBusy(false);
+    }
+  }
+
+  async function createEncryptedLocalDatabaseBackup() {
+    if (encryptedBackupBusy) return;
+    if (encryptedBackupPassword.length < 12) {
+      setEncryptedBackupError("Use an encryption password containing at least 12 characters.");
+      return;
+    }
+    if (encryptedBackupPassword !== encryptedBackupPasswordConfirm) {
+      setEncryptedBackupError("The password confirmation does not match.");
+      return;
+    }
+    setEncryptedBackupBusy(true);
+    setEncryptedBackupStatus("");
+    setEncryptedBackupError("");
+    try {
+      const selected = await save({
+        title: "Create a password-protected midSunday backup",
+        defaultPath: "midSunday-encrypted-backup.msbackup",
+        filters: [{ name: "Encrypted midSunday backup", extensions: ["msbackup"] }],
+      });
+      if (!selected) return;
+      await invoke<void>("create_encrypted_local_database_backup", {
+        filePath: selected,
+        password: encryptedBackupPassword,
+      });
+      setEncryptedBackupStatus("Encrypted backup saved and verified. The password is not stored by midSunday; losing it means the backup cannot be opened.");
+    } catch (error) {
+      setEncryptedBackupError(typeof error === "string" ? error : "The encrypted backup could not be created. Check the selected location and available disk space.");
+    } finally {
+      setEncryptedBackupPassword("");
+      setEncryptedBackupPasswordConfirm("");
+      setEncryptedBackupBusy(false);
+    }
+  }
+
+  async function verifyEncryptedLocalDatabaseBackup() {
+    if (encryptedVerifyBusy) return;
+    if (encryptedVerifyPassword.length < 12) {
+      setEncryptedVerifyError("Enter the password used when this encrypted backup was created.");
+      return;
+    }
+    setEncryptedVerifyBusy(true);
+    setEncryptedVerifyStatus("");
+    setEncryptedVerifyError("");
+    try {
+      const selected = await open({
+        title: "Verify a password-protected midSunday backup",
+        multiple: false,
+        directory: false,
+        filters: [{ name: "Encrypted midSunday backup", extensions: ["msbackup"] }],
+      });
+      if (!selected || Array.isArray(selected)) return;
+      const result = await invoke<{ valid: boolean; schemaVersion: number; fileSizeBytes: number; conversationCount: number; messageCount: number; savedMemoryCount: number; awarenessItemCount: number; awarenessActivityCount: number; awarenessHistoryCount: number; awarenessSuppressionCount: number; awarenessSuggestionCount: number; appPreferenceCount: number; backupFormatVersion: number | null; createdAt: number | null; appVersion: string | null; detail: string }>("verify_encrypted_local_database_backup", {
+        filePath: selected,
+        password: encryptedVerifyPassword,
+      });
+      setEncryptedVerifyStatus(result.detail + " Encrypted container decrypted and authenticated. Schema v" + result.schemaVersion + " · " + formatModelSize(result.fileSizeBytes) + ". Inventory: " + result.conversationCount + " conversations, " + result.messageCount + " messages, " + result.savedMemoryCount + " saved memories, " + result.awarenessItemCount + " Awareness items, " + result.awarenessActivityCount + " Awareness activity records, " + result.awarenessHistoryCount + " Awareness history records, " + result.awarenessSuppressionCount + " relearning exclusions, " + result.awarenessSuggestionCount + " pending learning suggestions, and " + result.appPreferenceCount + " app-preference records. The encrypted source file was not changed.");
+    } catch (error) {
+      setEncryptedVerifyError(typeof error === "string" ? error : "The encrypted backup could not be verified. The selected file was not changed.");
+    } finally {
+      setEncryptedVerifyPassword("");
+      setEncryptedVerifyBusy(false);
     }
   }
 
@@ -2348,8 +2421,19 @@ export default function App() {
                 <div><strong>Keep a copy of your personal data</strong><p>The backup is created on this device only and verified before the app reports success. It does not include model files or separate application settings, and restore is not available yet.</p></div>
                 <button className="secondary-action" type="button" onClick={() => void createLocalDatabaseBackup()} disabled={databaseBackupBusy}>{databaseBackupBusy ? "Creating and verifying…" : "Create local database backup"}</button>
                 <button className="secondary-action" type="button" onClick={() => void verifyLocalDatabaseBackup()} disabled={databaseVerifyBusy}>{databaseVerifyBusy ? "Checking backup…" : "Verify existing backup"}</button>
+                <div className="database-backup-password-fields">
+                  <label>Encryption password<input type="password" autoComplete="new-password" value={encryptedBackupPassword} onChange={(event) => setEncryptedBackupPassword(event.target.value)} maxLength={1024} placeholder="At least 12 characters" /></label>
+                  <label>Confirm password<input type="password" autoComplete="new-password" value={encryptedBackupPasswordConfirm} onChange={(event) => setEncryptedBackupPasswordConfirm(event.target.value)} maxLength={1024} placeholder="Enter the same password again" /></label>
+                  <button className="primary-action" type="button" onClick={() => void createEncryptedLocalDatabaseBackup()} disabled={encryptedBackupBusy}>{encryptedBackupBusy ? "Encrypting and verifying…" : "Create encrypted backup"}</button>
+                  <label>Backup password for verification<input type="password" autoComplete="off" value={encryptedVerifyPassword} onChange={(event) => setEncryptedVerifyPassword(event.target.value)} maxLength={1024} placeholder="Enter backup password" /></label>
+                  <button className="secondary-action" type="button" onClick={() => void verifyEncryptedLocalDatabaseBackup()} disabled={encryptedVerifyBusy}>{encryptedVerifyBusy ? "Decrypting and checking…" : "Verify encrypted backup"}</button>
+                </div>
               </div>
-              <p className="settings-footnote">Important: this first local backup format is an unencrypted SQLite file. Choose a private location, protect the file yourself, and do not share or upload it. Existing files are never overwritten. No cloud transfer occurs.</p>
+              <p className="settings-footnote">The standard .sqlite3 backup is unencrypted. The separate .msbackup option uses password-derived authenticated encryption and is verified before saving. Use a unique password of at least 12 characters; midSunday never stores it, and it cannot be recovered if lost. Existing files are never overwritten. Backups stay local; cloud transfer and restore are not implemented.</p>
+              {encryptedBackupStatus && <p className="database-backup-status" role="status" aria-live="polite">{encryptedBackupStatus}</p>}
+              {encryptedBackupError && <p className="hardware-error" role="alert">{encryptedBackupError}</p>}
+              {encryptedVerifyStatus && <p className="database-backup-status" role="status" aria-live="polite">{encryptedVerifyStatus}</p>}
+              {encryptedVerifyError && <p className="hardware-error" role="alert">{encryptedVerifyError}</p>}
               {databaseBackupStatus && <p className="database-backup-status" role="status" aria-live="polite">{databaseBackupStatus}</p>}
               {databaseBackupError && <p className="hardware-error" role="alert">{databaseBackupError}</p>}
               {databaseVerifyStatus && <p className="database-backup-status" role="status" aria-live="polite">{databaseVerifyStatus}</p>}
