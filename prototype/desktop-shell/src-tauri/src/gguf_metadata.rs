@@ -32,6 +32,15 @@ pub struct GgufMetadata {
 #[derive(Debug)]
 enum Value { Text(String), Unsigned(u64), Signed(i64), Other }
 
+fn opened_regular_file_size(file: &File) -> Result<u64, String> {
+    let metadata = file.metadata()
+        .map_err(|error| format!("Could not inspect the opened GGUF file: {error}"))?;
+    if !metadata.is_file() {
+        return Err("The opened GGUF path is not a regular file.".to_owned());
+    }
+    Ok(metadata.len())
+}
+
 fn read_u8(f:&mut File)->Result<u8,String>{let mut b=[0;1];f.read_exact(&mut b).map_err(|_|"The GGUF metadata is truncated.".to_owned())?;Ok(b[0])}
 fn skip_bool(f:&mut File)->Result<(),String>{
     let value=read_u8(f)?;
@@ -292,7 +301,7 @@ pub fn analyse_tensor_storage(input:&str)->Result<TensorStorageAnalysis,String>{
     let mut f=File::open(&path).map_err(|e|format!("Could not open GGUF file: {e}"))?;
     // Read the size from the same opened handle used for parsing, avoiding a
     // path-metadata/open race when checking descriptor offsets against EOF.
-    let file_size=f.metadata().map_err(|e|format!("Could not inspect GGUF file: {e}"))?.len();
+    let file_size=opened_regular_file_size(&f)?;
     let mut magic=[0;4];f.read_exact(&mut magic).map_err(|_|"The GGUF header is truncated.".to_owned())?;
     if &magic!=b"GGUF"{return Err("The selected file does not have a valid GGUF header.".to_owned());}
     let version=read_u32(&mut f)?;
@@ -438,7 +447,7 @@ pub fn inspect(input:&str)->Result<GgufMetadata,String>{
     if !path.extension().and_then(|v|v.to_str()).is_some_and(|v|v.eq_ignore_ascii_case("gguf")){return Err("Only .gguf files can be inspected.".to_owned());}
     let mut f=File::open(&path).map_err(|e|format!("Could not open the GGUF file: {e}"))?;
     // Keep the reported size tied to the same opened handle used by the parser.
-    let file_size=f.metadata().map_err(|e|format!("Could not inspect the GGUF file: {e}"))?.len();
+    let file_size=opened_regular_file_size(&f)?;
     let mut magic=[0;4];f.read_exact(&mut magic).map_err(|_|"The selected file is too small to be a GGUF file.".to_owned())?;
     if &magic!=b"GGUF"{return Err("The selected file does not have a valid GGUF header.".to_owned());}
     let version=read_u32(&mut f)?;if !(2..=3).contains(&version){return Err(format!("GGUF version {version} is not supported by this metadata inspector (supported: 2 and 3)."));}
@@ -710,6 +719,24 @@ mod tests{
         let aligned=((b.len()+31)/32)*32;b.resize(aligned,0);b
     }
     fn temp(bytes:&[u8],ext:&str)->std::path::PathBuf{let p=std::env::temp_dir().join(format!("midsunday-gguf-{}-{}.{}",std::process::id(),NEXT.fetch_add(1,Ordering::Relaxed),ext));let mut f=File::create(&p).unwrap();f.write_all(bytes).unwrap();p}
+    #[test]
+    fn opened_gguf_file_size_requires_a_regular_file() {
+        let path = temp(b"GGUF-test", "gguf");
+        let file = File::open(&path).unwrap();
+        assert_eq!(opened_regular_file_size(&file).unwrap(), 9);
+        drop(file);
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn opened_gguf_directory_is_rejected_by_handle_metadata() {
+        let directory = tempfile::tempdir().unwrap();
+        let file = File::open(directory.path()).unwrap();
+        let error = opened_regular_file_size(&file).unwrap_err();
+        assert!(error.contains("not a regular file"));
+    }
+
     #[test]fn preflights_metadata_type_and_scalar_payload_boundaries(){
         let p=std::env::temp_dir().join(format!("midsunday-gguf-scalar-boundary-{}-{}.gguf",std::process::id(),NEXT.fetch_add(1,Ordering::Relaxed)));
         let mut file=File::create(&p).unwrap();

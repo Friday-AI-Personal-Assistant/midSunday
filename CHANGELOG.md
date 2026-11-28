@@ -536,3 +536,9 @@ All notable project changes are recorded here. The project is in foundation/prot
 ## 2026-11-28 — Batch #332
 - Hardened conversation backup import by enforcing globally unique message identifiers across the entire archive, matching the database's identifier invariant rather than checking each conversation separately.
 - Added a regression test with the same message ID in two different conversations and verified the archive is rejected before any conversation is imported.
+
+
+## 2026-11-28 — Batch #333
+- Added a shared opened-handle validation step to both GGUF metadata inspection and tensor-storage analysis.
+- The parsers now require the actual opened handle to identify a regular file before trusting its length, preserving the same-handle size check used for bounded parsing.
+- Added regular-file coverage and a Unix directory-handle regression test; path-level extension and existence checks remain in place.
