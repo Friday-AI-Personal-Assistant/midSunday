@@ -836,7 +836,8 @@ mod diagnostics_disk_space_tests {
         // fixtures would correctly trip the absolute 2 GiB critical threshold.
         assert_eq!(diagnostics_storage_status(20 * GIB, 30 * GIB), Some("healthy"));
         assert_eq!(diagnostics_storage_status(100, 4), Some("critical"));
-        assert_eq!(diagnostics_storage_status(100, 9), Some("low"));
+        // 9 bytes free is also critical because it is below the 2 GiB floor.
+        assert_eq!(diagnostics_storage_status(100, 9), Some("critical"));
     }
 
     #[test]

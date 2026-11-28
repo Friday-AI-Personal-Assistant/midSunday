@@ -2546,3 +2546,6 @@ Storage status remains an advisory point-in-time classification; unavailable cap
 
 ## 2026-11-28 — Batch #248
 - Corrected the diagnostic storage-capacity regression fixture to use realistic GiB-scale values. The test still verifies that reported free space is clamped to total capacity, while respecting the absolute low-space thresholds.
+
+## 2026-11-28 — Batch #249
+- Corrected the remaining storage diagnostics test expectation: 9 bytes of free space is critical under the documented absolute 2 GiB threshold, not low. GiB-scale fixtures continue to cover the low and percentage boundaries.
