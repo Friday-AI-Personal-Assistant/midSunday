@@ -318,7 +318,7 @@ fn database_content_fingerprint(connection: &Connection) -> Result<String, Strin
         digest.update([0x5A]);
         digest.update(row_count.to_le_bytes());
     }
-    Ok(format!("{:x}", digest.finalize()))
+    Ok(digest.finalize().iter().map(|byte| format!("{byte:02x}")).collect())
 }
 
 /// An exclusive reservation of the live database connection for a restore transaction.
