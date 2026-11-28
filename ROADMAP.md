@@ -2610,3 +2610,12 @@ The overview is derived entirely from the existing diagnostic snapshot. It does 
 - [x] Respect the Reduce motion preference when scrolling to a destination and move keyboard focus to the destination section.
 - [x] Keep navigation targets limited to settings that directly relate to the finding; storage and database warnings remain guidance-only where no safe automatic action exists.
 - [ ] Validate shortcut navigation, focus visibility, and reduced-motion behavior on physical Windows, Linux, and macOS devices.
+
+
+### 2026-11-28 — Diagnostic storage capacity clarity (Batch #256)
+
+- [x] Show available and total capacity together for app-data and model volumes, with a rounded used-space percentage.
+- [x] Add compact visual usage meters to the Diagnostics storage cards so low-capacity volumes are easier to understand at a glance.
+- [x] Keep unknown, unavailable, zero-capacity, and malformed measurements as explanatory text without fabricating a percentage or progress bar.
+- [x] Reuse the same validated formatting in the report review preview; no new collection, paths, identifiers, telemetry, or report-schema changes.
+- [ ] Validate meter contrast, narrow layouts, and real storage readings on physical Windows, Linux, and macOS devices.

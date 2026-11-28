@@ -322,3 +322,8 @@ All notable project changes are recorded here. The project is in foundation/prot
 ## 2026-11-28 — Batch #255
 - Added contextual navigation shortcuts to Diagnostics findings for the configured local server, GGUF model, and local model catalogue. Users can jump directly to the related settings section without hunting through the Settings page.
 - Navigation respects Reduce motion, scrolls the destination into view, and moves keyboard focus to the destination section. The shortcuts are navigation-only; they do not modify files, start the engine, or perform repairs.
+
+
+## 2026-11-28 — Batch #256
+- Improved Diagnostics storage clarity by showing available capacity, total capacity, and percentage used for app-data and model volumes, with compact visual usage meters.
+- Unknown or invalid measurements remain explanatory text without a fabricated percentage or meter. The reviewed export preview uses the same safe formatting; collection and report schema are unchanged.

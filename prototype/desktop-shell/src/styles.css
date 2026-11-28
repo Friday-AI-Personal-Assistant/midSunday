@@ -769,6 +769,9 @@ body { color:var(--text-main); background:var(--app-bg); }
 .app-crash-card small { color:var(--muted); font-size:10px; line-height:1.5; }
 
 
+.diagnostic-storage-meter { height: 6px; margin-top: 9px; overflow: hidden; border-radius: 999px; background: var(--surface-raised); }
+.diagnostic-storage-meter span { display: block; height: 100%; border-radius: inherit; background: var(--accent); transition: width .2s ease; }
+
 /* Read-only Diagnostics health overview */
 .diagnostics-summary { margin: 15px 0 18px; padding: 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
 .diagnostics-summary-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
