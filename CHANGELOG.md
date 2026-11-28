@@ -356,3 +356,5 @@ All notable project changes are recorded here. The project is in foundation/prot
 - Hardened local backup creation by generating and verifying a temporary SQLite snapshot first, then publishing it with an atomic no-overwrite hard link on the destination volume.
 - A destination that appears after backup creation begins cannot be silently replaced. Existing files remain byte-for-byte unchanged, and temporary files are cleaned up after success or failure.
 - Added regression checks for existing destination preservation and missing-folder failure. Filesystem-specific physical-device validation remains pending.
+
+- Added a versioned metadata manifest to new local SQLite backups, recording creation time, app/schema versions, and privacy-safe aggregate counts. Verification rejects mismatched or unsupported manifests while continuing to recognise older pre-manifest backups as legacy. The manifest contains no personal content and does not add encryption or enable restore.

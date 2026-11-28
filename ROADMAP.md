@@ -2666,3 +2666,15 @@ The summary helps users understand what a verified database backup contains befo
 - [x] Add regression coverage for unchanged existing destination bytes and safe failure when the destination folder is missing.
 - [ ] Validate atomic publication and cleanup behavior on physical Windows, Linux, and macOS filesystems, including removable and network volumes.
 
+
+
+### 2026-11-28 — Versioned local backup manifest (Batch #263)
+
+- [x] Embed a versioned manifest in newly created SQLite backups with creation time, source schema version, app version, and aggregate counts for conversations, messages, saved memories, and Awareness items.
+- [x] Keep the manifest free of personal text, titles, record identifiers, local paths, credentials, and model data.
+- [x] Verify manifest version, timestamp, schema compatibility, and every aggregate count against the actual database before a backup can be published or later declared valid.
+- [x] Preserve read-only verification support for older pre-manifest SQLite backups and label them as legacy in the UI.
+- [x] Add regression coverage for generated manifest metadata, count mismatches, and unsupported manifest versions.
+- [ ] Validate manifest creation and legacy-backup compatibility using real user databases on physical Windows, Linux, and macOS devices.
+
+The manifest is metadata inside the unencrypted SQLite backup; it is not a cryptographic signature and does not provide confidentiality or tamper-proof authenticity. Restore remains unavailable.

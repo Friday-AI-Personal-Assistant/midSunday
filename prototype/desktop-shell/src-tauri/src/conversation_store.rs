@@ -212,6 +212,9 @@ pub struct DatabaseBackupVerification {
     pub message_count: u64,
     pub saved_memory_count: u64,
     pub awareness_item_count: u64,
+    pub backup_format_version: Option<i64>,
+    pub created_at: Option<i64>,
+    pub app_version: Option<String>,
     pub detail: String,
 }
 
@@ -274,6 +277,30 @@ impl ConversationStore {
         let saved_memory_count = count_rows("saved_memories")?;
         let awareness_item_count = count_rows("awareness_items")?;
 
+        // Manifest metadata is optional only for older backups created before format v1.
+        // If a manifest exists, every field and every recorded aggregate must agree.
+        let manifest_table_count: i64 = backup.query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'midsunday_backup_manifest'",
+            [],
+            |row| row.get(0),
+        ).map_err(|_| "The backup manifest could not be inspected.".to_owned())?;
+        let (backup_format_version, created_at, app_version) = if manifest_table_count == 0 {
+            (None, None, None)
+        } else {
+            let manifest: (i64, i64, i64, String, i64, i64, i64, i64) = backup.query_row(
+                "SELECT format_version, created_at, schema_version, app_version, conversation_count, message_count, saved_memory_count, awareness_item_count FROM midsunday_backup_manifest WHERE id = 1",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?, row.get(6)?, row.get(7)?)),
+            ).map_err(|_| "The backup manifest is missing or malformed. Do not restore this file.".to_owned())?;
+            if manifest.0 != 1 || manifest.1 <= 0 || manifest.2 != schema_version || manifest.3.trim().is_empty()
+                || manifest.4 < 0 || manifest.5 < 0 || manifest.6 < 0 || manifest.7 < 0
+                || manifest.4 as u64 != conversation_count || manifest.5 as u64 != message_count
+                || manifest.6 as u64 != saved_memory_count || manifest.7 as u64 != awareness_item_count {
+                return Err("The backup manifest is unsupported or does not match the verified database contents. Do not restore this file.".to_owned());
+            }
+            (Some(manifest.0), Some(manifest.1), Some(manifest.3))
+        };
+
         Ok(DatabaseBackupVerification {
             valid: true,
             schema_version,
@@ -282,7 +309,10 @@ impl ConversationStore {
             message_count,
             saved_memory_count,
             awareness_item_count,
-            detail: "SQLite integrity and required midSunday database structures passed read-only verification.".to_owned(),
+            backup_format_version,
+            created_at,
+            app_version,
+            detail: "SQLite integrity, required midSunday structures, and available backup metadata passed read-only verification.".to_owned(),
         })
     }
 
@@ -558,16 +588,51 @@ impl ConversationStore {
                 .map_err(|_| "Could not create the local database backup. Check the selected location and available disk space.".to_owned())?;
             drop(connection);
 
-            let backup = Connection::open_with_flags(&temporary_path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
-                .map_err(|_| "The new backup could not be opened for verification.".to_owned())?;
-            let integrity: String = backup.query_row("PRAGMA quick_check(1)", [], |row| row.get(0))
-                .map_err(|_| "The new backup could not pass its integrity check.".to_owned())?;
-            let backup_schema: i64 = backup.pragma_query_value(None, "user_version", |row| row.get(0))
-                .map_err(|_| "The new backup's schema version could not be verified.".to_owned())?;
-            if integrity != "ok" || backup_schema != source_schema {
-                return Err("The new backup did not pass integrity and schema verification.".to_owned());
+            // Add a compact, versioned manifest to the snapshot itself. It contains only
+            // compatibility metadata and aggregate counts, never personal text or paths.
+            let backup_writer = Connection::open(&temporary_path)
+                .map_err(|_| "The temporary backup could not be opened to add its metadata.".to_owned())?;
+            let count_rows = |table: &str| -> Result<i64, String> {
+                let sql = match table {
+                    "conversations" => "SELECT COUNT(*) FROM conversations",
+                    "conversation_messages" => "SELECT COUNT(*) FROM conversation_messages",
+                    "saved_memories" => "SELECT COUNT(*) FROM saved_memories",
+                    "awareness_items" => "SELECT COUNT(*) FROM awareness_items",
+                    _ => return Err("Unsupported backup manifest count.".to_owned()),
+                };
+                backup_writer.query_row(sql, [], |row| row.get::<_, i64>(0))
+                    .map_err(|_| "The temporary backup contents could not be summarised safely.".to_owned())
+            };
+            let counts = (
+                count_rows("conversations")?,
+                count_rows("conversation_messages")?,
+                count_rows("saved_memories")?,
+                count_rows("awareness_items")?,
+            );
+            let created_at = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs() as i64;
+            backup_writer.execute_batch(
+                "CREATE TABLE midsunday_backup_manifest (
+                    id INTEGER PRIMARY KEY CHECK(id = 1),
+                    format_version INTEGER NOT NULL,
+                    created_at INTEGER NOT NULL,
+                    schema_version INTEGER NOT NULL,
+                    app_version TEXT NOT NULL,
+                    conversation_count INTEGER NOT NULL,
+                    message_count INTEGER NOT NULL,
+                    saved_memory_count INTEGER NOT NULL,
+                    awareness_item_count INTEGER NOT NULL
+                );"
+            ).map_err(|_| "The backup metadata table could not be created.".to_owned())?;
+            backup_writer.execute(
+                "INSERT INTO midsunday_backup_manifest (id, format_version, created_at, schema_version, app_version, conversation_count, message_count, saved_memory_count, awareness_item_count) VALUES (1, 1, ?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                params![created_at, source_schema, env!("CARGO_PKG_VERSION"), counts.0, counts.1, counts.2, counts.3],
+            ).map_err(|_| "The backup metadata could not be saved.".to_owned())?;
+            drop(backup_writer);
+
+            let verification = Self::verify_backup_file(&temporary_path)?;
+            if !verification.valid || verification.schema_version != source_schema || verification.backup_format_version != Some(1) {
+                return Err("The new backup did not pass integrity, schema, and manifest verification.".to_owned());
             }
-            drop(backup);
 
             std::fs::hard_link(&temporary_path, backup_path).map_err(|error| {
                 if error.kind() == std::io::ErrorKind::AlreadyExists {
@@ -1893,6 +1958,21 @@ mod tests {
         let memories: i64 = backup.query_row("SELECT COUNT(*) FROM saved_memories", [], |row| row.get(0)).unwrap();
         let awareness: i64 = backup.query_row("SELECT COUNT(*) FROM awareness_items", [], |row| row.get(0)).unwrap();
         assert_eq!((conversations, messages, memories, awareness), (1, 1, 1, 1));
+        let manifest: (i64, i64, i64, String, i64, i64, i64, i64) = backup.query_row(
+            "SELECT format_version, created_at, schema_version, app_version, conversation_count, message_count, saved_memory_count, awareness_item_count FROM midsunday_backup_manifest WHERE id = 1",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?, row.get(6)?, row.get(7)?)),
+        ).unwrap();
+        assert_eq!(manifest.0, 1);
+        assert!(manifest.1 > 0);
+        assert_eq!(manifest.2, 8);
+        assert!(!manifest.3.is_empty());
+        assert_eq!((manifest.4, manifest.5, manifest.6, manifest.7), (1, 1, 1, 1));
+        drop(backup);
+        let verified = ConversationStore::verify_backup_file(&backup_path).unwrap();
+        assert_eq!(verified.backup_format_version, Some(1));
+        assert!(verified.created_at.unwrap() > 0);
+        assert_eq!(verified.app_version.as_deref(), Some(env!("CARGO_PKG_VERSION")));
         let original_backup_bytes = std::fs::read(&backup_path).unwrap();
         let overwrite_error = store.backup_to(&backup_path).unwrap_err();
         assert!(overwrite_error.contains("already exists"));
@@ -1989,6 +2069,38 @@ mod tests {
 
         let _ = std::fs::remove_file(incomplete_path);
         let _ = std::fs::remove_file(unsupported_path);
+    }
+
+    #[test]
+    fn rejects_backup_manifest_when_aggregate_counts_do_not_match_database() {
+        let backup_path = backup_test_path("manifest-count-mismatch", "sqlite3");
+        let store = store();
+        let chat = store.create("Manifest test").unwrap();
+        store.append(chat.id, "user", "Manifest contents stay private").unwrap();
+        store.backup_to(&backup_path).unwrap();
+
+        let writer = Connection::open(&backup_path).unwrap();
+        writer.execute("UPDATE midsunday_backup_manifest SET conversation_count = 99 WHERE id = 1", []).unwrap();
+        drop(writer);
+
+        let error = ConversationStore::verify_backup_file(&backup_path).unwrap_err();
+        assert!(error.contains("manifest is unsupported or does not match"));
+        let _ = std::fs::remove_file(backup_path);
+    }
+
+    #[test]
+    fn rejects_unsupported_backup_manifest_version() {
+        let backup_path = backup_test_path("manifest-unsupported-version", "sqlite3");
+        let store = store();
+        store.backup_to(&backup_path).unwrap();
+
+        let writer = Connection::open(&backup_path).unwrap();
+        writer.execute("UPDATE midsunday_backup_manifest SET format_version = 99 WHERE id = 1", []).unwrap();
+        drop(writer);
+
+        let error = ConversationStore::verify_backup_file(&backup_path).unwrap_err();
+        assert!(error.contains("manifest is unsupported or does not match"));
+        let _ = std::fs::remove_file(backup_path);
     }
 
     #[test]
