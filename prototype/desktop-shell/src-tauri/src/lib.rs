@@ -1231,6 +1231,52 @@ mod restore_safety_archive_tests {
     }
 
     #[test]
+    fn guarded_live_copy_matches_verified_candidate_without_reopening_store_lock() {
+        let directory = temp_dir();
+        let source_store = ConversationStore::open(&directory.join("source-live.sqlite3")).unwrap();
+        let conversation = source_store.create("Candidate destination test").unwrap();
+        source_store.append(conversation.id, "user", "This record must replace the target database.").unwrap();
+        source_store.create_memory("Restored memory").unwrap();
+        let source_backup = directory.join("source.sqlite3");
+        source_store.backup_to(&source_backup).unwrap();
+        let candidate = ConversationStore::prepare_verified_restore_candidate(&source_backup).unwrap();
+
+        let target_store = ConversationStore::open(&directory.join("target-live.sqlite3")).unwrap();
+        target_store.create("Old target record").unwrap();
+        let manager = RuntimeManager::default();
+        let runtime_guard = manager.try_acquire_restore_gate().unwrap();
+        let mut database_guard = target_store.try_acquire_restore_lock().unwrap();
+        database_guard.copy_from_candidate(&candidate).unwrap();
+        database_guard.verify_current_matches(&candidate.verification).unwrap();
+        drop(database_guard);
+        drop(runtime_guard);
+
+        let inventory = target_store.content_inventory().unwrap();
+        assert_eq!(inventory.conversation_count, 1);
+        assert_eq!(inventory.message_count, 1);
+        assert_eq!(inventory.saved_memory_count, 1);
+        let _ = fs::remove_dir_all(directory);
+    }
+
+    #[test]
+    fn guarded_live_verification_rejects_a_different_inventory() {
+        let directory = temp_dir();
+        let source_store = ConversationStore::open(&directory.join("source-live.sqlite3")).unwrap();
+        source_store.create("Expected source record").unwrap();
+        let source_backup = directory.join("source.sqlite3");
+        source_store.backup_to(&source_backup).unwrap();
+        let candidate = ConversationStore::prepare_verified_restore_candidate(&source_backup).unwrap();
+
+        let target_store = ConversationStore::open(&directory.join("target-live.sqlite3")).unwrap();
+        target_store.create("Different target record").unwrap();
+        let database_guard = target_store.try_acquire_restore_lock().unwrap();
+        assert!(database_guard.verify_current_matches(&candidate.verification).is_err());
+        drop(database_guard);
+        assert_eq!(target_store.content_inventory().unwrap().conversation_count, 1);
+        let _ = fs::remove_dir_all(directory);
+    }
+
+    #[test]
     fn encrypted_candidate_staging_rejects_wrong_password_without_changing_source() {
         let directory = temp_dir();
         let store = ConversationStore::open(&directory.join("live.sqlite3")).unwrap();
