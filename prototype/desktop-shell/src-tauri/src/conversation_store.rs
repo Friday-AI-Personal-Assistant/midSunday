@@ -515,20 +515,50 @@ impl ConversationStore {
         if !backup_path.extension().and_then(|value| value.to_str()).is_some_and(|value| value.eq_ignore_ascii_case("sqlite3")) {
             return Err("Choose a .sqlite3 file for the local database backup.".to_owned());
         }
-        if backup_path.exists() {
-            return Err("A file already exists at that location. Choose a new filename; existing files are never overwritten.".to_owned());
-        }
         let backup_path_text = backup_path.to_str()
             .ok_or_else(|| "The selected backup location is not supported.".to_owned())?;
-        let connection = self.lock()?;
-        let source_schema: i64 = connection.pragma_query_value(None, "user_version", |row| row.get(0))
-            .map_err(|_| "The local database version could not be checked before backup.".to_owned())?;
-        connection.execute("VACUUM INTO ?1", [backup_path_text])
-            .map_err(|_| "Could not create the local database backup. Check the selected location and available disk space.".to_owned())?;
-        drop(connection);
+        let parent = backup_path.parent().filter(|path| !path.as_os_str().is_empty()).unwrap_or_else(|| Path::new("."));
+        let file_name = backup_path.file_name().and_then(|value| value.to_str())
+            .ok_or_else(|| "The selected backup filename is not supported.".to_owned())?;
 
-        let verification = (|| -> Result<(), String> {
-            let backup = Connection::open_with_flags(backup_path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
+        // Reserve a unique temporary name, then let SQLite create its snapshot there.
+        // Publishing with hard_link is an atomic no-clobber operation on the same volume.
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static NEXT_TEMP: AtomicU64 = AtomicU64::new(1);
+        let mut temporary_path = None;
+        for _ in 0..32 {
+            let sequence = NEXT_TEMP.fetch_add(1, Ordering::Relaxed);
+            let candidate = parent.join(format!(
+                ".{file_name}.{}.{}.tmp.sqlite3",
+                std::process::id(),
+                sequence
+            ));
+            match std::fs::OpenOptions::new().write(true).create_new(true).open(&candidate) {
+                Ok(file) => {
+                    drop(file);
+                    std::fs::remove_file(&candidate)
+                        .map_err(|_| "Could not prepare a private temporary backup file in the selected folder.".to_owned())?;
+                    temporary_path = Some(candidate);
+                    break;
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+                Err(_) => return Err("Could not prepare a temporary backup in the selected folder. Check folder permissions and available disk space.".to_owned()),
+            }
+        }
+        let temporary_path = temporary_path
+            .ok_or_else(|| "Could not reserve a unique temporary backup filename. Try again.".to_owned())?;
+        let temporary_path_text = temporary_path.to_str()
+            .ok_or_else(|| "The temporary backup location is not supported.".to_owned())?;
+
+        let creation = (|| -> Result<(), String> {
+            let connection = self.lock()?;
+            let source_schema: i64 = connection.pragma_query_value(None, "user_version", |row| row.get(0))
+                .map_err(|_| "The local database version could not be checked before backup.".to_owned())?;
+            connection.execute("VACUUM INTO ?1", [temporary_path_text])
+                .map_err(|_| "Could not create the local database backup. Check the selected location and available disk space.".to_owned())?;
+            drop(connection);
+
+            let backup = Connection::open_with_flags(&temporary_path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
                 .map_err(|_| "The new backup could not be opened for verification.".to_owned())?;
             let integrity: String = backup.query_row("PRAGMA quick_check(1)", [], |row| row.get(0))
                 .map_err(|_| "The new backup could not pass its integrity check.".to_owned())?;
@@ -537,11 +567,27 @@ impl ConversationStore {
             if integrity != "ok" || backup_schema != source_schema {
                 return Err("The new backup did not pass integrity and schema verification.".to_owned());
             }
+            drop(backup);
+
+            std::fs::hard_link(&temporary_path, backup_path).map_err(|error| {
+                if error.kind() == std::io::ErrorKind::AlreadyExists {
+                    "A file already exists at that location. Choose a new filename; existing files are never overwritten.".to_owned()
+                } else {
+                    "The verified backup could not be safely published at the selected location. Check folder permissions and try again.".to_owned()
+                }
+            })?;
             Ok(())
         })();
-        if let Err(error) = verification {
-            let _ = std::fs::remove_file(backup_path);
+
+        let cleanup_result = std::fs::remove_file(&temporary_path);
+        if let Err(error) = creation {
+            let _ = cleanup_result;
             return Err(error);
+        }
+        if cleanup_result.is_err() {
+            // The published backup is complete and verified; a leftover hidden temporary
+            // hard-link is harmless, but report it so the user can clean up the extra file.
+            return Err(format!("The verified backup was saved, but a temporary file could not be cleaned up in the selected folder ({backup_path_text})."));
         }
         Ok(())
     }
@@ -1847,8 +1893,21 @@ mod tests {
         let memories: i64 = backup.query_row("SELECT COUNT(*) FROM saved_memories", [], |row| row.get(0)).unwrap();
         let awareness: i64 = backup.query_row("SELECT COUNT(*) FROM awareness_items", [], |row| row.get(0)).unwrap();
         assert_eq!((conversations, messages, memories, awareness), (1, 1, 1, 1));
-        assert!(store.backup_to(&backup_path).is_err());
+        let original_backup_bytes = std::fs::read(&backup_path).unwrap();
+        let overwrite_error = store.backup_to(&backup_path).unwrap_err();
+        assert!(overwrite_error.contains("already exists"));
+        assert_eq!(
+            std::fs::read(&backup_path).unwrap(),
+            original_backup_bytes,
+            "a pre-existing destination must remain byte-for-byte unchanged"
+        );
         assert!(store.backup_to(&backup_path.with_extension("json")).is_err());
+
+        let missing_parent = std::env::temp_dir()
+            .join(format!("midsunday-missing-parent-{}", std::process::id()))
+            .join("backup.sqlite3");
+        assert!(store.backup_to(&missing_parent).is_err());
+        assert!(!missing_parent.exists());
 
         drop(backup);
         drop(store);

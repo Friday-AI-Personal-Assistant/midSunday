@@ -2656,3 +2656,13 @@ Verification does not restore, repair, or modify the selected file. It only chec
 - [ ] Validate count accuracy and narrow-layout readability with real user data on physical Windows, Linux, and macOS devices.
 
 The summary helps users understand what a verified database backup contains before a future restore workflow. Counts are metadata only and do not establish that a restore will succeed.
+
+
+### 2026-11-28 — Atomic no-overwrite backup publishing (Batch #262)
+
+- [x] Create and verify the SQLite snapshot at a uniquely reserved temporary path in the destination folder before publishing it.
+- [x] Publish the completed snapshot with an atomic same-volume hard-link operation that fails if any destination entry already exists, closing the check-then-write overwrite race.
+- [x] Preserve pre-existing destination contents byte-for-byte and clean up temporary files after success or failure.
+- [x] Add regression coverage for unchanged existing destination bytes and safe failure when the destination folder is missing.
+- [ ] Validate atomic publication and cleanup behavior on physical Windows, Linux, and macOS filesystems, including removable and network volumes.
+

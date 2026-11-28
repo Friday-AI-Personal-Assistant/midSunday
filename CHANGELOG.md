@@ -350,3 +350,9 @@ All notable project changes are recorded here. The project is in foundation/prot
 ## 2026-11-28 — Batch #261
 - Extended read-only backup verification to report aggregate counts for conversations, messages, saved memories, and Awareness items, helping users understand a backup before a future restore workflow.
 - Kept the summary free of personal text, titles, timestamps, record IDs, and paths. Added regression assertions for all four counts; verification remains non-mutating.
+
+
+## 2026-11-28 — Batch #262
+- Hardened local backup creation by generating and verifying a temporary SQLite snapshot first, then publishing it with an atomic no-overwrite hard link on the destination volume.
+- A destination that appears after backup creation begins cannot be silently replaced. Existing files remain byte-for-byte unchanged, and temporary files are cleaned up after success or failure.
+- Added regression checks for existing destination preservation and missing-folder failure. Filesystem-specific physical-device validation remains pending.
