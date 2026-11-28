@@ -1,6 +1,6 @@
 //! User-controlled local inference settings persisted on this device.
 use serde::{Deserialize, Serialize};
-use std::{path::{Path, PathBuf}, sync::Mutex};
+use std::{io::Write, path::{Path, PathBuf}, sync::Mutex};
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -68,15 +68,14 @@ impl EngineSettingsStore {
         let mut current = self.settings.lock().map_err(|_| "Local engine settings are unavailable.".to_owned())?;
         let contents = serde_json::to_vec_pretty(&settings)
             .map_err(|error| format!("Could not encode local engine settings: {error}"))?;
-        let temporary = self.path.with_extension("json.tmp");
-        std::fs::write(&temporary, contents)
+        let parent = self.path.parent().filter(|parent| !parent.as_os_str().is_empty()).unwrap_or_else(|| Path::new("."));
+        let mut temporary = tempfile::NamedTempFile::new_in(parent)
+            .map_err(|error| format!("Could not prepare a temporary settings file: {error}"))?;
+        temporary.write_all(&contents)
+            .and_then(|_| temporary.as_file().sync_all())
             .map_err(|error| format!("Could not write local engine settings: {error}"))?;
-        if self.path.exists() {
-            std::fs::remove_file(&self.path)
-                .map_err(|error| format!("Could not replace local engine settings: {error}"))?;
-        }
-        std::fs::rename(&temporary, &self.path)
-            .map_err(|error| format!("Could not finish saving local engine settings: {error}"))?;
+        temporary.persist(&self.path)
+            .map_err(|error| format!("Could not atomically replace local engine settings: {}", error.error))?;
         *current = settings;
         Ok(())
     }
@@ -126,6 +125,31 @@ mod tests {
         drop(store);
         let reopened = EngineSettingsStore::open(&path).unwrap();
         assert_eq!(reopened.get().unwrap(), settings);
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn replacing_existing_settings_is_atomic_and_reloads_the_new_values() {
+        let path = test_path();
+        let store = EngineSettingsStore::open(&path).unwrap();
+        let first = EngineSettings {
+            executable_path: "/tools/old-server".to_owned(),
+            model_path: "/models/old.gguf".to_owned(),
+            context_tokens: 2048,
+            cpu_threads: None,
+        };
+        let second = EngineSettings {
+            executable_path: "/tools/new-server".to_owned(),
+            model_path: "/models/new.gguf".to_owned(),
+            context_tokens: 8192,
+            cpu_threads: Some(8),
+        };
+        store.save(first).unwrap();
+        store.save(second.clone()).unwrap();
+        assert_eq!(store.get().unwrap(), second);
+        drop(store);
+        let reopened = EngineSettingsStore::open(&path).unwrap();
+        assert_eq!(reopened.get().unwrap(), second);
         let _ = std::fs::remove_file(path);
     }
 
