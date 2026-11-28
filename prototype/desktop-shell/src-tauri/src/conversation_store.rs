@@ -627,7 +627,18 @@ impl ConversationStore {
         let healthy = result == "ok";
         Ok(DatabaseHealth {
             status: if healthy { "healthy" } else { "warning" }.to_owned(),
-              pub fn backup_to(&self, backup_path: &Path) -> Result<(), String> {
+            schema_version,
+            detail: if healthy {
+                "SQLite quick_check completed successfully.".to_owned()
+            } else {
+                "SQLite reported an integrity issue. Avoid deleting or replacing this database; make a safe backup before attempting recovery.".to_owned()
+            },
+        })
+    }
+
+    /// Creates a consistent, verified SQLite snapshot at a user-selected local path.
+    /// The connection mutex prevents concurrent writes; VACUUM INTO includes committed WAL content.
+    pub fn backup_to(&self, backup_path: &Path) -> Result<(), String> {
         let connection = self.lock()?;
         Self::backup_connection_to(&connection, backup_path)
     }
@@ -745,18 +756,6 @@ impl ConversationStore {
 
         let cleanup_result = std::fs::remove_file(&temporary_path);
         if let Err(error) = creation {
-            let _ = cleanup_result;
-            return Err(error);
-        }
-        if cleanup_result.is_err() {
-            // The published backup is complete and verified; a leftover hidden temporary
-            // hard-link is harmless, but report it so the user can clean up the extra file.
-            return Err(format!("The verified backup was saved, but a temporary file could not be cleaned up in the selected folder ({backup_path_text})."));
-        }
-        Ok(())
-    }
-
-  if let Err(error) = creation {
             let _ = cleanup_result;
             return Err(error);
         }
