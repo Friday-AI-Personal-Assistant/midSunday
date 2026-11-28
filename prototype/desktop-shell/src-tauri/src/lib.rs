@@ -588,17 +588,22 @@ fn verify_encrypted_database_backup(
 }
 
 #[tauri::command]
-fn create_encrypted_local_database_backup(
+async fn create_encrypted_local_database_backup(
     file_path: String,
     password: String,
     store: State<'_, ConversationStore>,
 ) -> Result<(), String> {
-    create_encrypted_database_backup(&store, &file_path, &password)
+    let store = store.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || create_encrypted_database_backup(&store, &file_path, &password))
+        .await
+        .map_err(|_| "The encrypted backup worker could not complete.".to_owned())?
 }
 
 #[tauri::command]
-fn verify_encrypted_local_database_backup(file_path: String, password: String) -> Result<conversation_store::DatabaseBackupVerification, String> {
-    verify_encrypted_database_backup(&file_path, &password)
+async fn verify_encrypted_local_database_backup(file_path: String, password: String) -> Result<conversation_store::DatabaseBackupVerification, String> {
+    tauri::async_runtime::spawn_blocking(move || verify_encrypted_database_backup(&file_path, &password))
+        .await
+        .map_err(|_| "The encrypted backup verification worker could not complete.".to_owned())?
 }
 
 #[tauri::command]

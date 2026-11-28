@@ -1,7 +1,7 @@
 use rusqlite::{params, Connection, OptionalExtension};
 use sha2::{Digest, Sha256};
 use serde::{Deserialize, Serialize};
-use std::{path::Path, sync::Mutex, time::{SystemTime, UNIX_EPOCH}};
+use std::{path::Path, sync::{Arc, Mutex}, time::{SystemTime, UNIX_EPOCH}};
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -223,8 +223,9 @@ pub struct DatabaseBackupVerification {
     pub detail: String,
 }
 
+#[derive(Clone)]
 pub struct ConversationStore {
-    connection: Mutex<Connection>,
+    connection: Arc<Mutex<Connection>>,
 }
 
 impl ConversationStore {
@@ -568,7 +569,7 @@ impl ConversationStore {
             ).map_err(|error| format!("Could not create saved-memory search index: {error}"))?;
             transaction.commit().map_err(|error| format!("Could not finish saved-memory search migration: {error}"))?;
         }
-        Ok(Self { connection: Mutex::new(connection) })
+        Ok(Self { connection: Arc::new(Mutex::new(connection)) })
     }
 
     /// Performs a read-only SQLite integrity check and reports only schema metadata.
