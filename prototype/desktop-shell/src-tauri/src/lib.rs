@@ -1,4 +1,5 @@
 mod conversation_store;
+mod backup_encryption;
 mod companion_settings;
 mod engine_settings;
 mod gguf_metadata;
@@ -509,6 +510,100 @@ fn backup_local_database(file_path: String, store: State<'_, ConversationStore>)
     store.backup_to(std::path::Path::new(&file_path))
 }
 
+fn reserve_backup_temp_path(parent: &std::path::Path, label: &str, extension: &str) -> Result<std::path::PathBuf, String> {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static NEXT: AtomicU64 = AtomicU64::new(1);
+    for _ in 0..32 {
+        let sequence = NEXT.fetch_add(1, Ordering::Relaxed);
+        let path = parent.join(format!(".midsunday-{label}-{}-{sequence}.{extension}", std::process::id()));
+        match std::fs::OpenOptions::new().write(true).create_new(true).open(&path) {
+            Ok(file) => {
+                drop(file);
+                std::fs::remove_file(&path).map_err(|_| "Could not prepare a temporary backup file.".to_owned())?;
+                return Ok(path);
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(_) => return Err("Could not prepare a temporary backup file. Check folder permissions and available disk space.".to_owned()),
+        }
+    }
+    Err("Could not reserve a unique temporary backup filename. Try again.".to_owned())
+}
+
+fn create_encrypted_database_backup(
+    store: &ConversationStore,
+    file_path: &str,
+    password: &str,
+) -> Result<(), String> {
+    use std::path::Path;
+    let destination = Path::new(file_path);
+    if !destination.extension().and_then(|value| value.to_str()).is_some_and(|value| value.eq_ignore_ascii_case("msbackup")) {
+        return Err("Choose a .msbackup file for an encrypted midSunday backup.".to_owned());
+    }
+    let parent = destination.parent().filter(|path| !path.as_os_str().is_empty()).unwrap_or_else(|| Path::new("."));
+    let plaintext = reserve_backup_temp_path(&std::env::temp_dir(), "encrypted-source", "sqlite3")?;
+    let encrypted = reserve_backup_temp_path(parent, "encrypted-output", "msbackup")?;
+    let verification_copy = reserve_backup_temp_path(&std::env::temp_dir(), "encrypted-check", "sqlite3")?;
+
+    let result = (|| -> Result<(), String> {
+        store.backup_to(&plaintext)?;
+        backup_encryption::encrypt_file(&plaintext, &encrypted, password)?;
+        backup_encryption::decrypt_file(&encrypted, &verification_copy, password)?;
+        let verification = ConversationStore::verify_backup_file(&verification_copy)?;
+        if !verification.valid || verification.backup_format_version != Some(2) {
+            return Err("The encrypted backup did not pass its post-encryption database verification.".to_owned());
+        }
+        std::fs::hard_link(&encrypted, destination).map_err(|error| {
+            if error.kind() == std::io::ErrorKind::AlreadyExists {
+                "A file already exists at that location. Choose a new filename; existing files are never overwritten.".to_owned()
+            } else {
+                "The verified encrypted backup could not be safely published. Check folder permissions and try again.".to_owned()
+            }
+        })?;
+        Ok(())
+    })();
+
+    let _ = std::fs::remove_file(&plaintext);
+    let _ = std::fs::remove_file(&encrypted);
+    let _ = std::fs::remove_file(&verification_copy);
+    result
+}
+
+fn verify_encrypted_database_backup(
+    file_path: &str,
+    password: &str,
+) -> Result<conversation_store::DatabaseBackupVerification, String> {
+    use std::path::Path;
+    let source = Path::new(file_path);
+    if !source.extension().and_then(|value| value.to_str()).is_some_and(|value| value.eq_ignore_ascii_case("msbackup")) {
+        return Err("Choose a .msbackup encrypted midSunday backup.".to_owned());
+    }
+    let plaintext = reserve_backup_temp_path(&std::env::temp_dir(), "encrypted-verify", "sqlite3")?;
+    let result = (|| -> Result<conversation_store::DatabaseBackupVerification, String> {
+        backup_encryption::decrypt_file(source, &plaintext, password)?;
+        let verification = ConversationStore::verify_backup_file(&plaintext)?;
+        if !verification.valid || verification.backup_format_version != Some(2) {
+            return Err("The decrypted file is not a supported, verified midSunday database backup.".to_owned());
+        }
+        Ok(verification)
+    })();
+    let _ = std::fs::remove_file(&plaintext);
+    result
+}
+
+#[tauri::command]
+fn create_encrypted_local_database_backup(
+    file_path: String,
+    password: String,
+    store: State<'_, ConversationStore>,
+) -> Result<(), String> {
+    create_encrypted_database_backup(&store, &file_path, &password)
+}
+
+#[tauri::command]
+fn verify_encrypted_local_database_backup(file_path: String, password: String) -> Result<conversation_store::DatabaseBackupVerification, String> {
+    verify_encrypted_database_backup(&file_path, &password)
+}
+
 #[tauri::command]
 fn get_app_status() -> &'static str {
     "The midSunday Rust core is running. The desktop shell is connected."
@@ -739,6 +834,8 @@ pub fn run() {
             export_diagnostics_report,
             backup_local_database,
             verify_local_database_backup,
+            create_encrypted_local_database_backup,
+            verify_encrypted_local_database_backup,
             get_hardware_snapshot,
             get_live_system_metrics,
             list_local_models,
