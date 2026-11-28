@@ -1,3 +1,7 @@
+## 2026-11-28 — Batch #279
+- Strengthened read-only database backup verification with SQLite's full integrity check and an explicit foreign-key relationship check, in addition to schema, required-table, and manifest/inventory validation.
+- Added regression tests for valid full-integrity backups and backups containing broken conversation-message relationships. Verification remains read-only; actual restore is still disabled.
+
 ## 2026-11-28 — Batch #278
 - Fixed a command-registration regression from Batch #277: restored the existing encrypted-backup verification Tauri command while retaining the new read-only restore preview command.
 - No backup format, restore behaviour, or personal data handling was changed by this repair.
