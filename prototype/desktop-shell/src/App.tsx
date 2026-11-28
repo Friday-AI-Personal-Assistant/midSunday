@@ -66,6 +66,7 @@ type LocalModel = { id: string; displayName: string; filePath: string; sizeBytes
 type ModelVerification = { valid: boolean; status: string; detail: string };
 type SetupFileCheck = { status: string; detail: string };
 type LocalSetupReadiness = { executable: SetupFileCheck; model: SetupFileCheck };
+type DiagnosticsSnapshot = { appVersion: string; operatingSystem: string; architecture: string; database: { status: string; schemaVersion: number; detail: string }; modelCount: number | null; runtimeStatus: string };
 type GgufMetadata = { formatVersion:number; fileSizeBytes:number; tensorCount:number; metadataEntryCount:number; architecture:string|null; modelName:string|null; fileTypeCode:number|null; fileTypeDescription:string|null; parameterCount:number|null; contextLength:number|null; blockCount:number|null; embeddingLength:number|null; attentionHeadCount:number|null; attentionKvHeadCount:number|null; attentionKeyLength:number|null; attentionValueLength:number|null; ropeDimensionCount:number|null; expertCount:number|null; expertUsedCount:number|null; quantizationVersion:number|null; alignment:number|null };
 type TensorStorageAnalysis = { status:string; tensorCount:number; analysedTensorCount:number; unknownSizeTensorCount:number; knownPayloadBytes:number; tensorElementCount:number; reportedParameterCount:number|null; parameterCountStatus:string; dataStartOffset:number; alignment:number; types:{ typeCode:number; typeName:string; tensorCount:number; knownPayloadBytes:number; unknownSizeTensorCount:number }[]; note:string };
 type KvCacheEstimate = { status:string; contextTokens:number; bytesPerElement:number; keyCacheBytes:number|null; valueCacheBytes:number|null; totalBytes:number|null; reportedContextLength:number|null; contextLimitStatus:string; contextLimitNote:string; assumptions:string };
@@ -255,6 +256,9 @@ export default function App() {
   const [runtimeStatus, setRuntimeStatus] = useState<RuntimeStatusSnapshot>({ status: "notInstalled", detail: null, startupMemory: null, session: null });
   const [runtimeBusy, setRuntimeBusy] = useState(false);
   const [runtimeError, setRuntimeError] = useState("");
+  const [diagnosticsSnapshot, setDiagnosticsSnapshot] = useState<DiagnosticsSnapshot | null>(null);
+  const [diagnosticsBusy, setDiagnosticsBusy] = useState(false);
+  const [diagnosticsError, setDiagnosticsError] = useState("");
   const [localSetupReadiness, setLocalSetupReadiness] = useState<LocalSetupReadiness | null>(null);
   const [localSetupBusy, setLocalSetupBusy] = useState(false);
   const localSetupCheckSequence = useRef(0);
@@ -1181,6 +1185,19 @@ export default function App() {
     localSetupCheckSequence.current += 1;
     setLocalSetupReadiness(null);
     setLocalSetupBusy(false);
+  }
+
+  async function runDiagnostics() {
+    setDiagnosticsBusy(true);
+    setDiagnosticsError("");
+    try {
+      const snapshot = await invoke<DiagnosticsSnapshot>("get_diagnostics_snapshot");
+      setDiagnosticsSnapshot(snapshot);
+    } catch {
+      setDiagnosticsError("The local diagnostic check could not complete. Check that the app is running correctly and try again.");
+    } finally {
+      setDiagnosticsBusy(false);
+    }
   }
 
   async function checkLocalSetup() {
@@ -2194,6 +2211,18 @@ export default function App() {
                 <div className="hardware-note">This assessment does not select a model, change performance settings, download anything, or guarantee compatibility.</div>
               </>}
               <div className="setting-row"><div><strong>Launch at sign-in</strong><p>Start midSunday automatically when you sign in to Windows, Linux, or macOS. This only registers the app with your operating system; it does not start an AI model or connect to the internet.</p></div><button className={launchAtLogin ? "toggle on" : "toggle"} type="button" role="switch" aria-label="Launch midSunday at sign-in" aria-checked={launchAtLogin} aria-busy={launchAtLoginBusy} disabled={launchAtLoginBusy} onClick={() => void toggleLaunchAtLogin()}><i /></button></div>{launchAtLoginError && <p className="hardware-error" role="status">{launchAtLoginError}</p>}
+            </section>
+            <section className="settings-section diagnostics-section">
+              <div className="settings-section-title"><div><h2>Diagnostics</h2><p>Run a read-only local health check. No conversations, memories, file paths, or private content are collected.</p></div><span className="settings-symbol">⌁</span></div>
+              <div className="diagnostics-actions"><button className="secondary-action" type="button" onClick={() => void runDiagnostics()} disabled={diagnosticsBusy}>{diagnosticsBusy ? "Checking…" : "Run local health check"}</button><span className="settings-footnote">Checks app build information, SQLite integrity, registered model count, and local engine state.</span></div>
+              {diagnosticsError && <p className="hardware-error" role="alert">{diagnosticsError}</p>}
+              {diagnosticsSnapshot && <div className="diagnostics-grid" aria-live="polite">
+                <div className="diagnostic-item"><span>Application</span><strong>midSunday {diagnosticsSnapshot.appVersion}</strong><small>{diagnosticsSnapshot.operatingSystem} · {diagnosticsSnapshot.architecture}</small></div>
+                <div className="diagnostic-item"><span>Conversation database</span><strong className={"diagnostic-status diagnostic-" + diagnosticsSnapshot.database.status}>{diagnosticsSnapshot.database.status.replace(/_/g, " ")}</strong><small>Schema v{diagnosticsSnapshot.database.schemaVersion} · {diagnosticsSnapshot.database.detail}</small></div>
+                <div className="diagnostic-item"><span>Local model catalogue</span><strong>{diagnosticsSnapshot.modelCount === null ? "Unavailable" : diagnosticsSnapshot.modelCount + " registered"}</strong><small>Model files are not opened or fingerprinted by this check.</small></div>
+                <div className="diagnostic-item"><span>Local AI engine</span><strong>{diagnosticsSnapshot.runtimeStatus.replace(/([A-Z])/g, " $1").replace(/_/g, " ")}</strong><small>Reports the current managed runtime state only.</small></div>
+              </div>}
+              <p className="settings-footnote">This is an initial diagnostic check, not a full startup repair tool. It does not test model compatibility, hardware performance, microphone/speaker devices, or installer prerequisites. Nothing is uploaded or exported.</p>
             </section>
             <div className="settings-footnote">Local memory is stored separately from conversation history. Clearing chats does not delete memories; use the memory controls above to manage them.</div>
           </div>

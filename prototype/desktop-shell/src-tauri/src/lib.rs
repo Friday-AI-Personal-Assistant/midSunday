@@ -16,7 +16,7 @@ use system_info::{HardwareSnapshot, LiveSystemMetrics, SystemMonitor};
 use serde::Deserialize;
 use runtime::{ConversationMessage, GenerationRequest, RuntimeConfig};
 use runtime_manager::{RuntimeGenerationMemoryReport, RuntimeManager, RuntimeStatusSnapshot};
-use conversation_store::{AwarenessHistoryEntry, AwarenessItem, AwarenessSettings, AwarenessSuggestion, AwarenessSuppression, ConversationStore, ConversationSummary, ImportResult, MemoryImportResult, MemorySearchPage, SavedMemory, StoredMessage, UserProfile};
+use conversation_store::{AwarenessHistoryEntry, AwarenessItem, AwarenessSettings, AwarenessSuggestion, AwarenessSuppression, ConversationStore, ConversationSummary, DatabaseHealth, ImportResult, MemoryImportResult, MemorySearchPage, SavedMemory, StoredMessage, UserProfile};
 use engine_settings::{EngineSettings, EngineSettingsStore};
 use gguf_metadata::{GgufMetadata, KvCacheEstimate};
 use companion_settings::{CompanionSettings, CompanionSettingsStore};
@@ -320,6 +320,41 @@ fn verify_local_model(catalog: State<'_, ModelCatalog>, id: String) -> Result<Mo
     catalog.verify(&id)
 }
 
+#[derive(Clone, Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DiagnosticsSnapshot {
+    app_version: &'static str,
+    operating_system: &'static str,
+    architecture: &'static str,
+    database: DatabaseHealth,
+    model_count: Option<usize>,
+    runtime_status: String,
+}
+
+#[tauri::command]
+fn get_diagnostics_snapshot(
+    store: State<'_, ConversationStore>,
+    catalog: State<'_, ModelCatalog>,
+    manager: State<'_, RuntimeManager>,
+) -> DiagnosticsSnapshot {
+    let database = store.health_check().unwrap_or_else(|_| DatabaseHealth {
+        status: "unavailable".to_owned(),
+        schema_version: 0,
+        detail: "The local database integrity check could not complete. Check disk space and file permissions; preserve the database before attempting recovery.".to_owned(),
+    });
+    let model_count = catalog.list().ok().map(|models| models.len());
+    let runtime_status = manager.snapshot().map(|snapshot| snapshot.status)
+        .unwrap_or_else(|_| "unavailable".to_owned());
+    DiagnosticsSnapshot {
+        app_version: env!("CARGO_PKG_VERSION"),
+        operating_system: std::env::consts::OS,
+        architecture: std::env::consts::ARCH,
+        database,
+        model_count,
+        runtime_status,
+    }
+}
+
 #[tauri::command]
 fn get_app_status() -> &'static str {
     "The midSunday Rust core is running. The desktop shell is connected."
@@ -546,6 +581,7 @@ pub fn run() {
         .manage(SystemMonitor::default())
         .invoke_handler(tauri::generate_handler![
             get_app_status,
+            get_diagnostics_snapshot,
             get_hardware_snapshot,
             get_live_system_metrics,
             list_local_models,

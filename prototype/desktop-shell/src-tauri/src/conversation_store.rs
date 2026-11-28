@@ -194,6 +194,14 @@ pub struct ImportResult {
     pub skipped_duplicates: usize,
 }
 
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct DatabaseHealth {
+    pub status: String,
+    pub schema_version: i64,
+    pub detail: String,
+}
+
 pub struct ConversationStore {
     connection: Mutex<Connection>,
 }
@@ -400,6 +408,26 @@ impl ConversationStore {
             transaction.commit().map_err(|error| format!("Could not finish saved-memory search migration: {error}"))?;
         }
         Ok(Self { connection: Mutex::new(connection) })
+    }
+
+    /// Performs a read-only SQLite integrity check and reports only schema metadata.
+    /// No conversation, memory, or Awareness content is read or returned.
+    pub fn health_check(&self) -> Result<DatabaseHealth, String> {
+        let connection = self.lock()?;
+        let schema_version: i64 = connection.pragma_query_value(None, "user_version", |row| row.get(0))
+            .map_err(|_| "Could not read the local database schema version.".to_owned())?;
+        let result: String = connection.query_row("PRAGMA quick_check(1)", [], |row| row.get(0))
+            .map_err(|_| "The local database integrity check could not complete.".to_owned())?;
+        let healthy = result == "ok";
+        Ok(DatabaseHealth {
+            status: if healthy { "healthy" } else { "warning" }.to_owned(),
+            schema_version,
+            detail: if healthy {
+                "SQLite quick_check completed successfully.".to_owned()
+            } else {
+                "SQLite reported an integrity issue. Avoid deleting or replacing this database; make a safe backup before attempting recovery.".to_owned()
+            },
+        })
     }
 
     fn lock(&self) -> Result<std::sync::MutexGuard<'_, Connection>, String> {
@@ -1673,6 +1701,16 @@ mod tests {
         assert_eq!(store.list_memories().unwrap()[0].content, "Keep this separate");
         assert_eq!(store.list().unwrap()[0].title, "Keep this chat");
         assert_ne!(item.id, 0);
+    }
+
+    #[test]
+    fn database_health_check_reports_integrity_and_schema_without_content() {
+        let store = store();
+        let health = store.health_check().unwrap();
+        assert_eq!(health.status, "healthy");
+        assert_eq!(health.schema_version, 8);
+        assert!(health.detail.contains("quick_check"));
+        assert!(!health.detail.contains("conversation"));
     }
 
     #[test]

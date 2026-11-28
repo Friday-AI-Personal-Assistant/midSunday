@@ -2449,3 +2449,16 @@ The check reuses the existing 1.5-second runtime status refresh. It reports only
 - [ ] Validate long-running generation status refresh, forced engine termination during generation, and recovery on physical Windows, Linux, and macOS devices.
 
 This avoids making the UI's periodic status refresh wait behind an in-flight inference request. Unexpected exits while idle are detected by the existing refresh; exits during inference are reported through the generation outcome.
+
+
+### 2026-11-28 — First local Diagnostics health check (Batch #239)
+
+- [x] Add an explicit user-triggered Diagnostics check in Settings.
+- [x] Report application version, operating system, and architecture without exposing local paths or personal content.
+- [x] Run SQLite `PRAGMA quick_check(1)` against the local conversation database and report schema version plus a plain-language integrity result.
+- [x] Report registered model count and managed local engine state without opening model files or exposing model paths.
+- [x] Keep the check read-only, local-only, and free of telemetry, uploads, or automatic repair.
+- [x] Add a Rust regression test for healthy database reporting and schema metadata.
+- [ ] Extend diagnostics with startup prerequisites, model-file verification, permissions, disk-space checks, and reviewed/exportable redacted reports; validate recovery scenarios on physical devices.
+
+This is an initial diagnostic slice, not a complete health or repair system. A healthy SQLite check does not guarantee model compatibility or overall application health.

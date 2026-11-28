@@ -255,3 +255,6 @@ All notable project changes are recorded here. The project is in foundation/prot
 
 
 - Batch #238: Kept runtime status reads non-blocking during active inference. The UI no longer waits for the session mutex held by streaming generation; idle ready-state refreshes continue checking the managed child, while generation failures flow through the existing result/error path. Added a lock-contention regression test. Physical-device validation remains pending.
+
+
+- Batch #239: Added Settings → Diagnostics with an explicit read-only local health check for app version/platform, SQLite integrity and schema version, registered model count, and managed engine state. The check does not read conversation or memory content, open model files, expose local paths, repair data, or send telemetry. Added a Rust database-health regression test.
