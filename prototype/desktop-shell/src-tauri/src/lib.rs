@@ -1293,7 +1293,7 @@ mod restore_safety_archive_tests {
         assert!(error.contains("pre-restore database candidate was successfully restored and verified"));
         guard.verify_current_matches(&rollback_candidate).unwrap();
         drop(guard);
-        let messages = target_store.list_messages(original_conversation.id).unwrap();
+        let messages = target_store.messages(original_conversation.id).unwrap();
         assert_eq!(messages.len(), 1);
         assert_eq!(messages[0].content, "Original content must survive rollback");
     }
