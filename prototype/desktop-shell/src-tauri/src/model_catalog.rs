@@ -25,35 +25,57 @@ pub struct ModelCatalog { path: PathBuf, models: Arc<Mutex<Vec<LocalModel>>> }
 
 impl ModelCatalog {
     pub fn open(path: &Path) -> Result<Self, String> {
-        if let Some(parent) = path.parent() { fs::create_dir_all(parent).map_err(|e| format!("Could not create model catalogue directory: {e}"))?; }
-        let models = match File::open(path) {
-            Ok(file) => {
-                let metadata = file.metadata()
-                    .map_err(|e| format!("Could not inspect local model catalogue: {e}"))?;
-                if !metadata.is_file() {
-                    return Err("The local model catalogue path is not a regular file.".to_owned());
-                }
-                if metadata.len() > MAX_CATALOGUE_BYTES {
-                    return Err("The local model catalogue exceeds the supported size.".to_owned());
-                }
-                // Limit the actual read as well as checking metadata: the file
-                // could grow between the metadata check and the read.
-                let mut contents = String::new();
-                file.take(MAX_CATALOGUE_BYTES + 1)
-                    .read_to_string(&mut contents)
-                    .map_err(|e| format!("Local model catalogue could not be read: {e}"))?;
-                if contents.len() as u64 > MAX_CATALOGUE_BYTES {
-                    return Err("The local model catalogue exceeds the supported size.".to_owned());
-                }
-                let parsed: Vec<LocalModel> = serde_json::from_str(&contents)
-                    .map_err(|e| format!("Local model catalogue could not be read: {e}"))?;
-                validate_catalogue(&parsed)?;
-                parsed
+        // Inspect the path before opening it. Unix permits opening directories
+        // as file handles, while Windows generally rejects that operation.
+        // Checking metadata first gives both platforms the same clear result.
+        let metadata = match fs::metadata(path) {
+            Ok(metadata) => metadata,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                return Ok(Self {
+                    path: path.to_path_buf(),
+                    models: Arc::new(Mutex::new(Vec::new())),
+                });
             }
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Vec::new(),
-            Err(e) => return Err(format!("Could not read local model catalogue: {e}")),
+            Err(error) => {
+                return Err(format!("Could not inspect local model catalogue: {error}"));
+            }
         };
-        Ok(Self { path: path.to_path_buf(), models: Arc::new(Mutex::new(models)) })
+        if !metadata.is_file() {
+            return Err("The local model catalogue path is not a regular file.".to_owned());
+        }
+        if metadata.len() > MAX_CATALOGUE_BYTES {
+            return Err("The local model catalogue exceeds the supported size.".to_owned());
+        }
+
+        let file = File::open(path)
+            .map_err(|e| format!("Could not read local model catalogue: {e}"))?;
+        // Re-check the opened handle to guard against the path being replaced
+        // between the path metadata check and File::open.
+        let opened_metadata = file.metadata()
+            .map_err(|e| format!("Could not inspect local model catalogue: {e}"))?;
+        if !opened_metadata.is_file() {
+            return Err("The local model catalogue path is not a regular file.".to_owned());
+        }
+        if opened_metadata.len() > MAX_CATALOGUE_BYTES {
+            return Err("The local model catalogue exceeds the supported size.".to_owned());
+        }
+
+        // Limit the actual read as well as checking metadata: the file could
+        // grow between the metadata check and the read.
+        let mut contents = String::new();
+        file.take(MAX_CATALOGUE_BYTES + 1)
+            .read_to_string(&mut contents)
+            .map_err(|e| format!("Local model catalogue could not be read: {e}"))?;
+        if contents.len() as u64 > MAX_CATALOGUE_BYTES {
+            return Err("The local model catalogue exceeds the supported size.".to_owned());
+        }
+        let parsed: Vec<LocalModel> = serde_json::from_str(&contents)
+            .map_err(|e| format!("Local model catalogue could not be read: {e}"))?;
+        validate_catalogue(&parsed)?;
+        Ok(Self {
+            path: path.to_path_buf(),
+            models: Arc::new(Mutex::new(parsed)),
+        })
     }
     pub fn list(&self) -> Result<Vec<LocalModel>, String> {
         self.models.lock().map(|m| m.clone()).map_err(|_| "Local model catalogue is unavailable.".to_owned())

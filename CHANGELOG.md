@@ -525,3 +525,9 @@ All notable project changes are recorded here. The project is in foundation/prot
 - Added subprocess regression cases proving valid, malformed/partial, and unsupported-version markers block normal startup in an independent process.
 - Kept the child probe inert during ordinary test execution unless its private test-only environment variables are supplied.
 - No recovery UI, marker-clearing operation, or restore capability was added.
+
+
+## 2026-11-28 — Batch #331
+- Fixed cross-platform model-catalogue path validation by inspecting filesystem metadata before opening the path, so directories are rejected consistently on Windows, Linux, and macOS.
+- Re-check the opened file handle and retain the existing 64 MiB metadata and bounded-read protections to guard against path replacement and file growth.
+- This addresses the Windows-only directory-test failure from validation run #330 without weakening the catalogue safety checks.
