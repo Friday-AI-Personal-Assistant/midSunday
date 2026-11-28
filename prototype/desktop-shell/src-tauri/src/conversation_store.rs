@@ -2200,6 +2200,8 @@ mod tests {
 
         // Deliberately bypass SQLite's write-time FK enforcement to simulate a damaged archive.
         let writer = Connection::open(&backup_path).unwrap();
+        // This fixture intentionally creates corruption; normal application connections keep FK checks enabled.
+        writer.pragma_update(None, "foreign_keys", "OFF").unwrap();
         writer.execute(
             "UPDATE conversation_messages SET conversation_id = 9223372036854775807",
             [],
